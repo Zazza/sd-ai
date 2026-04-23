@@ -58,6 +58,11 @@ func migrate(db *sql.DB) error {
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			text TEXT NOT NULL,
 			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		);
+		CREATE TABLE IF NOT EXISTS saved_prompts (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			text TEXT NOT NULL,
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 		)
 	`)
 	return err
@@ -207,5 +212,37 @@ func (d *DB) CreateDescription(text string) (*SavedDescription, error) {
 
 func (d *DB) DeleteDescription(id int64) error {
 	_, err := d.db.Exec(`DELETE FROM saved_descriptions WHERE id = ?`, id)
+	return err
+}
+
+func (d *DB) ListPrompts() ([]SavedPrompt, error) {
+	rows, err := d.db.Query(`SELECT id, text, created_at FROM saved_prompts ORDER BY created_at DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var items []SavedPrompt
+	for rows.Next() {
+		var s SavedPrompt
+		if err := rows.Scan(&s.ID, &s.Text, &s.CreatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, s)
+	}
+	return items, rows.Err()
+}
+
+func (d *DB) CreatePrompt(text string) (*SavedPrompt, error) {
+	result, err := d.db.Exec(`INSERT INTO saved_prompts (text) VALUES (?)`, text)
+	if err != nil {
+		return nil, err
+	}
+	id, _ := result.LastInsertId()
+	return &SavedPrompt{ID: id, Text: text}, nil
+}
+
+func (d *DB) DeletePrompt(id int64) error {
+	_, err := d.db.Exec(`DELETE FROM saved_prompts WHERE id = ?`, id)
 	return err
 }

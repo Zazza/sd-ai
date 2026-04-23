@@ -10,12 +10,20 @@ export function CreatePreset(arg1) {
   return window['go']['main']['App']['CreatePreset'](arg1);
 }
 
+export function CreatePrompt(arg1) {
+  return window['go']['main']['App']['CreatePrompt'](arg1);
+}
+
 export function DeleteDescription(arg1) {
   return window['go']['main']['App']['DeleteDescription'](arg1);
 }
 
 export function DeletePreset(arg1) {
   return window['go']['main']['App']['DeletePreset'](arg1);
+}
+
+export function DeletePrompt(arg1) {
+  return window['go']['main']['App']['DeletePrompt'](arg1);
 }
 
 export function GenerateImage(arg1) {
@@ -56,6 +64,14 @@ export function ListPresets() {
 
 export function ListPresetsByType(arg1) {
   return window['go']['main']['App']['ListPresetsByType'](arg1);
+}
+
+export function ListPrompts() {
+  return window['go']['main']['App']['ListPrompts']();
+}
+
+export function SaveImage(arg1, arg2) {
+  return window['go']['main']['App']['SaveImage'](arg1, arg2);
 }
 
 export function UpdatePreset(arg1) {

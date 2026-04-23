@@ -5,7 +5,6 @@ import { api } from '../api.js'
 const presets = ref([])
 const selectedPresetId = ref(null)
 const description = ref('')
-const generatedPrompt = ref('')
 const extraPrompt = ref('')
 const extraNegativePrompt = ref('')
 const generatedImage = ref('')
@@ -16,7 +15,9 @@ const generatingImage = ref(false)
 const error = ref('')
 
 const savedDescriptions = ref([])
-const showSaved = ref(false)
+const showSavedDescriptions = ref(false)
+const savedPrompts = ref([])
+const showSavedPrompts = ref(false)
 
 async function loadPresets() {
   try {
@@ -29,6 +30,14 @@ async function loadPresets() {
 async function loadDescriptions() {
   try {
     savedDescriptions.value = await api.listDescriptions()
+  } catch (e) {
+    console.error(e)
+  }
+}
+
+async function loadPrompts() {
+  try {
+    savedPrompts.value = await api.listPrompts()
   } catch (e) {
     console.error(e)
   }
@@ -55,7 +64,31 @@ async function deleteDescription(id) {
 
 function useDescription(text) {
   description.value = text
-  showSaved.value = false
+  showSavedDescriptions.value = false
+}
+
+async function savePrompt() {
+  if (!extraPrompt.value.trim()) return
+  try {
+    await api.createPrompt(extraPrompt.value)
+    await loadPrompts()
+  } catch (e) {
+    error.value = e.message
+  }
+}
+
+async function deletePrompt(id) {
+  try {
+    await api.deletePrompt(id)
+    await loadPrompts()
+  } catch (e) {
+    error.value = e.message
+  }
+}
+
+function usePrompt(text) {
+  extraPrompt.value = text
+  showSavedPrompts.value = false
 }
 
 async function generatePrompt() {
@@ -66,7 +99,7 @@ async function generatePrompt() {
     const preset = presets.value.find(p => p.id === Number(selectedPresetId.value))
     const result = await api.generateSdPrompt(description.value, preset?.preset_type || '')
     if (result && result.trim()) {
-      generatedPrompt.value = result
+      extraPrompt.value = result
     } else {
       error.value = 'LLM returned empty response'
     }
@@ -75,10 +108,6 @@ async function generatePrompt() {
   } finally {
     generatingPrompt.value = false
   }
-}
-
-function useAsPrompt() {
-  extraPrompt.value = generatedPrompt.value
 }
 
 async function generateImage() {
@@ -101,17 +130,23 @@ async function generateImage() {
   }
 }
 
-function downloadImage() {
+async function downloadImage() {
   if (!generatedImage.value) return
-  const link = document.createElement('a')
-  link.href = 'data:image/png;base64,' + generatedImage.value
-  link.download = 'sd-studio-' + Date.now() + '.png'
-  link.click()
+  try {
+    const defaultName = 'sd-studio-' + Date.now() + '.png'
+    const savedPath = await api.saveImage(generatedImage.value, defaultName)
+    if (savedPath) {
+      error.value = ''
+    }
+  } catch (e) {
+    error.value = 'Save failed: ' + e.message
+  }
 }
 
 onMounted(() => {
   loadPresets()
   loadDescriptions()
+  loadPrompts()
 })
 </script>
 
@@ -144,13 +179,13 @@ onMounted(() => {
                 <button class="btn btn-secondary btn-sm" @click="saveDescription" :disabled="!description.trim()" title="Save description">
                   &#9776; Save
                 </button>
-                <button class="btn btn-secondary btn-sm" @click="showSaved = !showSaved" title="Load saved">
+                <button class="btn btn-secondary btn-sm" @click="showSavedDescriptions = !showSavedDescriptions" title="Load saved">
                   &#128194; Saved
                 </button>
               </div>
             </div>
 
-            <div v-if="showSaved" class="saved-list">
+            <div v-if="showSavedDescriptions" class="saved-list">
               <div v-if="savedDescriptions.length === 0" style="color: var(--text-dim); padding: 8px; font-size: 12px;">
                 No saved descriptions yet
               </div>
@@ -168,17 +203,30 @@ onMounted(() => {
             </div>
           </div>
 
-          <div v-if="generatedPrompt" class="form-group">
-            <label class="form-label">Generated Prompt</label>
-            <div class="form-textarea" style="background: var(--accent-bg); cursor: pointer; padding: 9px 12px;" @click="useAsPrompt" title="Click to use as extra prompt">
-              {{ generatedPrompt }}
-            </div>
-            <small style="color: var(--text-dim); margin-top: 4px; display: block;">Click to copy as extra prompt</small>
-          </div>
-
           <div class="form-group">
-            <label class="form-label">Extra Prompt</label>
-            <textarea class="form-textarea" v-model="extraPrompt" rows="2" placeholder="Additional tags..."></textarea>
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <label class="form-label" style="margin-bottom: 0;">Extra Prompt</label>
+              <div style="display: flex; gap: 6px;">
+                <button class="btn btn-secondary btn-sm" @click="savePrompt" :disabled="!extraPrompt.trim()" title="Save prompt">
+                  &#9776; Save
+                </button>
+                <button class="btn btn-secondary btn-sm" @click="showSavedPrompts = !showSavedPrompts" title="Load saved">
+                  &#128194; Saved
+                </button>
+              </div>
+            </div>
+
+            <div v-if="showSavedPrompts" class="saved-list">
+              <div v-if="savedPrompts.length === 0" style="color: var(--text-dim); padding: 8px; font-size: 12px;">
+                No saved prompts yet
+              </div>
+              <div v-for="s in savedPrompts" :key="s.id" class="saved-item">
+                <span class="saved-item-text" @click="usePrompt(s.text)">{{ s.text }}</span>
+                <button class="btn btn-danger btn-sm" @click="deletePrompt(s.id)" title="Delete">&times;</button>
+              </div>
+            </div>
+
+            <textarea class="form-textarea" v-model="extraPrompt" rows="2" placeholder="Additional tags..." style="margin-top: 8px;"></textarea>
           </div>
 
           <div class="form-group">

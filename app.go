@@ -2,7 +2,12 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
+	"os"
+	"path/filepath"
 	"strings"
+
+	"github.com/wailsapp/wails/v2/pkg/runtime"
 
 	"go-sd/internal/config"
 	"go-sd/internal/llm"
@@ -232,4 +237,69 @@ func (a *App) CreateDescription(text string) (*preset.SavedDescription, error) {
 
 func (a *App) DeleteDescription(id int64) error {
 	return a.presets.DeleteDescription(id)
+}
+
+// --- Saved Prompts ---
+
+func (a *App) ListPrompts() ([]preset.SavedPrompt, error) {
+	items, err := a.presets.ListPrompts()
+	if err != nil {
+		return nil, err
+	}
+	if items == nil {
+		items = []preset.SavedPrompt{}
+	}
+	return items, nil
+}
+
+func (a *App) CreatePrompt(text string) (*preset.SavedPrompt, error) {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return nil, nil
+	}
+	return a.presets.CreatePrompt(text)
+}
+
+func (a *App) DeletePrompt(id int64) error {
+	return a.presets.DeletePrompt(id)
+}
+
+// --- Save Image ---
+
+func (a *App) SaveImage(base64Data, defaultName string) (string, error) {
+	if base64Data == "" {
+		return "", nil
+	}
+
+	if defaultName == "" {
+		defaultName = "sd-studio-image.png"
+	}
+	if !strings.HasSuffix(strings.ToLower(defaultName), ".png") {
+		defaultName += ".png"
+	}
+
+	path, err := runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{
+		DefaultFilename: defaultName,
+		Filters: []runtime.FileFilter{
+			{DisplayName: "PNG Image", Pattern: "*.png"},
+		},
+	})
+	if err != nil || path == "" {
+		return "", err
+	}
+
+	data, err := base64.StdEncoding.DecodeString(base64Data)
+	if err != nil {
+		return "", err
+	}
+
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return "", err
+	}
+
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		return "", err
+	}
+
+	return path, nil
 }

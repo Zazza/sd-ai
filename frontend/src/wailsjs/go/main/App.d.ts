@@ -9,9 +9,13 @@ export function CreateDescription(arg1:string):Promise<preset.SavedDescription>;
 
 export function CreatePreset(arg1:preset.Preset):Promise<preset.Preset>;
 
+export function CreatePrompt(arg1:string):Promise<preset.SavedPrompt>;
+
 export function DeleteDescription(arg1:number):Promise<void>;
 
 export function DeletePreset(arg1:number):Promise<void>;
+
+export function DeletePrompt(arg1:number):Promise<void>;
 
 export function GenerateImage(arg1:main.GenerateImageParams):Promise<main.GenerateImageResult>;
 
@@ -32,6 +36,10 @@ export function ListDescriptions():Promise<Array<preset.SavedDescription>>;
 export function ListPresets():Promise<Array<preset.Preset>>;
 
 export function ListPresetsByType(arg1:string):Promise<Array<preset.Preset>>;
+
+export function ListPrompts():Promise<Array<preset.SavedPrompt>>;
+
+export function SaveImage(arg1:string,arg2:string):Promise<string>;
 
 export function UpdatePreset(arg1:preset.Preset):Promise<preset.Preset>;
 

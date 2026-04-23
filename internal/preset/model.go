@@ -24,3 +24,9 @@ type SavedDescription struct {
 	Text      string    `json:"text"`
 	CreatedAt time.Time `json:"created_at"`
 }
+
+type SavedPrompt struct {
+	ID        int64     `json:"id"`
+	Text      string    `json:"text"`
+	CreatedAt time.Time `json:"created_at"`
+}
