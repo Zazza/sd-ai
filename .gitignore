@@ -1,0 +1,24 @@
+# Runtime data
+data/
+*.db
+
+# Build output
+build/bin/
+web_dist/
+frontend/dist/
+
+# Dependencies
+frontend/node_modules/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Claude Code automation
+.claude/
+CLAUDE.md
+.mcp.json
