@@ -104,6 +104,50 @@ Settings are stored in SQLite (`data/presets.db`) and persist across reinstalls.
 └── data/                # SQLite DB (runtime)
 ```
 
+## Improvement Roadmap
+
+Prioritized findings from code review (2026-04-24).
+
+### Critical — Security & Correctness
+
+| # | Issue | Effort |
+|---|-------|--------|
+| 1 | Kids Mode PIN: SHA-256 without salt (rainbow tables), `!=` hash comparison (timing attack), silent error on hash read | 1h |
+| 2 | Kids Mode filter: false positives (`"class"` matches `"ass"`, `"dismissing"` matches `"smoking"`) — bare `strings.Contains` | 1h |
+| 3 | `CheckServices` race condition — goroutines write shared `status` without mutex | 30m |
+| 4 | `CheckServices` writes `SDPromptModel` into LLM status field (bug) | 10m |
+| 5 | No input validation on user-provided URLs and numeric fields | 1h |
+
+### Important — Architecture & Reliability
+
+| # | Issue | Effort |
+|---|-------|--------|
+| 6 | No interfaces for LLM/SD clients — `app.go` depends on concrete types, untestable | 2–3h |
+| 7 | No tests at all (no `*_test.go`, no frontend tests) | 2–3d |
+| 8 | Duplicated settings validation in `app.go` and `api/handler.go`; whitelist missing newer fields (`llm_backend`, `llm_keep_alive`) | 1h |
+| 9 | No `context.Context` in HTTP calls — requests can hang on app exit | 2h |
+| 10 | SQLite `SetMaxOpenConns(1)` — potential bottleneck | varies |
+
+### Nice-to-have — UX & Quality
+
+| # | Issue | Effort |
+|---|-------|--------|
+| 11 | Frontend: missing error handling, no retry buttons, no progress indicators | 1d |
+| 12 | Leftover `HelloWorld.vue` template not removed | 5m |
+| 13 | No DB migration system — `CREATE TABLE IF NOT EXISTS` only, no versioning/rollback | 0.5d |
+| 14 | Docker container runs as root, no healthcheck, no resource limits | 2h |
+| 15 | No CI/CD, no linters (golangci-lint, prettier, eslint) | 0.5d |
+| 16 | `log.Printf` logging — no levels, no structured output; response body logged in full (`llm/client.go:104`) | 0.5d |
+
+### Priority Matrix
+
+| Priority | Items | Description |
+|----------|-------|-------------|
+| **P0** | 1, 3, 4 | Security fixes and bugs |
+| **P1** | 5, 6, 8, 9 | Architecture improvements |
+| **P2** | 7, 11, 12, 13 | Tests, UX, migrations |
+| **P3** | 10, 14, 15, 16 | Ops, quality tooling |
+
 ## License
 
-Private project.
+[GNU Affero General Public License v3.0](LICENSE)
