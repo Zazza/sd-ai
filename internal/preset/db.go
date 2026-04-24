@@ -38,6 +38,10 @@ func Open(dbPath string) (*DB, error) {
 		return nil, fmt.Errorf("migrate v3: %w", err)
 	}
 
+	if err := migrateV4(db); err != nil {
+		return nil, fmt.Errorf("migrate v4: %w", err)
+	}
+
 	return &DB{db: db}, nil
 }
 
@@ -118,6 +122,18 @@ func migrateV3(db *sql.DB) error {
 		pattern := "% " + s
 		_, _ = db.Exec("UPDATE presets SET sampler = SUBSTR(sampler, 1, LENGTH(sampler) - ?), schedule_type = ? WHERE sampler LIKE ? AND schedule_type = ''",
 			len(s)+1, s, pattern)
+	}
+	return nil
+}
+
+func migrateV4(db *sql.DB) error {
+	fixes := map[string]string{
+		"karras":        "Karras",
+		"exponential":   "Exponential",
+		"polyexponential": "Polyexponential",
+	}
+	for lower, proper := range fixes {
+		_, _ = db.Exec("UPDATE presets SET schedule_type = ? WHERE schedule_type = ?", proper, lower)
 	}
 	return nil
 }

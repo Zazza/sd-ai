@@ -35,7 +35,9 @@ const currentPage = computed(() => {
       </nav>
     </aside>
     <main class="main">
-      <component :is="currentPage" />
+      <KeepAlive>
+        <component :is="currentPage" />
+      </KeepAlive>
     </main>
   </div>
 </template>

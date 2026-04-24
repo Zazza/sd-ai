@@ -186,7 +186,8 @@ func (h *Handler) generateImage(w http.ResponseWriter, r *http.Request) {
 
 	samplerName := p.Sampler
 	if p.ScheduleType != "" {
-		samplerName = p.Sampler + " " + p.ScheduleType
+		st := strings.ToUpper(p.ScheduleType[:1]) + p.ScheduleType[1:]
+		samplerName = p.Sampler + " " + st
 	}
 
 	batchSize := 1
@@ -202,6 +203,15 @@ func (h *Handler) generateImage(w http.ResponseWriter, r *http.Request) {
 		clipSkip = *p.ClipSkip
 	}
 
+	denoisingStrength := p.DenoisingStrength
+	if denoisingStrength == nil && p.HiresFix != nil && *p.HiresFix {
+		ds := 0.5
+		if p.HiresDenoisingStrength != nil {
+			ds = *p.HiresDenoisingStrength
+		}
+		denoisingStrength = &ds
+	}
+
 	result, err := h.sd.Txt2Img(sd.Txt2ImgRequest{
 		Prompt:                 prompt,
 		NegativePrompt:         negativePrompt,
@@ -212,6 +222,7 @@ func (h *Handler) generateImage(w http.ResponseWriter, r *http.Request) {
 		Width:                  p.Width,
 		Height:                 p.Height,
 		Seed:                   p.Seed,
+		DenoisingStrength:      denoisingStrength,
 		ClipSkip:               &clipSkip,
 		BatchSize:              &batchSize,
 		BatchCount:             &batchCount,

@@ -71,6 +71,8 @@ type Txt2ImgRequest struct {
 	HiresUpscale           *float64 `json:"hr_scale,omitempty"`
 	HiresDenoisingStrength *float64 `json:"hr_denoising_strength,omitempty"`
 	HiresUpscaler          string   `json:"hr_upscaler,omitempty"`
+	HiresResizeX           int      `json:"hr_resize_x"`
+	HiresResizeY           int      `json:"hr_resize_y"`
 }
 
 type Txt2ImgResponse struct {
@@ -135,7 +137,7 @@ func (c *Client) Txt2Img(req Txt2ImgRequest) (*Txt2ImgResponse, error) {
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("API error %d: %s", resp.StatusCode, string(respBody))
+		return nil, fmt.Errorf("API error %d: %s\nRequest: %s", resp.StatusCode, string(respBody), string(body))
 	}
 
 	var result Txt2ImgResponse
