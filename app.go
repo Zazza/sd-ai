@@ -243,6 +243,19 @@ func (a *App) GenerateImage(params GenerateImageParams) (*GenerateImageResult, e
 		samplerName = p.Sampler + " " + p.ScheduleType
 	}
 
+	batchSize := 1
+	if p.BatchSize != nil {
+		batchSize = *p.BatchSize
+	}
+	batchCount := 1
+	if p.BatchCount != nil {
+		batchCount = *p.BatchCount
+	}
+	clipSkip := 1
+	if p.ClipSkip != nil {
+		clipSkip = *p.ClipSkip
+	}
+
 	result, err := a.sd.Txt2Img(sd.Txt2ImgRequest{
 		Prompt:                 prompt,
 		NegativePrompt:         negativePrompt,
@@ -254,9 +267,9 @@ func (a *App) GenerateImage(params GenerateImageParams) (*GenerateImageResult, e
 		Height:                 p.Height,
 		Seed:                   p.Seed,
 		DenoisingStrength:      p.DenoisingStrength,
-		ClipSkip:               p.ClipSkip,
-		BatchSize:              p.BatchSize,
-		BatchCount:             p.BatchCount,
+		ClipSkip:               &clipSkip,
+		BatchSize:              &batchSize,
+		BatchCount:             &batchCount,
 		HiresFix:               p.HiresFix,
 		HiresUpscale:           p.HiresUpscale,
 		HiresDenoisingStrength: p.HiresDenoisingStrength,
