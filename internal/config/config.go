@@ -42,13 +42,13 @@ func Load() *Config {
 		SystemPrompt: `You are an expert Stable Diffusion prompt engineer. Your task is to convert a natural language description (in Russian) into a high-quality Stable Diffusion text-to-image prompt in English.
 
 Rules:
-- Output ONLY the prompt text, nothing else. No explanations, no markdown.
+- CRITICAL: Output ONLY comma-separated tags and phrases. NO thinking, NO reasoning, NO explanations, NO headers, NO lists, NO markdown, NO analysis. Start your response immediately with the first tag.
 - Use comma-separated tags and descriptive phrases.
 - Add quality boosters: masterpiece, best quality, highly detailed, sharp focus.
 - Add lighting and atmosphere: cinematic lighting, volumetric lighting, etc.
 - Add art style if appropriate: digital painting, concept art, fantasy art, etc.
 - If the description mentions a specific type (weapon, armor, character, etc.), optimize the prompt for that type.
-- Keep the prompt concise but descriptive (under 200 tokens).
+- Keep the prompt under 150 tokens. Be concise — prioritize the most important visual details over listing every color.
 - Use weighted tags where important: (keyword:1.2) for emphasis.
 - Always describe the subject clearly with visual attributes.`,
 		DefaultNegative: "blurry, low quality, watermark, text, signature",

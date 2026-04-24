@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 
@@ -30,6 +31,53 @@ func NewApp(presets *preset.DB, llmClient *llm.Client, sdClient *sd.Client, cfg 
 
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+}
+
+// --- Service Status ---
+
+type ServiceStatus struct {
+	LLM struct {
+		Available bool   `json:"available"`
+		Model     string `json:"model"`
+	} `json:"llm"`
+	SD struct {
+		Available bool   `json:"available"`
+		Model     string `json:"model"`
+	} `json:"sd"`
+}
+
+func (a *App) CheckServices() ServiceStatus {
+	var status ServiceStatus
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	go func() {
+		defer wg.Done()
+		if err := a.llm.HealthCheck(); err != nil {
+			status.LLM.Available = false
+			return
+		}
+		status.LLM.Available = true
+		status.LLM.Model = a.config.SDPromptModel
+	}()
+
+	go func() {
+		defer wg.Done()
+		if err := a.sd.HealthCheck(); err != nil {
+			status.SD.Available = false
+			return
+		}
+		status.SD.Available = true
+		opts, err := a.sd.GetOptions()
+		if err == nil {
+			if m, ok := opts["sd_model_checkpoint"].(string); ok {
+				status.SD.Model = m
+			}
+		}
+	}()
+
+	wg.Wait()
+	return status
 }
 
 // --- Presets ---

@@ -23,6 +23,32 @@ func New(baseURL string) *Client {
 	}
 }
 
+func (c *Client) HealthCheck() error {
+	client := &http.Client{Timeout: 3 * time.Second}
+	resp, err := client.Get(c.baseURL + "/sdapi/v1/sd-models")
+	if err != nil {
+		return fmt.Errorf("health check failed: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("health check status %d", resp.StatusCode)
+	}
+	return nil
+}
+
+func (c *Client) GetOptions() (map[string]interface{}, error) {
+	resp, err := c.httpClient.Get(c.baseURL + "/sdapi/v1/options")
+	if err != nil {
+		return nil, fmt.Errorf("get options: %w", err)
+	}
+	defer resp.Body.Close()
+	var opts map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&opts); err != nil {
+		return nil, fmt.Errorf("decode options: %w", err)
+	}
+	return opts, nil
+}
+
 func (c *Client) SetURL(baseURL string) {
 	c.baseURL = baseURL
 }

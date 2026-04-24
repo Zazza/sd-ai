@@ -5,7 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
+	"regexp"
+	"strings"
 	"time"
 )
 
@@ -44,6 +47,7 @@ type ChatRequest struct {
 	Messages    []Message    `json:"messages"`
 	Temperature float64      `json:"temperature"`
 	MaxTokens   int          `json:"max_tokens"`
+	Stream      bool         `json:"stream"`
 	KeepAlive   string       `json:"keep_alive,omitempty"`
 	Options     *ChatOptions `json:"options,omitempty"`
 }
@@ -81,16 +85,23 @@ func (c *Client) Chat(model, systemPrompt, userMessage string, temperature float
 		return "", fmt.Errorf("marshal request: %w", err)
 	}
 
-	resp, err := c.httpClient.Post(c.baseURL+"/v1/chat/completions", "application/json", bytes.NewReader(body))
+	url := c.baseURL + "/v1/chat/completions"
+	log.Printf("[LLM] POST %s model=%s max_tokens=%d temperature=%.1f prompt_len=%d", url, model, maxTokens, temperature, len(userMessage))
+
+	resp, err := c.httpClient.Post(url, "application/json", bytes.NewReader(body))
 	if err != nil {
+		log.Printf("[LLM] request error: %v", err)
 		return "", fmt.Errorf("request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
+		log.Printf("[LLM] read error: %v", err)
 		return "", fmt.Errorf("read response: %w", err)
 	}
+
+	log.Printf("[LLM] response status=%d body_len=%d body=%s", resp.StatusCode, len(respBody), string(respBody))
 
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("API error %d: %s", resp.StatusCode, string(respBody))
@@ -98,14 +109,45 @@ func (c *Client) Chat(model, systemPrompt, userMessage string, temperature float
 
 	var chatResp ChatResponse
 	if err := json.Unmarshal(respBody, &chatResp); err != nil {
+		log.Printf("[LLM] decode error: %v", err)
 		return "", fmt.Errorf("decode response: %w", err)
 	}
 
 	if len(chatResp.Choices) == 0 {
-		return "", fmt.Errorf("empty response from LLM")
+		return "", fmt.Errorf("empty response from LLM (body: %s)", string(respBody))
 	}
 
-	return chatResp.Choices[0].Message.Content, nil
+	content := chatResp.Choices[0].Message.Content
+	content = strings.TrimSpace(stripThinkTags(content))
+	return content, nil
+}
+
+var thinkRe = regexp.MustCompile(`(?s)<think\s*>.*?</think\s*>`)
+
+func stripThinkTags(s string) string {
+	return thinkRe.ReplaceAllString(s, "")
+}
+
+var preambleRe = regexp.MustCompile(`(?si)^(?:.*?(?:my prompt|final prompt|here(?:'s| is) the prompt|the prompt|output:)[^\n]*\n)(.*)$`)
+
+func stripPreamble(s string) string {
+	lines := strings.Split(s, "\n")
+	if len(lines) <= 1 {
+		return s
+	}
+	for i := len(lines) - 1; i >= 0; i-- {
+		line := strings.TrimSpace(lines[i])
+		if line == "" {
+			continue
+		}
+		if !strings.HasPrefix(line, "**") && !strings.HasPrefix(line, "#") &&
+			!strings.HasPrefix(line, "-") && !strings.HasPrefix(line, "*") &&
+			!strings.HasPrefix(line, ">") && !strings.HasSuffix(line, ":") &&
+			!strings.HasPrefix(line, "```") {
+			return strings.Join(lines[i:], "\n")
+		}
+	}
+	return s
 }
 
 func (c *Client) GenerateSDPrompt(systemPrompt, description, presetType, model string) (string, error) {
@@ -114,7 +156,24 @@ func (c *Client) GenerateSDPrompt(systemPrompt, description, presetType, model s
 		userMessage = fmt.Sprintf("[Type: %s] %s", presetType, description)
 	}
 
-	return c.Chat(model, systemPrompt, userMessage, 0.7, 300)
+	result, err := c.Chat(model, systemPrompt, userMessage, 0.7, 500)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(stripPreamble(result)), nil
+}
+
+func (c *Client) HealthCheck() error {
+	client := &http.Client{Timeout: 3 * time.Second}
+	resp, err := client.Get(c.baseURL + "/v1/models")
+	if err != nil {
+		return fmt.Errorf("health check failed: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("health check status %d", resp.StatusCode)
+	}
+	return nil
 }
 
 func (c *Client) SetURL(baseURL string) {

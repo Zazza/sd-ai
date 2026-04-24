@@ -2,7 +2,7 @@ import {
   ListPresets, ListPresetsByType, CreatePreset, UpdatePreset, DeletePreset,
   GenerateSDPrompt, GenerateImage, SaveImage,
   GetSDModels, GetSDSamplers, GetLLMModels,
-  GetSettings, UpdateSettings,
+  GetSettings, UpdateSettings, CheckServices,
   ListDescriptions, CreateDescription, DeleteDescription,
   ListPrompts, CreatePrompt, DeletePrompt,
 } from './wailsjs/go/main/App.js'
@@ -22,6 +22,7 @@ export const api = {
   getLLMModels: () => GetLLMModels(),
   getSettings: () => GetSettings(),
   updateSettings: (data) => UpdateSettings(data),
+  checkServices: () => CheckServices(),
   listDescriptions: () => ListDescriptions(),
   createDescription: (text) => CreateDescription(text),
   deleteDescription: (id) => DeleteDescription(id),

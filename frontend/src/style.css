@@ -476,6 +476,85 @@ input, textarea, select {
   color: var(--accent);
 }
 
+/* Saved modal list */
+.saved-modal-list {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.saved-modal-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.saved-modal-item:last-child {
+  border-bottom: none;
+}
+
+.saved-modal-text {
+  flex: 1;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text);
+  cursor: pointer;
+  word-break: break-word;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.saved-modal-text:hover {
+  color: var(--accent);
+}
+
+/* Pager */
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.pager-info {
+  font-size: 13px;
+  color: var(--text-dim);
+  min-width: 60px;
+  text-align: center;
+}
+
+/* Service status */
+.service-status {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 500;
+  color: white;
+}
+
+.status-ok {
+  background: var(--success);
+}
+
+.status-down {
+  background: var(--danger);
+}
+
 /* Tabs */
 .tabs {
   display: flex;

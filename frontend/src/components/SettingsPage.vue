@@ -38,10 +38,14 @@ const llmModels = ref([])
 const llmLoading = ref(false)
 const llmError = ref('')
 
+const connectionLLMModels = ref([])
+const connectionLLMLoading = ref(false)
+
 watch(() => connectionForm.llm_backend, (newVal, oldVal) => {
   if (oldVal && defaultURLs[oldVal] && connectionForm.llm_url === defaultURLs[oldVal]) {
     connectionForm.llm_url = defaultURLs[newVal] || defaultURLs.lmstudio
   }
+  loadConnectionLLMModels()
 })
 
 async function loadSettings() {
@@ -55,7 +59,20 @@ async function loadSettings() {
     connectionForm.llm_keep_alive = settings.llm_keep_alive || '5m'
     connectionForm.llm_num_ctx = settings.llm_num_ctx || '4096'
     connectionForm.llm_num_gpu = settings.llm_num_gpu || '0'
+    loadConnectionLLMModels()
   } catch {}
+}
+
+async function loadConnectionLLMModels() {
+  if (connectionForm.llm_backend === 'llamacpp') return
+  connectionLLMLoading.value = true
+  try {
+    connectionLLMModels.value = await api.getLLMModels() || []
+  } catch {
+    connectionLLMModels.value = []
+  } finally {
+    connectionLLMLoading.value = false
+  }
 }
 
 async function saveConnection() {
@@ -68,9 +85,9 @@ async function saveConnection() {
       llm_model: connectionForm.llm_model,
       sd_prompt_model: connectionForm.sd_prompt_model,
       llm_backend: connectionForm.llm_backend,
-      llm_keep_alive: connectionForm.llm_keep_alive,
-      llm_num_ctx: connectionForm.llm_num_ctx,
-      llm_num_gpu: connectionForm.llm_num_gpu,
+      llm_keep_alive: String(connectionForm.llm_keep_alive),
+      llm_num_ctx: String(connectionForm.llm_num_ctx),
+      llm_num_gpu: String(connectionForm.llm_num_gpu),
     })
     connectionSaved.value = true
   } catch (e) {
@@ -144,14 +161,21 @@ onMounted(loadSettings)
         <input class="form-input" v-model="connectionForm.llm_url" :placeholder="defaultURLs[connectionForm.llm_backend]" />
       </div>
 
-      <div class="form-group">
+      <div class="form-group" v-if="connectionForm.llm_backend !== 'llamacpp'">
         <label class="form-label">LLM Model (for chat)</label>
-        <input class="form-input" v-model="connectionForm.llm_model" placeholder="openai/gpt-oss-20b" />
+        <div v-if="connectionLLMLoading" style="padding: 8px 0;"><span class="spinner"></span></div>
+        <select v-else class="form-input" v-model="connectionForm.llm_model">
+          <option value="">-- select model --</option>
+          <option v-for="m in connectionLLMModels" :key="m.id" :value="m.id">{{ m.id }}</option>
+        </select>
       </div>
 
-      <div class="form-group">
+      <div class="form-group" v-if="connectionForm.llm_backend !== 'llamacpp'">
         <label class="form-label">SD Prompt Model (model for prompt generation)</label>
-        <input class="form-input" v-model="connectionForm.sd_prompt_model" placeholder="default" />
+        <select class="form-input" v-model="connectionForm.sd_prompt_model">
+          <option value="default">default</option>
+          <option v-for="m in connectionLLMModels" :key="m.id" :value="m.id">{{ m.id }}</option>
+        </select>
       </div>
 
       <div class="form-group">
