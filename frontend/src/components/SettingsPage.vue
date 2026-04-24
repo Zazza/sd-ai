@@ -1,6 +1,8 @@
 <script setup>
 import { ref, reactive, watch, onMounted } from 'vue'
 import { api } from '../api.js'
+import ToggleSwitch from './ToggleSwitch.vue'
+import PinModal from './PinModal.vue'
 
 const activeTab = ref('connection')
 
@@ -41,6 +43,11 @@ const llmError = ref('')
 const connectionLLMModels = ref([])
 const connectionLLMLoading = ref(false)
 
+const kidsMode = ref(false)
+const showPinModal = ref(false)
+const pinMode = ref('set')
+const pinError = ref('')
+
 watch(() => connectionForm.llm_backend, (newVal, oldVal) => {
   if (oldVal && defaultURLs[oldVal] && connectionForm.llm_url === defaultURLs[oldVal]) {
     connectionForm.llm_url = defaultURLs[newVal] || defaultURLs.lmstudio
@@ -60,6 +67,7 @@ async function loadSettings() {
     connectionForm.llm_num_ctx = settings.llm_num_ctx || '4096'
     connectionForm.llm_num_gpu = settings.llm_num_gpu || '0'
     loadConnectionLLMModels()
+    kidsMode.value = await api.isKidsModeActive()
   } catch {}
 }
 
@@ -127,6 +135,34 @@ function switchTab(tab) {
   if (tab === 'llm' && llmModels.value.length === 0 && !llmError.value) loadLLM()
 }
 
+function onKidsToggle(val) {
+  pinError.value = ''
+  if (val) {
+    pinMode.value = 'set'
+    showPinModal.value = true
+  } else {
+    pinMode.value = 'verify'
+    showPinModal.value = true
+  }
+}
+
+async function onPinConfirm(pin) {
+  pinError.value = ''
+  const enabled = pinMode.value === 'set'
+  try {
+    await api.setKidsMode(enabled, pin)
+    kidsMode.value = enabled
+    showPinModal.value = false
+  } catch (e) {
+    pinError.value = e.message || 'Error'
+  }
+}
+
+function onPinCancel() {
+  showPinModal.value = false
+  pinError.value = ''
+}
+
 onMounted(loadSettings)
 </script>
 
@@ -140,6 +176,7 @@ onMounted(loadSettings)
       <button class="tab" :class="{ active: activeTab === 'connection' }" @click="switchTab('connection')">Connection</button>
       <button class="tab" :class="{ active: activeTab === 'sd' }" @click="switchTab('sd')">Stable Diffusion</button>
       <button class="tab" :class="{ active: activeTab === 'llm' }" @click="switchTab('llm')">LLM</button>
+      <button class="tab" :class="{ active: activeTab === 'safety' }" @click="switchTab('safety')">Safety</button>
     </div>
 
     <!-- Connection Tab -->
@@ -260,5 +297,31 @@ onMounted(loadSettings)
         {{ llmLoading ? 'Loading...' : 'Refresh' }}
       </button>
     </div>
+
+    <!-- Safety Tab -->
+    <div v-if="activeTab === 'safety'" class="card">
+      <h3 style="color: var(--text-bright); margin-bottom: 16px;">Kids Mode</h3>
+      <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 16px;">
+        <ToggleSwitch :modelValue="kidsMode" @update:modelValue="onKidsToggle" />
+        <div>
+          <div style="color: var(--text-bright); font-weight: 500;">{{ kidsMode ? 'Enabled' : 'Disabled' }}</div>
+          <div style="color: var(--text-dim); font-size: 12px; margin-top: 2px;">
+            Content filter for child-safe image generation
+          </div>
+        </div>
+      </div>
+      <div style="color: var(--text-dim); font-size: 13px; line-height: 1.6;">
+        When enabled, Kids Mode applies multiple safety layers:
+        <ul style="margin: 8px 0 0 16px; padding: 0;">
+          <li>Filters user input for restricted content</li>
+          <li>Instructs the LLM to generate only safe prompts</li>
+          <li>Filters LLM output for inappropriate tags</li>
+          <li>Forces negative prompt safety tags</li>
+        </ul>
+        <div style="margin-top: 8px;">Protected by 4-digit PIN to prevent children from disabling it.</div>
+      </div>
+    </div>
+
+    <PinModal v-if="showPinModal" :mode="pinMode" :error="pinError" @confirm="onPinConfirm" @cancel="onPinCancel" />
   </div>
 </template>

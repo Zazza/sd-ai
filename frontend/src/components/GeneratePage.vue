@@ -42,6 +42,7 @@ const llmAvailable = ref(false)
 const llmModel = ref('')
 const sdAvailable = ref(false)
 const sdModel = ref('')
+const kidsModeActive = ref(false)
 let statusInterval = null
 
 async function checkServices() {
@@ -51,6 +52,7 @@ async function checkServices() {
     llmModel.value = status.llm?.model || ''
     sdAvailable.value = status.sd?.available || false
     sdModel.value = status.sd?.model || ''
+    kidsModeActive.value = await api.isKidsModeActive()
   } catch {}
 }
 
@@ -238,6 +240,9 @@ onUnmounted(() => {
       </div>
       <div class="status-badge" :class="sdAvailable ? 'status-ok' : 'status-down'">
         &#9679; SD{{ sdModel ? ': ' + sdModel : '' }}
+      </div>
+      <div v-if="kidsModeActive" class="status-badge status-ok">
+        &#9679; Kids Mode
       </div>
     </div>
 

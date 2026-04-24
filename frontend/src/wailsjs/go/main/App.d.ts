@@ -33,6 +33,8 @@ export function GetSDSamplers():Promise<Array<sd.Sampler>>;
 
 export function GetSettings():Promise<Record<string, string>>;
 
+export function IsKidsModeActive():Promise<boolean>;
+
 export function ListDescriptions():Promise<Array<preset.SavedDescription>>;
 
 export function ListPresets():Promise<Array<preset.Preset>>;
@@ -42,6 +44,8 @@ export function ListPresetsByType(arg1:string):Promise<Array<preset.Preset>>;
 export function ListPrompts():Promise<Array<preset.SavedPrompt>>;
 
 export function SaveImage(arg1:string,arg2:string):Promise<string>;
+
+export function SetKidsMode(arg1:boolean,arg2:string):Promise<void>;
 
 export function UpdatePreset(arg1:preset.Preset):Promise<preset.Preset>;
 

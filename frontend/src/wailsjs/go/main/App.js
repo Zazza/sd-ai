@@ -58,6 +58,10 @@ export function GetSettings() {
   return window['go']['main']['App']['GetSettings']();
 }
 
+export function IsKidsModeActive() {
+  return window['go']['main']['App']['IsKidsModeActive']();
+}
+
 export function ListDescriptions() {
   return window['go']['main']['App']['ListDescriptions']();
 }
@@ -76,6 +80,10 @@ export function ListPrompts() {
 
 export function SaveImage(arg1, arg2) {
   return window['go']['main']['App']['SaveImage'](arg1, arg2);
+}
+
+export function SetKidsMode(arg1, arg2) {
+  return window['go']['main']['App']['SetKidsMode'](arg1, arg2);
 }
 
 export function UpdatePreset(arg1) {

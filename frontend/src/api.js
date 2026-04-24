@@ -5,6 +5,7 @@ import {
   GetSettings, UpdateSettings, CheckServices,
   ListDescriptions, CreateDescription, DeleteDescription,
   ListPrompts, CreatePrompt, DeletePrompt,
+  SetKidsMode, IsKidsModeActive,
 } from './wailsjs/go/main/App.js'
 
 export const api = {
@@ -29,4 +30,6 @@ export const api = {
   listPrompts: () => ListPrompts(),
   createPrompt: (text) => CreatePrompt(text),
   deletePrompt: (id) => DeletePrompt(id),
+  setKidsMode: (enabled, pin) => SetKidsMode(enabled, pin),
+  isKidsModeActive: () => IsKidsModeActive(),
 }

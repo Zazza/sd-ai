@@ -2,7 +2,10 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -12,6 +15,7 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 
 	"go-sd/internal/config"
+	"go-sd/internal/kids"
 	"go-sd/internal/llm"
 	"go-sd/internal/preset"
 	"go-sd/internal/sd"
@@ -31,6 +35,42 @@ func NewApp(presets *preset.DB, llmClient *llm.Client, sdClient *sd.Client, cfg 
 
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+}
+
+func (a *App) isKidsMode() bool {
+	v, _ := a.presets.GetSetting("kids_mode")
+	return v == "true"
+}
+
+func (a *App) IsKidsModeActive() bool {
+	return a.isKidsMode()
+}
+
+func (a *App) SetKidsMode(enabled bool, pin string) error {
+	if enabled {
+		if pin != "" {
+			if len(pin) != 4 {
+				return fmt.Errorf("PIN must be 4 digits")
+			}
+			hash := sha256.Sum256([]byte(pin))
+			if err := a.presets.SetSetting("kids_pin_hash", hex.EncodeToString(hash[:])); err != nil {
+				return err
+			}
+		}
+		return a.presets.SetSetting("kids_mode", "true")
+	}
+
+	storedHash, _ := a.presets.GetSetting("kids_pin_hash")
+	if storedHash != "" {
+		if pin == "" {
+			return fmt.Errorf("PIN required")
+		}
+		hash := sha256.Sum256([]byte(pin))
+		if hex.EncodeToString(hash[:]) != storedHash {
+			return fmt.Errorf("incorrect PIN")
+		}
+	}
+	return a.presets.SetSetting("kids_mode", "false")
 }
 
 // --- Service Status ---
@@ -133,7 +173,28 @@ func (a *App) GenerateSDPrompt(description, presetType string) (string, error) {
 	if description == "" {
 		return "", nil
 	}
-	return a.llm.GenerateSDPrompt(a.config.SystemPrompt, description, presetType, a.config.SDPromptModel)
+
+	systemPrompt := a.config.SystemPrompt
+
+	if a.isKidsMode() {
+		filtered := kids.FilterInput(description)
+		if filtered == "" {
+			return "", fmt.Errorf("description contains restricted content")
+		}
+		description = filtered
+		systemPrompt += config.KidsModePrompt
+	}
+
+	result, err := a.llm.GenerateSDPrompt(systemPrompt, description, presetType, a.config.SDPromptModel)
+	if err != nil {
+		return "", err
+	}
+
+	if a.isKidsMode() {
+		result = kids.FilterOutput(result)
+	}
+
+	return result, nil
 }
 
 type GenerateImageParams struct {
@@ -162,6 +223,10 @@ func (a *App) GenerateImage(params GenerateImageParams) (*GenerateImageResult, e
 	negativePrompt := p.NegativePrompt
 	if params.ExtraNegativePrompt != "" {
 		negativePrompt += ", " + params.ExtraNegativePrompt
+	}
+
+	if a.isKidsMode() {
+		negativePrompt += ", " + config.KidsModeNegativePrompt
 	}
 
 	if p.ModelName != "" {
@@ -226,6 +291,7 @@ func (a *App) GetSettings() (map[string]string, error) {
 		"llm_keep_alive":  "5m",
 		"llm_num_ctx":     "4096",
 		"llm_num_gpu":     "0",
+		"kids_mode":       "false",
 	}
 	for k, v := range defaults {
 		if _, ok := settings[k]; !ok {
@@ -239,6 +305,7 @@ func (a *App) UpdateSettings(data map[string]string) error {
 	allowed := map[string]bool{
 		"llm_url": true, "sd_url": true, "llm_model": true, "sd_prompt_model": true,
 		"llm_backend": true, "llm_keep_alive": true, "llm_num_ctx": true, "llm_num_gpu": true,
+		"kids_mode": true, "kids_pin_hash": true,
 	}
 
 	for k, v := range data {
