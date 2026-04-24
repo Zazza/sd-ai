@@ -13,6 +13,16 @@ Desktop application for image generation via [Stable Diffusion WebUI](https://gi
 | LLM | OpenAI-compatible API |
 | SD | Stable Diffusion WebUI API |
 
+## External Services
+
+SD Studio requires two external services running on a machine in your local network with their API accessible:
+
+- **Image generation** — [Stable Diffusion WebUI (A1111)](https://github.com/AUTOMATIC1111/stable-diffusion-webui) must be running with the `--api` flag. Configure its URL in Settings (default: `http://localhost:7860`).
+
+- **Prompt generation (LLM)** — Any OpenAI-compatible API server: [llama.cpp](https://github.com/ggerganov/llama.cpp) (`--server` mode), [Ollama](https://ollama.com/), or [LM Studio](https://lmstudio.ai/). Configure URL and model in Settings (default: `http://localhost:11434/v1`).
+
+Both services must be reachable from the machine running SD Studio. If they run on a different host, set the URL accordingly (e.g. `http://192.168.1.100:7860`).
+
 ## Features
 
 - Generate SD prompts via LLM from text descriptions (any language)
