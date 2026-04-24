@@ -128,13 +128,49 @@ func stripThinkTags(s string) string {
 	return thinkRe.ReplaceAllString(s, "")
 }
 
-var preambleRe = regexp.MustCompile(`(?si)^(?:.*?(?:my prompt|final prompt|here(?:'s| is) the prompt|the prompt|output:)[^\n]*\n)(.*)$`)
-
-func stripPreamble(s string) string {
-	lines := strings.Split(s, "\n")
-	if len(lines) <= 1 {
-		return s
+func extractTags(s string) string {
+	lower := strings.ToLower(s)
+	tagMarkers := []string{"masterpiece", "score_9"}
+	tagStart := -1
+	for _, m := range tagMarkers {
+		if idx := strings.Index(lower, m); idx >= 0 {
+			if tagStart < 0 || idx < tagStart {
+				tagStart = idx
+			}
+		}
 	}
+
+	if tagStart < 0 {
+		return cleanResponse(s)
+	}
+
+	if nl := strings.LastIndex(s[:tagStart], "\n"); nl >= 0 {
+		tagStart = nl + 1
+	}
+
+	result := s[tagStart:]
+
+	cutMarkers := []string{"\n\nLet me", "\n\nHere ", "\n\nNote:", "\n\n---", "\n\n**", "\n\n#",
+		"\nLet me create", "\nNow let me", "\nI'll ", "\nFirst,", "\nSo the"}
+	for _, m := range cutMarkers {
+		if idx := strings.Index(result, m); idx > 0 {
+			result = result[:idx]
+		}
+	}
+
+	result = strings.TrimSpace(result)
+	result = strings.ReplaceAll(result, "\n", ", ")
+	for strings.Contains(result, ", ,") {
+		result = strings.ReplaceAll(result, ", ,", ",")
+	}
+	for strings.Contains(result, ",,") {
+		result = strings.ReplaceAll(result, ",,", ",")
+	}
+	return result
+}
+
+func cleanResponse(s string) string {
+	lines := strings.Split(s, "\n")
 	for i := len(lines) - 1; i >= 0; i-- {
 		line := strings.TrimSpace(lines[i])
 		if line == "" {
@@ -156,11 +192,11 @@ func (c *Client) GenerateSDPrompt(systemPrompt, description, presetType, model s
 		userMessage = fmt.Sprintf("[Type: %s] %s", presetType, description)
 	}
 
-	result, err := c.Chat(model, systemPrompt, userMessage, 0.7, 500)
+	result, err := c.Chat(model, systemPrompt, userMessage, 0.4, 500)
 	if err != nil {
 		return "", err
 	}
-	return strings.TrimSpace(stripPreamble(result)), nil
+	return strings.TrimSpace(extractTags(result)), nil
 }
 
 func (c *Client) HealthCheck() error {

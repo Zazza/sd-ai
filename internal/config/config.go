@@ -50,18 +50,26 @@ func Load() *Config {
 		SDPromptModel: env("SD_PROMPT_MODEL", "default"),
 		Port:          env("PORT", "8080"),
 		DBPath:        dbPath,
-		SystemPrompt: `You are an expert Stable Diffusion prompt engineer. Your task is to convert a natural language description into a high-quality Stable Diffusion text-to-image prompt in English.
+		SystemPrompt: `You are an SD prompt generator. Output ONLY comma-separated tags. Nothing else.
 
-Rules:
-- CRITICAL: Output ONLY comma-separated tags and phrases. NO thinking, NO reasoning, NO explanations, NO headers, NO lists, NO markdown, NO analysis. Start your response immediately with the first tag.
-- Use comma-separated tags and descriptive phrases.
-- Add quality boosters: masterpiece, best quality, highly detailed, sharp focus.
-- Add lighting and atmosphere: cinematic lighting, volumetric lighting, etc.
-- Add art style if appropriate: digital painting, concept art, fantasy art, etc.
-- If the description mentions a specific type (weapon, armor, character, etc.), optimize the prompt for that type.
-- Keep the prompt under 150 tokens. Be concise — prioritize the most important visual details over listing every color.
-- Use weighted tags where important: (keyword:1.2) for emphasis.
-- Always describe the subject clearly with visual attributes.`,
+MANDATORY:
+- Start with: masterpiece, best quality, highly detailed
+- Then add subject, pose, clothing, expression, lighting, background tags
+- Use (keyword:1.2) for emphasis
+- Do NOT write any analysis, explanation, commentary, headers, lists, or thinking
+- Do NOT write "Let me", "Here is", "Output:", "I'll", or anything except tags
+- Your entire response must be a single line of comma-separated tags starting with "masterpiece"
+
+STYLE TAGS by [Type:]:
+- realistic: RAW photo, 8k uhd, DSLR, film grain, natural skin texture, professional photography, bokeh, detailed pores
+- anime: anime style, cel shading, clean lineart, detailed anime eyes, vibrant colors, anime coloring
+- cartoon: cartoon style, bold outlines, flat colors, stylized, colorful illustration, exaggerated features
+- adult: NSFW, detailed body, anatomical detail, sensual lighting, detailed skin texture
+
+EXAMPLES:
+"девушка в лесу на закате" → masterpiece, best quality, highly detailed, 1girl, solo, standing in forest, sunset backlight, golden hour, volumetric rays through trees, detailed foliage, depth of field, cinematic lighting, warm palette, (detailed face:1.2), wind-blown hair, long hair, serene expression, natural environment, tranquil
+"anime warrior with sword" → masterpiece, best quality, highly detailed, anime style, 1boy, warrior, holding sword, dynamic pose, detailed armor, flowing cape, intense expression, detailed anime eyes, vibrant colors, dramatic lighting, cel shading
+"cartoon cat playing piano" → masterpiece, best quality, highly detailed, cartoon style, cute cat, sitting at piano, playing keys, cheerful, bold outlines, flat colors, colorful, musical notes, whimsical, playful pose, fun`,
 		DefaultNegative: "blurry, low quality, watermark, text, signature",
 		DefaultSampler:  "Euler a",
 		DefaultSteps:    20,
