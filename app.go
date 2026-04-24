@@ -235,15 +235,27 @@ func (a *App) GenerateImage(params GenerateImageParams) (*GenerateImageResult, e
 		_ = a.sd.SetModel(p.ModelName)
 	}
 
+	if p.VAE != "" {
+		_ = a.sd.SetVAE(p.VAE)
+	}
+
 	result, err := a.sd.Txt2Img(sd.Txt2ImgRequest{
-		Prompt:         prompt,
-		NegativePrompt: negativePrompt,
-		SamplerName:    p.Sampler,
-		Steps:          p.Steps,
-		CfgScale:       p.CfgScale,
-		Width:          p.Width,
-		Height:         p.Height,
-		Seed:           p.Seed,
+		Prompt:                 prompt,
+		NegativePrompt:         negativePrompt,
+		SamplerName:            p.Sampler,
+		Steps:                  p.Steps,
+		CfgScale:               p.CfgScale,
+		Width:                  p.Width,
+		Height:                 p.Height,
+		Seed:                   p.Seed,
+		DenoisingStrength:      p.DenoisingStrength,
+		ClipSkip:               p.ClipSkip,
+		BatchSize:              p.BatchSize,
+		BatchCount:             p.BatchCount,
+		HiresFix:               p.HiresFix,
+		HiresUpscale:           p.HiresUpscale,
+		HiresDenoisingStrength: p.HiresDenoisingStrength,
+		HiresUpscaler:          p.HiresUpscaler,
 	})
 	if err != nil {
 		return nil, err
@@ -268,6 +280,14 @@ func (a *App) GetSDModels() ([]sd.SDModel, error) {
 
 func (a *App) GetSDSamplers() ([]sd.Sampler, error) {
 	return a.sd.GetSamplers()
+}
+
+func (a *App) GetSDUpscalers() ([]sd.Upscaler, error) {
+	return a.sd.GetUpscalers()
+}
+
+func (a *App) GetSDVAEs() ([]sd.VAE, error) {
+	return a.sd.GetVAEs()
 }
 
 // --- LLM Info ---
@@ -466,7 +486,16 @@ type PresetData struct {
 	Width          int     `json:"width"`
 	Height         int     `json:"height"`
 	ModelName      string  `json:"model_name"`
-	Seed           *int64  `json:"seed"`
+	Seed                   *int64   `json:"seed"`
+	DenoisingStrength      *float64 `json:"denoising_strength"`
+	ClipSkip               *int     `json:"clip_skip"`
+	BatchSize              *int     `json:"batch_size"`
+	BatchCount             *int     `json:"batch_count"`
+	HiresFix               *bool    `json:"hires_fix"`
+	HiresUpscale           *float64 `json:"hires_upscale"`
+	HiresDenoisingStrength *float64 `json:"hires_denoising_strength"`
+	HiresUpscaler          string   `json:"hires_upscaler"`
+	VAE                    string   `json:"vae"`
 }
 
 type ImportPreview struct {
@@ -491,17 +520,26 @@ func (a *App) ExportPresets(ids []int64) (string, error) {
 	}
 	for i, p := range selected {
 		data.Presets[i] = PresetData{
-			Name:           p.Name,
-			PresetType:     p.PresetType,
-			Prompt:         p.Prompt,
-			NegativePrompt: p.NegativePrompt,
-			Sampler:        p.Sampler,
-			Steps:          p.Steps,
-			CfgScale:       p.CfgScale,
-			Width:          p.Width,
-			Height:         p.Height,
-			ModelName:      p.ModelName,
-			Seed:           p.Seed,
+			Name:                   p.Name,
+			PresetType:             p.PresetType,
+			Prompt:                 p.Prompt,
+			NegativePrompt:         p.NegativePrompt,
+			Sampler:                p.Sampler,
+			Steps:                  p.Steps,
+			CfgScale:               p.CfgScale,
+			Width:                  p.Width,
+			Height:                 p.Height,
+			ModelName:              p.ModelName,
+			Seed:                   p.Seed,
+			DenoisingStrength:      p.DenoisingStrength,
+			ClipSkip:               p.ClipSkip,
+			BatchSize:              p.BatchSize,
+			BatchCount:             p.BatchCount,
+			HiresFix:               p.HiresFix,
+			HiresUpscale:           p.HiresUpscale,
+			HiresDenoisingStrength: p.HiresDenoisingStrength,
+			HiresUpscaler:          p.HiresUpscaler,
+			VAE:                    p.VAE,
 		}
 	}
 
@@ -590,22 +628,49 @@ func (a *App) ImportPresets(items []PresetData) ([]preset.Preset, error) {
 		if item.CfgScale < 0 || item.CfgScale > 30 {
 			return nil, fmt.Errorf("invalid cfg_scale for %q: must be 0-30", item.Name)
 		}
+		if item.DenoisingStrength != nil && (*item.DenoisingStrength < 0 || *item.DenoisingStrength > 1) {
+			return nil, fmt.Errorf("invalid denoising_strength for %q: must be 0-1", item.Name)
+		}
+		if item.ClipSkip != nil && (*item.ClipSkip < 1 || *item.ClipSkip > 12) {
+			return nil, fmt.Errorf("invalid clip_skip for %q: must be 1-12", item.Name)
+		}
+		if item.BatchSize != nil && (*item.BatchSize < 1 || *item.BatchSize > 8) {
+			return nil, fmt.Errorf("invalid batch_size for %q: must be 1-8", item.Name)
+		}
+		if item.BatchCount != nil && (*item.BatchCount < 1 || *item.BatchCount > 8) {
+			return nil, fmt.Errorf("invalid batch_count for %q: must be 1-8", item.Name)
+		}
+		if item.HiresUpscale != nil && (*item.HiresUpscale < 1 || *item.HiresUpscale > 4) {
+			return nil, fmt.Errorf("invalid hires_upscale for %q: must be 1-4", item.Name)
+		}
+		if item.HiresDenoisingStrength != nil && (*item.HiresDenoisingStrength < 0 || *item.HiresDenoisingStrength > 1) {
+			return nil, fmt.Errorf("invalid hires_denoising_strength for %q: must be 0-1", item.Name)
+		}
 	}
 
 	batch := make([]preset.Preset, len(items))
 	for i, item := range items {
 		batch[i] = preset.Preset{
-			Name:           item.Name,
-			PresetType:     item.PresetType,
-			Prompt:         item.Prompt,
-			NegativePrompt: item.NegativePrompt,
-			Sampler:        item.Sampler,
-			Steps:          item.Steps,
-			CfgScale:       item.CfgScale,
-			Width:          item.Width,
-			Height:         item.Height,
-			ModelName:      item.ModelName,
-			Seed:           item.Seed,
+			Name:                   item.Name,
+			PresetType:             item.PresetType,
+			Prompt:                 item.Prompt,
+			NegativePrompt:         item.NegativePrompt,
+			Sampler:                item.Sampler,
+			Steps:                  item.Steps,
+			CfgScale:               item.CfgScale,
+			Width:                  item.Width,
+			Height:                 item.Height,
+			ModelName:              item.ModelName,
+			Seed:                   item.Seed,
+			DenoisingStrength:      item.DenoisingStrength,
+			ClipSkip:               item.ClipSkip,
+			BatchSize:              item.BatchSize,
+			BatchCount:             item.BatchCount,
+			HiresFix:               item.HiresFix,
+			HiresUpscale:           item.HiresUpscale,
+			HiresDenoisingStrength: item.HiresDenoisingStrength,
+			HiresUpscaler:          item.HiresUpscaler,
+			VAE:                    item.VAE,
 		}
 	}
 

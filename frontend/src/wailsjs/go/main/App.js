@@ -58,6 +58,14 @@ export function GetSDSamplers() {
   return window['go']['main']['App']['GetSDSamplers']();
 }
 
+export function GetSDUpscalers() {
+  return window['go']['main']['App']['GetSDUpscalers']();
+}
+
+export function GetSDVAEs() {
+  return window['go']['main']['App']['GetSDVAEs']();
+}
+
 export function GetSettings() {
   return window['go']['main']['App']['GetSettings']();
 }

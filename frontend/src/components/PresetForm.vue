@@ -9,6 +9,8 @@ const emit = defineEmits(['save', 'close'])
 
 const models = ref([])
 const samplers = ref([])
+const upscalers = ref([])
+const vaes = ref([])
 
 const STYLE_MARKERS = [
   { id: 'realistic', label: 'Realistic', tags: 'realistic, photorealistic, photograph, raw photo, 8k uhd' },
@@ -37,6 +39,15 @@ const form = reactive({
   height: props.preset?.height || 512,
   model_name: props.preset?.model_name || '',
   seed: props.preset?.seed ?? null,
+  denoising_strength: props.preset?.denoising_strength ?? null,
+  clip_skip: props.preset?.clip_skip ?? null,
+  batch_size: props.preset?.batch_size ?? 1,
+  batch_count: props.preset?.batch_count ?? 1,
+  hires_fix: props.preset?.hires_fix ?? false,
+  hires_upscale: props.preset?.hires_upscale ?? 2.0,
+  hires_denoising_strength: props.preset?.hires_denoising_strength ?? 0.5,
+  hires_upscaler: props.preset?.hires_upscaler ?? '',
+  vae: props.preset?.vae ?? '',
 })
 
 const saving = ref(false)
@@ -48,6 +59,14 @@ async function loadModels() {
 
 async function loadSamplers() {
   try { samplers.value = await api.getSamplers() } catch {}
+}
+
+async function loadUpscalers() {
+  try { upscalers.value = await api.getUpscalers() } catch {}
+}
+
+async function loadVAEs() {
+  try { vaes.value = await api.getVAEs() } catch {}
 }
 
 function buildDescription() {
@@ -106,6 +125,15 @@ async function save() {
       height: Number(form.height),
       model_name: form.model_name,
       seed: form.seed ? Number(form.seed) : null,
+      denoising_strength: form.denoising_strength != null ? Number(form.denoising_strength) : null,
+      clip_skip: form.clip_skip != null ? Number(form.clip_skip) : null,
+      batch_size: form.batch_size != null ? Number(form.batch_size) : null,
+      batch_count: form.batch_count != null ? Number(form.batch_count) : null,
+      hires_fix: form.hires_fix || false,
+      hires_upscale: form.hires_upscale ? Number(form.hires_upscale) : null,
+      hires_denoising_strength: form.hires_denoising_strength != null ? Number(form.hires_denoising_strength) : null,
+      hires_upscaler: form.hires_upscaler || '',
+      vae: form.vae || '',
     })
   } finally {
     saving.value = false
@@ -115,6 +143,8 @@ async function save() {
 onMounted(() => {
   loadModels()
   loadSamplers()
+  loadUpscalers()
+  loadVAEs()
 })
 </script>
 
@@ -205,6 +235,63 @@ onMounted(() => {
           </div>
           <div></div>
         </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Batch Size</label>
+            <input class="form-input" type="number" v-model.number="form.batch_size" min="1" max="8" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Batch Count</label>
+            <input class="form-input" type="number" v-model.number="form.batch_count" min="1" max="8" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Clip Skip</label>
+            <input class="form-input" type="number" v-model.number="form.clip_skip" min="1" max="12" placeholder="1" />
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Denoising Strength</label>
+            <input class="form-input" type="number" v-model.number="form.denoising_strength" step="0.05" min="0" max="1" placeholder="0.75" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">VAE</label>
+            <select class="form-select" v-model="form.vae">
+              <option value="">Default</option>
+              <option v-for="v in vaes" :key="v.model_name" :value="v.model_name">{{ v.model_name }}</option>
+            </select>
+          </div>
+          <div></div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+            <input type="checkbox" v-model="form.hires_fix" />
+            Hires Fix
+          </label>
+        </div>
+
+        <template v-if="form.hires_fix">
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Upscale Factor</label>
+              <input class="form-input" type="number" v-model.number="form.hires_upscale" step="0.5" min="1" max="4" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Hires Denoising</label>
+              <input class="form-input" type="number" v-model.number="form.hires_denoising_strength" step="0.05" min="0" max="1" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Hires Upscaler</label>
+              <select class="form-select" v-model="form.hires_upscaler">
+                <option value="">Default</option>
+                <option v-for="u in upscalers" :key="u.name" :value="u.name">{{ u.name }}</option>
+              </select>
+            </div>
+          </div>
+        </template>
 
         <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
           <button type="button" class="btn btn-secondary" @click="$emit('close')">Cancel</button>

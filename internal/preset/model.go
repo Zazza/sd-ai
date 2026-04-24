@@ -13,10 +13,19 @@ type Preset struct {
 	CfgScale       float64   `json:"cfg_scale"`
 	Width          int       `json:"width"`
 	Height         int       `json:"height"`
-	ModelName      string    `json:"model_name"`
-	Seed           *int64    `json:"seed"`
-	CreatedAt      time.Time `json:"created_at"`
-	UpdatedAt      time.Time `json:"updated_at"`
+	ModelName              string    `json:"model_name"`
+	Seed                   *int64    `json:"seed"`
+	DenoisingStrength      *float64  `json:"denoising_strength"`
+	ClipSkip               *int      `json:"clip_skip"`
+	BatchSize              *int      `json:"batch_size"`
+	BatchCount             *int      `json:"batch_count"`
+	HiresFix               *bool     `json:"hires_fix"`
+	HiresUpscale           *float64  `json:"hires_upscale"`
+	HiresDenoisingStrength *float64  `json:"hires_denoising_strength"`
+	HiresUpscaler          string    `json:"hires_upscaler"`
+	VAE                    string    `json:"vae"`
+	CreatedAt              time.Time `json:"created_at"`
+	UpdatedAt              time.Time `json:"updated_at"`
 }
 
 type SavedDescription struct {

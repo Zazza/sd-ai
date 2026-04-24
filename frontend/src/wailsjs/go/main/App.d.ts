@@ -33,6 +33,10 @@ export function GetSDModels():Promise<Array<sd.SDModel>>;
 
 export function GetSDSamplers():Promise<Array<sd.Sampler>>;
 
+export function GetSDUpscalers():Promise<Array<sd.Upscaler>>;
+
+export function GetSDVAEs():Promise<Array<sd.VAE>>;
+
 export function GetSettings():Promise<Record<string, string>>;
 
 export function ImportPresets(arg1:Array<main.PresetData>):Promise<Array<preset.Preset>>;

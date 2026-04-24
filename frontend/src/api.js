@@ -1,7 +1,7 @@
 import {
   ListPresets, ListPresetsByType, CreatePreset, UpdatePreset, DeletePreset,
   GenerateSDPrompt, GenerateImage, SaveImage,
-  GetSDModels, GetSDSamplers, GetLLMModels,
+  GetSDModels, GetSDSamplers, GetSDUpscalers, GetSDVAEs, GetLLMModels,
   GetSettings, UpdateSettings, CheckServices,
   ListDescriptions, CreateDescription, DeleteDescription,
   ListPrompts, CreatePrompt, DeletePrompt,
@@ -21,6 +21,8 @@ export const api = {
   saveImage: (base64Data, defaultName) => SaveImage(base64Data, defaultName),
   getModels: () => GetSDModels(),
   getSamplers: () => GetSDSamplers(),
+  getUpscalers: () => GetSDUpscalers(),
+  getVAEs: () => GetSDVAEs(),
   getLLMModels: () => GetLLMModels(),
   getSettings: () => GetSettings(),
   updateSettings: (data) => UpdateSettings(data),

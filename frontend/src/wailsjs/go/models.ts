@@ -63,6 +63,15 @@ export namespace main {
 	    height: number;
 	    model_name: string;
 	    seed?: number;
+	    denoising_strength?: number;
+	    clip_skip?: number;
+	    batch_size?: number;
+	    batch_count?: number;
+	    hires_fix?: boolean;
+	    hires_upscale?: number;
+	    hires_denoising_strength?: number;
+	    hires_upscaler: string;
+	    vae: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new PresetData(source);
@@ -81,6 +90,15 @@ export namespace main {
 	        this.height = source["height"];
 	        this.model_name = source["model_name"];
 	        this.seed = source["seed"];
+	        this.denoising_strength = source["denoising_strength"];
+	        this.clip_skip = source["clip_skip"];
+	        this.batch_size = source["batch_size"];
+	        this.batch_count = source["batch_count"];
+	        this.hires_fix = source["hires_fix"];
+	        this.hires_upscale = source["hires_upscale"];
+	        this.hires_denoising_strength = source["hires_denoising_strength"];
+	        this.hires_upscaler = source["hires_upscaler"];
+	        this.vae = source["vae"];
 	    }
 	}
 	export class ImportPreview {
@@ -168,6 +186,15 @@ export namespace preset {
 	    height: number;
 	    model_name: string;
 	    seed?: number;
+	    denoising_strength?: number;
+	    clip_skip?: number;
+	    batch_size?: number;
+	    batch_count?: number;
+	    hires_fix?: boolean;
+	    hires_upscale?: number;
+	    hires_denoising_strength?: number;
+	    hires_upscaler: string;
+	    vae: string;
 	    // Go type: time
 	    created_at: any;
 	    // Go type: time
@@ -191,6 +218,15 @@ export namespace preset {
 	        this.height = source["height"];
 	        this.model_name = source["model_name"];
 	        this.seed = source["seed"];
+	        this.denoising_strength = source["denoising_strength"];
+	        this.clip_skip = source["clip_skip"];
+	        this.batch_size = source["batch_size"];
+	        this.batch_count = source["batch_count"];
+	        this.hires_fix = source["hires_fix"];
+	        this.hires_upscale = source["hires_upscale"];
+	        this.hires_denoising_strength = source["hires_denoising_strength"];
+	        this.hires_upscaler = source["hires_upscaler"];
+	        this.vae = source["vae"];
 	        this.created_at = this.convertValues(source["created_at"], null);
 	        this.updated_at = this.convertValues(source["updated_at"], null);
 	    }
@@ -318,6 +354,34 @@ export namespace sd {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.name = source["name"];
 	        this.aliases = source["aliases"];
+	    }
+	}
+	export class Upscaler {
+	    name: string;
+	    model_name: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Upscaler(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.model_name = source["model_name"];
+	    }
+	}
+	export class VAE {
+	    model_name: string;
+	    path: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new VAE(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.model_name = source["model_name"];
+	        this.path = source["path"];
 	    }
 	}
 
