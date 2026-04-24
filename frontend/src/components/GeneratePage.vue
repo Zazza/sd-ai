@@ -88,7 +88,7 @@ async function saveDescription() {
     await api.createDescription(description.value)
     await loadDescriptions()
   } catch (e) {
-    error.value = e.message
+    error.value = String(e)
   }
 }
 
@@ -97,7 +97,7 @@ async function deleteDescription(id) {
     await api.deleteDescription(id)
     await loadDescriptions()
   } catch (e) {
-    error.value = e.message
+    error.value = String(e)
   }
 }
 
@@ -117,7 +117,7 @@ async function savePrompt() {
     await api.createPrompt(extraPrompt.value)
     await loadPrompts()
   } catch (e) {
-    error.value = e.message
+    error.value = String(e)
   }
 }
 
@@ -126,7 +126,7 @@ async function deletePrompt(id) {
     await api.deletePrompt(id)
     await loadPrompts()
   } catch (e) {
-    error.value = e.message
+    error.value = String(e)
   }
 }
 
@@ -168,7 +168,7 @@ async function generatePrompt() {
     }
   } catch (e) {
     if (cancelPromptFlag) return
-    error.value = e.message
+    error.value = String(e)
   } finally {
     if (!cancelPromptFlag) {
       generatingPrompt.value = false
@@ -199,7 +199,7 @@ async function generateImage() {
       genInfo.value = result.info
     }
   } catch (e) {
-    error.value = e.message
+    error.value = String(e)
   } finally {
     generatingImage.value = false
   }
@@ -214,7 +214,7 @@ async function downloadImage() {
       error.value = ''
     }
   } catch (e) {
-    error.value = 'Save failed: ' + e.message
+    error.value = 'Save failed: ' + String(e)
   }
 }
 

@@ -107,7 +107,7 @@ async function handleExport() {
     selectMode.value = false
     selectedIds.value = new Set()
   } catch (e) {
-    if (e.message) alert('Export failed: ' + e.message)
+    if (String(e)) alert('Export failed: ' + e)
   }
 }
 
@@ -119,7 +119,7 @@ async function handleOpenImport() {
       showImport.value = true
     }
   } catch (e) {
-    if (e.message) alert('Import failed: ' + e.message)
+    if (String(e)) alert('Import failed: ' + e)
   }
 }
 

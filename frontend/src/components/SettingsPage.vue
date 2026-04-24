@@ -96,7 +96,7 @@ async function saveConnection() {
     })
     connectionSaved.value = true
   } catch (e) {
-    connectionError.value = e.message
+    connectionError.value = String(e)
   }
 }
 
@@ -151,7 +151,7 @@ async function onPinConfirm(pin) {
     kidsMode.value = enabled
     showPinModal.value = false
   } catch (e) {
-    pinError.value = e.message || 'Error'
+    pinError.value = String(e) || 'Error'
   }
 }
 
