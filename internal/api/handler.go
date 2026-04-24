@@ -35,6 +35,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/generate", h.generateImage)
 	mux.HandleFunc("GET /api/sd/models", h.getSDModels)
 	mux.HandleFunc("GET /api/sd/samplers", h.getSDSamplers)
+	mux.HandleFunc("GET /api/sd/schedulers", h.getSDSchedulers)
 	mux.HandleFunc("GET /api/llm/models", h.getLLMModels)
 	mux.HandleFunc("GET /api/settings", h.getSettings)
 	mux.HandleFunc("PUT /api/settings", h.updateSettings)
@@ -187,6 +188,7 @@ func (h *Handler) generateImage(w http.ResponseWriter, r *http.Request) {
 		Prompt:         prompt,
 		NegativePrompt: negativePrompt,
 		SamplerName:    p.Sampler,
+		Scheduler:      p.ScheduleType,
 		Steps:          p.Steps,
 		CfgScale:       p.CfgScale,
 		Width:          p.Width,
@@ -226,6 +228,15 @@ func (h *Handler) getSDSamplers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, samplers)
+}
+
+func (h *Handler) getSDSchedulers(w http.ResponseWriter, r *http.Request) {
+	schedulers, err := h.sd.GetSchedulers()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, schedulers)
 }
 
 func (h *Handler) getLLMModels(w http.ResponseWriter, r *http.Request) {

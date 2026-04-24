@@ -192,8 +192,12 @@ async function generateImage() {
   genInfo.value = null
   try {
     const result = await api.generateImage(selectedPresetId.value, extraPrompt.value, extraNegativePrompt.value)
-    generatedImage.value = result.image
-    genInfo.value = result.info
+    if (!result || !result.image) {
+      error.value = 'No image returned. Check preset settings (model, sampler, scheduler).'
+    } else {
+      generatedImage.value = result.image
+      genInfo.value = result.info
+    }
   } catch (e) {
     error.value = e.message
   } finally {

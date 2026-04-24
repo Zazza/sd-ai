@@ -33,6 +33,8 @@ export function GetSDModels():Promise<Array<sd.SDModel>>;
 
 export function GetSDSamplers():Promise<Array<sd.Sampler>>;
 
+export function GetSDSchedulers():Promise<Array<sd.Scheduler>>;
+
 export function GetSDUpscalers():Promise<Array<sd.Upscaler>>;
 
 export function GetSDVAEs():Promise<Array<sd.VAE>>;

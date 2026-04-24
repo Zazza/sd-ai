@@ -58,6 +58,10 @@ export function GetSDSamplers() {
   return window['go']['main']['App']['GetSDSamplers']();
 }
 
+export function GetSDSchedulers() {
+  return window['go']['main']['App']['GetSDSchedulers']();
+}
+
 export function GetSDUpscalers() {
   return window['go']['main']['App']['GetSDUpscalers']();
 }

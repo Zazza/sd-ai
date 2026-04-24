@@ -77,15 +77,14 @@ func (a *App) SetKidsMode(enabled bool, pin string) error {
 
 // --- Service Status ---
 
+type ServiceInfo struct {
+	Available bool   `json:"available"`
+	Model     string `json:"model"`
+}
+
 type ServiceStatus struct {
-	LLM struct {
-		Available bool   `json:"available"`
-		Model     string `json:"model"`
-	} `json:"llm"`
-	SD struct {
-		Available bool   `json:"available"`
-		Model     string `json:"model"`
-	} `json:"sd"`
+	LLM ServiceInfo `json:"llm"`
+	SD  ServiceInfo `json:"sd"`
 }
 
 func (a *App) CheckServices() ServiceStatus {
@@ -243,6 +242,7 @@ func (a *App) GenerateImage(params GenerateImageParams) (*GenerateImageResult, e
 		Prompt:                 prompt,
 		NegativePrompt:         negativePrompt,
 		SamplerName:            p.Sampler,
+		Scheduler:              p.ScheduleType,
 		Steps:                  p.Steps,
 		CfgScale:               p.CfgScale,
 		Width:                  p.Width,
@@ -262,7 +262,19 @@ func (a *App) GenerateImage(params GenerateImageParams) (*GenerateImageResult, e
 	}
 
 	if len(result.Images) == 0 {
-		return nil, nil
+		reason := "empty response"
+		if result.Error != "" {
+			reason = result.Error
+		} else if len(result.Info) > 0 {
+			var info struct {
+				Reason string `json:"reason"`
+			}
+			if json.Unmarshal(result.Info, &info) == nil && info.Reason != "" {
+				reason = info.Reason
+			}
+		}
+		return nil, fmt.Errorf("no image generated: %s (sampler=%s, scheduler=%s, model=%s)",
+			reason, p.Sampler, p.ScheduleType, p.ModelName)
 	}
 
 	return &GenerateImageResult{
@@ -280,6 +292,10 @@ func (a *App) GetSDModels() ([]sd.SDModel, error) {
 
 func (a *App) GetSDSamplers() ([]sd.Sampler, error) {
 	return a.sd.GetSamplers()
+}
+
+func (a *App) GetSDSchedulers() ([]sd.Scheduler, error) {
+	return a.sd.GetSchedulers()
 }
 
 func (a *App) GetSDUpscalers() ([]sd.Upscaler, error) {
@@ -481,6 +497,7 @@ type PresetData struct {
 	Prompt         string  `json:"prompt"`
 	NegativePrompt string  `json:"negative_prompt"`
 	Sampler        string  `json:"sampler"`
+	ScheduleType   string  `json:"schedule_type"`
 	Steps          int     `json:"steps"`
 	CfgScale       float64 `json:"cfg_scale"`
 	Width          int     `json:"width"`
@@ -525,6 +542,7 @@ func (a *App) ExportPresets(ids []int64) (string, error) {
 			Prompt:                 p.Prompt,
 			NegativePrompt:         p.NegativePrompt,
 			Sampler:                p.Sampler,
+			ScheduleType:           p.ScheduleType,
 			Steps:                  p.Steps,
 			CfgScale:               p.CfgScale,
 			Width:                  p.Width,
@@ -607,6 +625,19 @@ func (a *App) OpenImportFile() (*ImportPreview, error) {
 	}, nil
 }
 
+func splitCompositeSampler(sampler, scheduleType string) (string, string) {
+	if scheduleType != "" {
+		return sampler, scheduleType
+	}
+	knownSchedulers := []string{"Karras", "Exponential", "Polyexponential"}
+	for _, s := range knownSchedulers {
+		if strings.HasSuffix(sampler, " "+s) {
+			return sampler[:len(sampler)-len(s)-1], s
+		}
+	}
+	return sampler, ""
+}
+
 func (a *App) ImportPresets(items []PresetData) ([]preset.Preset, error) {
 	if len(items) == 0 {
 		return nil, fmt.Errorf("no presets selected")
@@ -650,12 +681,14 @@ func (a *App) ImportPresets(items []PresetData) ([]preset.Preset, error) {
 
 	batch := make([]preset.Preset, len(items))
 	for i, item := range items {
+		sampler, scheduleType := splitCompositeSampler(item.Sampler, item.ScheduleType)
 		batch[i] = preset.Preset{
 			Name:                   item.Name,
 			PresetType:             item.PresetType,
 			Prompt:                 item.Prompt,
 			NegativePrompt:         item.NegativePrompt,
-			Sampler:                item.Sampler,
+			Sampler:                sampler,
+			ScheduleType:           scheduleType,
 			Steps:                  item.Steps,
 			CfgScale:               item.CfgScale,
 			Width:                  item.Width,

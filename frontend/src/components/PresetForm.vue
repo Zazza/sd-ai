@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, reactive, computed } from 'vue'
+import { ref, onMounted, reactive } from 'vue'
 import { api } from '../api.js'
 
 const props = defineProps({
@@ -9,23 +9,9 @@ const emit = defineEmits(['save', 'close'])
 
 const models = ref([])
 const samplers = ref([])
+const schedulers = ref([])
 const upscalers = ref([])
 const vaes = ref([])
-
-const STYLE_MARKERS = [
-  { id: 'realistic', label: 'Realistic', tags: 'realistic, photorealistic, photograph, raw photo, 8k uhd' },
-  { id: '3d', label: '3D', tags: '3d render, octane render, unreal engine, highly detailed 3d' },
-  { id: 'anime', label: 'Anime', tags: 'anime style, anime art, illustration, cel shading' },
-  { id: 'cartoon', label: 'Cartoon', tags: 'cartoon style, cartoon art, colorful, bold outlines' },
-  { id: 'painting', label: 'Painting', tags: 'oil painting, digital painting, concept art, artstation' },
-  { id: 'pixel', label: 'Pixel Art', tags: 'pixel art, 16-bit, retro game style, sprite art' },
-  { id: 'watercolor', label: 'Watercolor', tags: 'watercolor painting, soft colors, delicate brush strokes' },
-  { id: 'comic', label: 'Comic', tags: 'comic book style, graphic novel, bold lines, halftone' },
-  { id: 'dark', label: 'Dark Fantasy', tags: 'dark fantasy, gothic, moody, dramatic lighting, dark atmosphere' },
-  { id: 'cinematic', label: 'Cinematic', tags: 'cinematic, movie still, dramatic composition, volumetric lighting' },
-]
-
-const selectedStyles = ref([])
 
 const form = reactive({
   name: props.preset?.name || '',
@@ -33,6 +19,7 @@ const form = reactive({
   prompt: props.preset?.prompt || '',
   negative_prompt: props.preset?.negative_prompt || '',
   sampler: props.preset?.sampler || 'Euler a',
+  schedule_type: props.preset?.schedule_type || '',
   steps: props.preset?.steps || 20,
   cfg_scale: props.preset?.cfg_scale || 7.0,
   width: props.preset?.width || 512,
@@ -51,7 +38,6 @@ const form = reactive({
 })
 
 const saving = ref(false)
-const generatingPrompt = ref(false)
 
 async function loadModels() {
   try { models.value = await api.getModels() } catch {}
@@ -61,53 +47,16 @@ async function loadSamplers() {
   try { samplers.value = await api.getSamplers() } catch {}
 }
 
+async function loadSchedulers() {
+  try { schedulers.value = await api.getSchedulers() } catch {}
+}
+
 async function loadUpscalers() {
   try { upscalers.value = await api.getUpscalers() } catch {}
 }
 
 async function loadVAEs() {
   try { vaes.value = await api.getVAEs() } catch {}
-}
-
-function buildDescription() {
-  let parts = []
-  if (form.name) parts.push(`Subject: ${form.name}`)
-  if (form.preset_type) parts.push(`Type: ${form.preset_type}`)
-  if (form.prompt) parts.push(`Current prompt to improve: ${form.prompt}`)
-  if (form.width && form.height) parts.push(`Resolution: ${form.width}x${form.height}`)
-  const activeStyles = STYLE_MARKERS.filter(s => selectedStyles.value.includes(s.id))
-  if (activeStyles.length > 0) {
-    parts.push(`Style: ${activeStyles.map(s => s.label).join(', ')}`)
-  }
-  return parts.join('. ') || 'Generate a generic high-quality image prompt'
-}
-
-async function generatePrompt() {
-  generatingPrompt.value = true
-  try {
-    const description = buildDescription()
-    const result = await api.generateSdPrompt(description, form.preset_type)
-    let prompt = result.prompt
-    const activeStyles = STYLE_MARKERS.filter(s => selectedStyles.value.includes(s.id))
-    if (activeStyles.length > 0) {
-      const styleTags = activeStyles.map(s => s.tags).join(', ')
-      prompt = styleTags + ', ' + prompt
-    }
-    form.prompt = prompt
-  } catch (e) {
-    alert('Prompt generation failed: ' + e.message)
-  } finally {
-    generatingPrompt.value = false
-  }
-}
-
-function toggleStyle(styleId) {
-  const idx = selectedStyles.value.indexOf(styleId)
-  if (idx === -1) {
-    selectedStyles.value.push(styleId)
-  } else {
-    selectedStyles.value.splice(idx, 1)
-  }
 }
 
 async function save() {
@@ -119,6 +68,7 @@ async function save() {
       prompt: form.prompt,
       negative_prompt: form.negative_prompt,
       sampler: form.sampler,
+      schedule_type: form.schedule_type,
       steps: Number(form.steps),
       cfg_scale: Number(form.cfg_scale),
       width: Number(form.width),
@@ -143,6 +93,7 @@ async function save() {
 onMounted(() => {
   loadModels()
   loadSamplers()
+  loadSchedulers()
   loadUpscalers()
   loadVAEs()
 })
@@ -170,27 +121,11 @@ onMounted(() => {
         <div class="form-group">
           <label class="form-label">Prompt</label>
           <textarea class="form-textarea" v-model="form.prompt" rows="4" placeholder="masterpiece, best quality, ..."></textarea>
-          <button type="button" class="btn btn-secondary btn-sm" style="margin-top: 6px;" @click="generatePrompt" :disabled="generatingPrompt">
-            {{ generatingPrompt ? 'Generating...' : 'AI Generate Prompt' }}
-          </button>
         </div>
 
         <div class="form-group">
           <label class="form-label">Negative Prompt</label>
           <textarea class="form-textarea" v-model="form.negative_prompt" rows="2"></textarea>
-        </div>
-
-        <div class="form-group">
-          <label class="form-label">Style</label>
-          <div class="style-markers">
-            <span
-              v-for="s in STYLE_MARKERS"
-              :key="s.id"
-              class="style-chip"
-              :class="{ active: selectedStyles.includes(s.id) }"
-              @click="toggleStyle(s.id)"
-            >{{ s.label }}</span>
-          </div>
         </div>
 
         <div class="form-group">
@@ -204,8 +139,17 @@ onMounted(() => {
         <div class="form-group">
           <label class="form-label">Sampler</label>
           <select class="form-select" v-model="form.sampler">
+            <option v-if="!samplers.some(s => s.name === form.sampler)" :value="form.sampler">{{ form.sampler }}</option>
             <option v-for="s in samplers" :key="s.name" :value="s.name">{{ s.name }}</option>
-            <option v-if="samplers.length === 0" value="Euler a">Euler a</option>
+            <option v-if="samplers.length === 0 && form.sampler !== 'Euler a'" value="Euler a">Euler a</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Schedule Type</label>
+          <select class="form-select" v-model="form.schedule_type">
+            <option value="">Automatic</option>
+            <option v-for="s in schedulers" :key="s.name" :value="s.name">{{ s.label || s.name }}</option>
           </select>
         </div>
 

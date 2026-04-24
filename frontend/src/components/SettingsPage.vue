@@ -21,7 +21,6 @@ const backendLabel = {
 const connectionForm = reactive({
   llm_url: '',
   sd_url: '',
-  llm_model: '',
   sd_prompt_model: '',
   llm_backend: 'lmstudio',
   llm_keep_alive: '5m',
@@ -60,7 +59,6 @@ async function loadSettings() {
     const settings = await api.getSettings()
     connectionForm.llm_url = settings.llm_url || ''
     connectionForm.sd_url = settings.sd_url || ''
-    connectionForm.llm_model = settings.llm_model || ''
     connectionForm.sd_prompt_model = settings.sd_prompt_model || ''
     connectionForm.llm_backend = settings.llm_backend || 'lmstudio'
     connectionForm.llm_keep_alive = settings.llm_keep_alive || '5m'
@@ -90,7 +88,6 @@ async function saveConnection() {
     await api.updateSettings({
       llm_url: connectionForm.llm_url,
       sd_url: connectionForm.sd_url,
-      llm_model: connectionForm.llm_model,
       sd_prompt_model: connectionForm.sd_prompt_model,
       llm_backend: connectionForm.llm_backend,
       llm_keep_alive: String(connectionForm.llm_keep_alive),
@@ -196,15 +193,6 @@ onMounted(loadSettings)
       <div class="form-group">
         <label class="form-label">LLM URL</label>
         <input class="form-input" v-model="connectionForm.llm_url" :placeholder="defaultURLs[connectionForm.llm_backend]" />
-      </div>
-
-      <div class="form-group" v-if="connectionForm.llm_backend !== 'llamacpp'">
-        <label class="form-label">LLM Model (for chat)</label>
-        <div v-if="connectionLLMLoading" style="padding: 8px 0;"><span class="spinner"></span></div>
-        <select v-else class="form-input" v-model="connectionForm.llm_model">
-          <option value="">-- select model --</option>
-          <option v-for="m in connectionLLMModels" :key="m.id" :value="m.id">{{ m.id }}</option>
-        </select>
       </div>
 
       <div class="form-group" v-if="connectionForm.llm_backend !== 'llamacpp'">

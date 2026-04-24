@@ -15,6 +15,9 @@ const selectedIds = ref(new Set())
 const showImport = ref(false)
 const importPresets = ref([])
 
+const pendingDeleteId = ref(null)
+let deleteTimer = null
+
 const selectedCount = computed(() => selectedIds.value.size)
 
 async function load() {
@@ -60,9 +63,16 @@ async function handleDuplicate(preset) {
 }
 
 async function handleDelete(id) {
-  if (!confirm('Delete this preset?')) return
-  await api.deletePreset(id)
-  await load()
+  if (pendingDeleteId.value === id) {
+    clearTimeout(deleteTimer)
+    pendingDeleteId.value = null
+    await api.deletePreset(id)
+    await load()
+  } else {
+    clearTimeout(deleteTimer)
+    pendingDeleteId.value = id
+    deleteTimer = setTimeout(() => { pendingDeleteId.value = null }, 3000)
+  }
 }
 
 function toggleSelectMode() {
@@ -172,7 +182,7 @@ onMounted(load)
         <div v-if="!selectMode" class="preset-actions">
           <button class="btn btn-secondary btn-sm" @click="openEdit(p)">Edit</button>
           <button class="btn btn-secondary btn-sm" @click="handleDuplicate(p)">Duplicate</button>
-          <button class="btn btn-danger btn-sm" @click="handleDelete(p.id)">Delete</button>
+          <button class="btn btn-danger btn-sm" @click="handleDelete(p.id)">{{ pendingDeleteId === p.id ? 'Sure?' : 'Delete' }}</button>
         </div>
       </div>
     </div>

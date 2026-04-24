@@ -57,6 +57,7 @@ export namespace main {
 	    prompt: string;
 	    negative_prompt: string;
 	    sampler: string;
+	    schedule_type: string;
 	    steps: number;
 	    cfg_scale: number;
 	    width: number;
@@ -84,6 +85,7 @@ export namespace main {
 	        this.prompt = source["prompt"];
 	        this.negative_prompt = source["negative_prompt"];
 	        this.sampler = source["sampler"];
+	        this.schedule_type = source["schedule_type"];
 	        this.steps = source["steps"];
 	        this.cfg_scale = source["cfg_scale"];
 	        this.width = source["width"];
@@ -134,11 +136,23 @@ export namespace main {
 		}
 	}
 	
+	export class ServiceInfo {
+	    available: boolean;
+	    model: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ServiceInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.available = source["available"];
+	        this.model = source["model"];
+	    }
+	}
 	export class ServiceStatus {
-	    // Go type: struct { Available bool "json:\"available\""; Model string "json:\"model\"" }
-	    llm: any;
-	    // Go type: struct { Available bool "json:\"available\""; Model string "json:\"model\"" }
-	    sd: any;
+	    llm: ServiceInfo;
+	    sd: ServiceInfo;
 	
 	    static createFrom(source: any = {}) {
 	        return new ServiceStatus(source);
@@ -146,8 +160,8 @@ export namespace main {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.llm = this.convertValues(source["llm"], Object);
-	        this.sd = this.convertValues(source["sd"], Object);
+	        this.llm = this.convertValues(source["llm"], ServiceInfo);
+	        this.sd = this.convertValues(source["sd"], ServiceInfo);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -180,6 +194,7 @@ export namespace preset {
 	    prompt: string;
 	    negative_prompt: string;
 	    sampler: string;
+	    schedule_type: string;
 	    steps: number;
 	    cfg_scale: number;
 	    width: number;
@@ -195,10 +210,8 @@ export namespace preset {
 	    hires_denoising_strength?: number;
 	    hires_upscaler: string;
 	    vae: string;
-	    // Go type: time
-	    created_at: any;
-	    // Go type: time
-	    updated_at: any;
+	    created_at: string;
+	    updated_at: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new Preset(source);
@@ -212,6 +225,7 @@ export namespace preset {
 	        this.prompt = source["prompt"];
 	        this.negative_prompt = source["negative_prompt"];
 	        this.sampler = source["sampler"];
+	        this.schedule_type = source["schedule_type"];
 	        this.steps = source["steps"];
 	        this.cfg_scale = source["cfg_scale"];
 	        this.width = source["width"];
@@ -227,33 +241,14 @@ export namespace preset {
 	        this.hires_denoising_strength = source["hires_denoising_strength"];
 	        this.hires_upscaler = source["hires_upscaler"];
 	        this.vae = source["vae"];
-	        this.created_at = this.convertValues(source["created_at"], null);
-	        this.updated_at = this.convertValues(source["updated_at"], null);
+	        this.created_at = source["created_at"];
+	        this.updated_at = source["updated_at"];
 	    }
-	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
 	}
 	export class SavedDescription {
 	    id: number;
 	    text: string;
-	    // Go type: time
-	    created_at: any;
+	    created_at: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new SavedDescription(source);
@@ -263,32 +258,13 @@ export namespace preset {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
 	        this.text = source["text"];
-	        this.created_at = this.convertValues(source["created_at"], null);
+	        this.created_at = source["created_at"];
 	    }
-	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
 	}
 	export class SavedPrompt {
 	    id: number;
 	    text: string;
-	    // Go type: time
-	    created_at: any;
+	    created_at: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new SavedPrompt(source);
@@ -298,26 +274,8 @@ export namespace preset {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
 	        this.text = source["text"];
-	        this.created_at = this.convertValues(source["created_at"], null);
+	        this.created_at = source["created_at"];
 	    }
-	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
 	}
 
 }
@@ -354,6 +312,20 @@ export namespace sd {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.name = source["name"];
 	        this.aliases = source["aliases"];
+	    }
+	}
+	export class Scheduler {
+	    name: string;
+	    label: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Scheduler(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.label = source["label"];
 	    }
 	}
 	export class Upscaler {

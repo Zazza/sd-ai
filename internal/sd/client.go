@@ -57,6 +57,7 @@ type Txt2ImgRequest struct {
 	Prompt                 string   `json:"prompt"`
 	NegativePrompt         string   `json:"negative_prompt"`
 	SamplerName            string   `json:"sampler_name"`
+	Scheduler              string   `json:"scheduler,omitempty"`
 	Steps                  int      `json:"steps"`
 	CfgScale               float64  `json:"cfg_scale"`
 	Width                  int      `json:"width"`
@@ -76,6 +77,7 @@ type Txt2ImgResponse struct {
 	Images     []string        `json:"images"`
 	Parameters json.RawMessage `json:"parameters"`
 	Info       json.RawMessage `json:"info"`
+	Error      string          `json:"error"`
 }
 
 type SDModel struct {
@@ -88,6 +90,11 @@ type SDModel struct {
 type Sampler struct {
 	Name    string   `json:"name"`
 	Aliases []string `json:"aliases"`
+}
+
+type Scheduler struct {
+	Name  string `json:"name"`
+	Label string `json:"label"`
 }
 
 type Upscaler struct {
@@ -136,6 +143,10 @@ func (c *Client) Txt2Img(req Txt2ImgRequest) (*Txt2ImgResponse, error) {
 		return nil, fmt.Errorf("decode response: %w", err)
 	}
 
+	if result.Error != "" {
+		return &result, fmt.Errorf("SD error: %s", result.Error)
+	}
+
 	return &result, nil
 }
 
@@ -165,6 +176,20 @@ func (c *Client) GetSamplers() ([]Sampler, error) {
 		return nil, fmt.Errorf("decode samplers: %w", err)
 	}
 	return samplers, nil
+}
+
+func (c *Client) GetSchedulers() ([]Scheduler, error) {
+	resp, err := c.httpClient.Get(c.baseURL + "/sdapi/v1/schedulers")
+	if err != nil {
+		return nil, fmt.Errorf("get schedulers: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var schedulers []Scheduler
+	if err := json.NewDecoder(resp.Body).Decode(&schedulers); err != nil {
+		return nil, fmt.Errorf("decode schedulers: %w", err)
+	}
+	return schedulers, nil
 }
 
 func (c *Client) GetUpscalers() ([]Upscaler, error) {
