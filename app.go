@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
@@ -173,6 +174,10 @@ func (a *App) GetSettings() (map[string]string, error) {
 		"sd_url":          a.config.SDUrl,
 		"llm_model":       a.config.LLMModel,
 		"sd_prompt_model": a.config.SDPromptModel,
+		"llm_backend":     a.config.LLMBackend,
+		"llm_keep_alive":  "5m",
+		"llm_num_ctx":     "4096",
+		"llm_num_gpu":     "0",
 	}
 	for k, v := range defaults {
 		if _, ok := settings[k]; !ok {
@@ -185,6 +190,7 @@ func (a *App) GetSettings() (map[string]string, error) {
 func (a *App) UpdateSettings(data map[string]string) error {
 	allowed := map[string]bool{
 		"llm_url": true, "sd_url": true, "llm_model": true, "sd_prompt_model": true,
+		"llm_backend": true, "llm_keep_alive": true, "llm_num_ctx": true, "llm_num_gpu": true,
 	}
 
 	for k, v := range data {
@@ -210,6 +216,26 @@ func (a *App) UpdateSettings(data map[string]string) error {
 	if v, ok := data["sd_prompt_model"]; ok {
 		a.config.SDPromptModel = v
 	}
+	if v, ok := data["llm_backend"]; ok {
+		a.llm.SetBackend(v)
+		a.config.LLMBackend = v
+	}
+
+	var cfg llm.BackendConfig
+	if v, ok := data["llm_keep_alive"]; ok {
+		cfg.KeepAlive = v
+	}
+	if v, ok := data["llm_num_ctx"]; ok {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.NumCtx = n
+		}
+	}
+	if v, ok := data["llm_num_gpu"]; ok {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.NumGPU = n
+		}
+	}
+	a.llm.SetBackendConfig(cfg)
 
 	return nil
 }

@@ -1,14 +1,30 @@
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, watch, onMounted } from 'vue'
 import { api } from '../api.js'
 
 const activeTab = ref('connection')
+
+const defaultURLs = {
+  lmstudio: 'http://localhost:1234',
+  ollama: 'http://localhost:11434',
+  llamacpp: 'http://localhost:8081',
+}
+
+const backendLabel = {
+  lmstudio: 'LM Studio',
+  ollama: 'Ollama',
+  llamacpp: 'llama.cpp',
+}
 
 const connectionForm = reactive({
   llm_url: '',
   sd_url: '',
   llm_model: '',
   sd_prompt_model: '',
+  llm_backend: 'lmstudio',
+  llm_keep_alive: '5m',
+  llm_num_ctx: '4096',
+  llm_num_gpu: '0',
 })
 const connectionSaved = ref(false)
 const connectionError = ref('')
@@ -22,6 +38,12 @@ const llmModels = ref([])
 const llmLoading = ref(false)
 const llmError = ref('')
 
+watch(() => connectionForm.llm_backend, (newVal, oldVal) => {
+  if (oldVal && defaultURLs[oldVal] && connectionForm.llm_url === defaultURLs[oldVal]) {
+    connectionForm.llm_url = defaultURLs[newVal] || defaultURLs.lmstudio
+  }
+})
+
 async function loadSettings() {
   try {
     const settings = await api.getSettings()
@@ -29,6 +51,10 @@ async function loadSettings() {
     connectionForm.sd_url = settings.sd_url || ''
     connectionForm.llm_model = settings.llm_model || ''
     connectionForm.sd_prompt_model = settings.sd_prompt_model || ''
+    connectionForm.llm_backend = settings.llm_backend || 'lmstudio'
+    connectionForm.llm_keep_alive = settings.llm_keep_alive || '5m'
+    connectionForm.llm_num_ctx = settings.llm_num_ctx || '4096'
+    connectionForm.llm_num_gpu = settings.llm_num_gpu || '0'
   } catch {}
 }
 
@@ -41,6 +67,10 @@ async function saveConnection() {
       sd_url: connectionForm.sd_url,
       llm_model: connectionForm.llm_model,
       sd_prompt_model: connectionForm.sd_prompt_model,
+      llm_backend: connectionForm.llm_backend,
+      llm_keep_alive: connectionForm.llm_keep_alive,
+      llm_num_ctx: connectionForm.llm_num_ctx,
+      llm_num_gpu: connectionForm.llm_num_gpu,
     })
     connectionSaved.value = true
   } catch (e) {
@@ -67,7 +97,8 @@ async function loadLLM() {
   try {
     llmModels.value = await api.getLLMModels() || []
   } catch (e) {
-    llmError.value = 'Cannot load models — is LM Studio running?'
+    const label = backendLabel[connectionForm.llm_backend] || 'LLM backend'
+    llmError.value = `Cannot load models — is ${label} running?`
   } finally {
     llmLoading.value = false
   }
@@ -100,8 +131,17 @@ onMounted(loadSettings)
       <div v-if="connectionError" class="status status-error" style="margin-bottom: 16px;">{{ connectionError }}</div>
 
       <div class="form-group">
+        <label class="form-label">LLM Backend</label>
+        <select class="form-input" v-model="connectionForm.llm_backend">
+          <option value="lmstudio">LM Studio</option>
+          <option value="ollama">Ollama</option>
+          <option value="llamacpp">llama.cpp</option>
+        </select>
+      </div>
+
+      <div class="form-group">
         <label class="form-label">LLM URL</label>
-        <input class="form-input" v-model="connectionForm.llm_url" placeholder="http://localhost:1234" />
+        <input class="form-input" v-model="connectionForm.llm_url" :placeholder="defaultURLs[connectionForm.llm_backend]" />
       </div>
 
       <div class="form-group">
@@ -118,6 +158,30 @@ onMounted(loadSettings)
         <label class="form-label">Stable Diffusion URL</label>
         <input class="form-input" v-model="connectionForm.sd_url" placeholder="http://localhost:7860" />
       </div>
+
+      <!-- Ollama-specific -->
+      <template v-if="connectionForm.llm_backend === 'ollama'">
+        <div class="form-group">
+          <label class="form-label">Keep Alive</label>
+          <input class="form-input" v-model="connectionForm.llm_keep_alive" placeholder="5m" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Context Size (num_ctx)</label>
+          <input class="form-input" type="number" v-model="connectionForm.llm_num_ctx" placeholder="4096" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">GPU Layers (num_gpu)</label>
+          <input class="form-input" type="number" v-model="connectionForm.llm_num_gpu" placeholder="0" />
+        </div>
+      </template>
+
+      <!-- llama.cpp-specific -->
+      <template v-if="connectionForm.llm_backend === 'llamacpp'">
+        <div class="form-group">
+          <label class="form-label">GPU Layers (num_gpu)</label>
+          <input class="form-input" type="number" v-model="connectionForm.llm_num_gpu" placeholder="0" />
+        </div>
+      </template>
 
       <button class="btn btn-primary" @click="saveConnection">Save Connection Settings</button>
     </div>

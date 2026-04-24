@@ -11,12 +11,18 @@ import (
 
 type Client struct {
 	baseURL    string
+	backend    string
+	backendCfg BackendConfig
 	httpClient *http.Client
 }
 
-func New(baseURL string) *Client {
+func New(baseURL, backend string) *Client {
+	if backend == "" {
+		backend = BackendLMStudio
+	}
 	return &Client{
 		baseURL: baseURL,
+		backend: backend,
 		httpClient: &http.Client{
 			Timeout: 120 * time.Second,
 		},
@@ -28,11 +34,18 @@ type Message struct {
 	Content string `json:"content"`
 }
 
+type ChatOptions struct {
+	NumCtx int `json:"num_ctx,omitempty"`
+	NumGPU int `json:"num_gpu,omitempty"`
+}
+
 type ChatRequest struct {
-	Model       string    `json:"model"`
-	Messages    []Message `json:"messages"`
-	Temperature float64   `json:"temperature"`
-	MaxTokens   int       `json:"max_tokens"`
+	Model       string       `json:"model"`
+	Messages    []Message    `json:"messages"`
+	Temperature float64      `json:"temperature"`
+	MaxTokens   int          `json:"max_tokens"`
+	KeepAlive   string       `json:"keep_alive,omitempty"`
+	Options     *ChatOptions `json:"options,omitempty"`
 }
 
 type ChatResponse struct {
@@ -52,6 +65,15 @@ func (c *Client) Chat(model, systemPrompt, userMessage string, temperature float
 		},
 		Temperature: temperature,
 		MaxTokens:   maxTokens,
+	}
+
+	if c.backend == BackendOllama {
+		reqBody.KeepAlive = c.backendCfg.KeepAlive
+		opts := ChatOptions{
+			NumCtx: c.backendCfg.NumCtx,
+			NumGPU: c.backendCfg.NumGPU,
+		}
+		reqBody.Options = &opts
 	}
 
 	body, err := json.Marshal(reqBody)
@@ -99,12 +121,27 @@ func (c *Client) SetURL(baseURL string) {
 	c.baseURL = baseURL
 }
 
+func (c *Client) SetBackend(backend string) {
+	c.backend = backend
+}
+
+func (c *Client) SetBackendConfig(cfg BackendConfig) {
+	c.backendCfg = cfg
+}
+
 type LLMModel struct {
 	ID     string `json:"id"`
 	Object string `json:"object"`
 }
 
 func (c *Client) GetModels() ([]LLMModel, error) {
+	if c.backend == BackendOllama {
+		return c.getOllamaModels()
+	}
+	return c.getOpenAIModels()
+}
+
+func (c *Client) getOpenAIModels() ([]LLMModel, error) {
 	resp, err := c.httpClient.Get(c.baseURL + "/v1/models")
 	if err != nil {
 		return nil, fmt.Errorf("get models: %w", err)

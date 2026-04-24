@@ -2,6 +2,7 @@ package main
 
 import (
 	"embed"
+	"fmt"
 	"log"
 
 	"github.com/wailsapp/wails/v2"
@@ -27,7 +28,7 @@ func main() {
 	}
 	defer presets.Close()
 
-	llmClient := llm.New(cfg.LLMUrl)
+	llmClient := llm.New(cfg.LLMUrl, cfg.LLMBackend)
 	sdClient := sd.New(cfg.SDUrl)
 
 	if v, _ := presets.GetSetting("llm_url"); v != "" {
@@ -44,6 +45,26 @@ func main() {
 	if v, _ := presets.GetSetting("sd_prompt_model"); v != "" {
 		cfg.SDPromptModel = v
 	}
+	if v, _ := presets.GetSetting("llm_backend"); v != "" {
+		cfg.LLMBackend = v
+		llmClient.SetBackend(v)
+	}
+
+	var backendCfg llm.BackendConfig
+	if v, _ := presets.GetSetting("llm_keep_alive"); v != "" {
+		backendCfg.KeepAlive = v
+	} else {
+		backendCfg.KeepAlive = "5m"
+	}
+	if v, _ := presets.GetSetting("llm_num_ctx"); v != "" {
+		fmt.Sscanf(v, "%d", &backendCfg.NumCtx)
+	} else {
+		backendCfg.NumCtx = 4096
+	}
+	if v, _ := presets.GetSetting("llm_num_gpu"); v != "" {
+		fmt.Sscanf(v, "%d", &backendCfg.NumGPU)
+	}
+	llmClient.SetBackendConfig(backendCfg)
 
 	app := NewApp(presets, llmClient, sdClient, cfg)
 
