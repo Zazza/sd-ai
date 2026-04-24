@@ -184,10 +184,15 @@ func (h *Handler) generateImage(w http.ResponseWriter, r *http.Request) {
 		_ = h.sd.SetModel(p.ModelName)
 	}
 
+	samplerName := p.Sampler
+	if p.ScheduleType != "" {
+		samplerName = p.Sampler + " " + p.ScheduleType
+	}
+
 	result, err := h.sd.Txt2Img(sd.Txt2ImgRequest{
 		Prompt:         prompt,
 		NegativePrompt: negativePrompt,
-		SamplerName:    p.Sampler,
+		SamplerName:    samplerName,
 		Scheduler:      p.ScheduleType,
 		Steps:          p.Steps,
 		CfgScale:       p.CfgScale,

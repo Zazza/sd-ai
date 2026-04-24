@@ -238,10 +238,15 @@ func (a *App) GenerateImage(params GenerateImageParams) (*GenerateImageResult, e
 		_ = a.sd.SetVAE(p.VAE)
 	}
 
+	samplerName := p.Sampler
+	if p.ScheduleType != "" {
+		samplerName = p.Sampler + " " + p.ScheduleType
+	}
+
 	result, err := a.sd.Txt2Img(sd.Txt2ImgRequest{
 		Prompt:                 prompt,
 		NegativePrompt:         negativePrompt,
-		SamplerName:            p.Sampler,
+		SamplerName:            samplerName,
 		Scheduler:              p.ScheduleType,
 		Steps:                  p.Steps,
 		CfgScale:               p.CfgScale,
