@@ -151,6 +151,77 @@ func (d *DB) Delete(id int64) error {
 	return err
 }
 
+func (d *DB) GetByIDs(ids []int64) ([]Preset, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	placeholders := ""
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		if i > 0 {
+			placeholders += ","
+		}
+		placeholders += "?"
+		args[i] = id
+	}
+	rows, err := d.db.Query(`SELECT id, name, preset_type, prompt, negative_prompt, sampler, steps, cfg_scale, width, height, model_name, seed, created_at, updated_at FROM presets WHERE id IN (`+placeholders+`) ORDER BY created_at DESC`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var presets []Preset
+	for rows.Next() {
+		var p Preset
+		var seed sql.NullInt64
+		if err := rows.Scan(&p.ID, &p.Name, &p.PresetType, &p.Prompt, &p.NegativePrompt, &p.Sampler, &p.Steps, &p.CfgScale, &p.Width, &p.Height, &p.ModelName, &seed, &p.CreatedAt, &p.UpdatedAt); err != nil {
+			return nil, err
+		}
+		if seed.Valid {
+			p.Seed = &seed.Int64
+		}
+		presets = append(presets, p)
+	}
+	return presets, rows.Err()
+}
+
+func (d *DB) CreateBatch(items []Preset) ([]Preset, error) {
+	tx, err := d.db.Begin()
+	if err != nil {
+		return nil, err
+	}
+
+	var created []Preset
+	for _, item := range items {
+		result, err := tx.Exec(`INSERT INTO presets (name, preset_type, prompt, negative_prompt, sampler, steps, cfg_scale, width, height, model_name, seed) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			item.Name, item.PresetType, item.Prompt, item.NegativePrompt, item.Sampler, item.Steps, item.CfgScale, item.Width, item.Height, item.ModelName, item.Seed)
+		if err != nil {
+			tx.Rollback()
+			return nil, err
+		}
+		id, _ := result.LastInsertId()
+		created = append(created, Preset{
+			ID:             id,
+			Name:           item.Name,
+			PresetType:     item.PresetType,
+			Prompt:         item.Prompt,
+			NegativePrompt: item.NegativePrompt,
+			Sampler:        item.Sampler,
+			Steps:          item.Steps,
+			CfgScale:       item.CfgScale,
+			Width:          item.Width,
+			Height:         item.Height,
+			ModelName:      item.ModelName,
+			Seed:           item.Seed,
+		})
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return created, nil
+}
+
 func (d *DB) GetSetting(key string) (string, error) {
 	var value string
 	err := d.db.QueryRow(`SELECT value FROM settings WHERE key = ?`, key).Scan(&value)

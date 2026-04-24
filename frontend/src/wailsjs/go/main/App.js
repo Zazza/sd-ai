@@ -30,6 +30,10 @@ export function DeletePrompt(arg1) {
   return window['go']['main']['App']['DeletePrompt'](arg1);
 }
 
+export function ExportPresets(arg1) {
+  return window['go']['main']['App']['ExportPresets'](arg1);
+}
+
 export function GenerateImage(arg1) {
   return window['go']['main']['App']['GenerateImage'](arg1);
 }
@@ -58,6 +62,10 @@ export function GetSettings() {
   return window['go']['main']['App']['GetSettings']();
 }
 
+export function ImportPresets(arg1) {
+  return window['go']['main']['App']['ImportPresets'](arg1);
+}
+
 export function IsKidsModeActive() {
   return window['go']['main']['App']['IsKidsModeActive']();
 }
@@ -76,6 +84,10 @@ export function ListPresetsByType(arg1) {
 
 export function ListPrompts() {
   return window['go']['main']['App']['ListPrompts']();
+}
+
+export function OpenImportFile() {
+  return window['go']['main']['App']['OpenImportFile']();
 }
 
 export function SaveImage(arg1, arg2) {

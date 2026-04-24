@@ -5,12 +5,14 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 
@@ -443,4 +445,173 @@ func (a *App) SaveImage(base64Data, defaultName string) (string, error) {
 	}
 
 	return path, nil
+}
+
+// --- Preset Export/Import ---
+
+type PresetExportFile struct {
+	Version    int          `json:"version"`
+	ExportedAt time.Time    `json:"exported_at"`
+	Presets    []PresetData `json:"presets"`
+}
+
+type PresetData struct {
+	Name           string  `json:"name"`
+	PresetType     string  `json:"preset_type"`
+	Prompt         string  `json:"prompt"`
+	NegativePrompt string  `json:"negative_prompt"`
+	Sampler        string  `json:"sampler"`
+	Steps          int     `json:"steps"`
+	CfgScale       float64 `json:"cfg_scale"`
+	Width          int     `json:"width"`
+	Height         int     `json:"height"`
+	ModelName      string  `json:"model_name"`
+	Seed           *int64  `json:"seed"`
+}
+
+type ImportPreview struct {
+	Presets []PresetData `json:"presets"`
+	Total   int          `json:"total"`
+}
+
+func (a *App) ExportPresets(ids []int64) (string, error) {
+	if len(ids) == 0 {
+		return "", fmt.Errorf("no presets selected")
+	}
+
+	selected, err := a.presets.GetByIDs(ids)
+	if err != nil {
+		return "", err
+	}
+
+	data := PresetExportFile{
+		Version:    1,
+		ExportedAt: time.Now().UTC(),
+		Presets:    make([]PresetData, len(selected)),
+	}
+	for i, p := range selected {
+		data.Presets[i] = PresetData{
+			Name:           p.Name,
+			PresetType:     p.PresetType,
+			Prompt:         p.Prompt,
+			NegativePrompt: p.NegativePrompt,
+			Sampler:        p.Sampler,
+			Steps:          p.Steps,
+			CfgScale:       p.CfgScale,
+			Width:          p.Width,
+			Height:         p.Height,
+			ModelName:      p.ModelName,
+			Seed:           p.Seed,
+		}
+	}
+
+	jsonBytes, err := json.MarshalIndent(data, "", "  ")
+	if err != nil {
+		return "", err
+	}
+
+	path, err := runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{
+		DefaultFilename: "sd-studio-presets.json",
+		Filters: []runtime.FileFilter{
+			{DisplayName: "JSON Files", Pattern: "*.json"},
+		},
+	})
+	if err != nil || path == "" {
+		return "", err
+	}
+
+	if err := os.WriteFile(path, jsonBytes, 0o644); err != nil {
+		return "", err
+	}
+
+	return path, nil
+}
+
+func (a *App) OpenImportFile() (*ImportPreview, error) {
+	path, err := runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{
+		Filters: []runtime.FileFilter{
+			{DisplayName: "JSON Files", Pattern: "*.json"},
+		},
+	})
+	if err != nil || path == "" {
+		return nil, err
+	}
+
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read file")
+	}
+	if info.Size() > 10*1024*1024 {
+		return nil, fmt.Errorf("file too large (max 10 MB)")
+	}
+
+	jsonBytes, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read file")
+	}
+
+	var data PresetExportFile
+	if err := json.Unmarshal(jsonBytes, &data); err != nil {
+		return nil, fmt.Errorf("invalid file format: %w", err)
+	}
+
+	if data.Version != 1 {
+		return nil, fmt.Errorf("unsupported file version: %d", data.Version)
+	}
+
+	if len(data.Presets) == 0 {
+		return nil, fmt.Errorf("no presets found in file")
+	}
+
+	return &ImportPreview{
+		Presets: data.Presets,
+		Total:   len(data.Presets),
+	}, nil
+}
+
+func (a *App) ImportPresets(items []PresetData) ([]preset.Preset, error) {
+	if len(items) == 0 {
+		return nil, fmt.Errorf("no presets selected")
+	}
+	if len(items) > 500 {
+		return nil, fmt.Errorf("too many presets (max 500)")
+	}
+
+	for _, item := range items {
+		if strings.TrimSpace(item.Name) == "" {
+			return nil, fmt.Errorf("preset name is required")
+		}
+		if item.Steps < 1 || item.Steps > 150 {
+			return nil, fmt.Errorf("invalid steps for %q: must be 1-150", item.Name)
+		}
+		if item.Width < 64 || item.Width > 2048 || item.Height < 64 || item.Height > 2048 {
+			return nil, fmt.Errorf("invalid dimensions for %q: must be 64-2048", item.Name)
+		}
+		if item.CfgScale < 0 || item.CfgScale > 30 {
+			return nil, fmt.Errorf("invalid cfg_scale for %q: must be 0-30", item.Name)
+		}
+	}
+
+	batch := make([]preset.Preset, len(items))
+	for i, item := range items {
+		batch[i] = preset.Preset{
+			Name:           item.Name,
+			PresetType:     item.PresetType,
+			Prompt:         item.Prompt,
+			NegativePrompt: item.NegativePrompt,
+			Sampler:        item.Sampler,
+			Steps:          item.Steps,
+			CfgScale:       item.CfgScale,
+			Width:          item.Width,
+			Height:         item.Height,
+			ModelName:      item.ModelName,
+			Seed:           item.Seed,
+		}
+	}
+
+	created, err := a.presets.CreateBatch(batch)
+	if err != nil {
+		return nil, err
+	}
+	return created, nil
 }

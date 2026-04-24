@@ -6,6 +6,7 @@ import {
   ListDescriptions, CreateDescription, DeleteDescription,
   ListPrompts, CreatePrompt, DeletePrompt,
   SetKidsMode, IsKidsModeActive,
+  ExportPresets, OpenImportFile, ImportPresets,
 } from './wailsjs/go/main/App.js'
 
 export const api = {
@@ -32,4 +33,7 @@ export const api = {
   deletePrompt: (id) => DeletePrompt(id),
   setKidsMode: (enabled, pin) => SetKidsMode(enabled, pin),
   isKidsModeActive: () => IsKidsModeActive(),
+  exportPresets: (ids) => ExportPresets(ids),
+  openImportFile: () => OpenImportFile(),
+  importPresets: (items) => ImportPresets(items),
 }

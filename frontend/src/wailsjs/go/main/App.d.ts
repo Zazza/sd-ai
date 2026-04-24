@@ -19,6 +19,8 @@ export function DeletePreset(arg1:number):Promise<void>;
 
 export function DeletePrompt(arg1:number):Promise<void>;
 
+export function ExportPresets(arg1:Array<number>):Promise<string>;
+
 export function GenerateImage(arg1:main.GenerateImageParams):Promise<main.GenerateImageResult>;
 
 export function GenerateSDPrompt(arg1:string,arg2:string):Promise<string>;
@@ -33,6 +35,8 @@ export function GetSDSamplers():Promise<Array<sd.Sampler>>;
 
 export function GetSettings():Promise<Record<string, string>>;
 
+export function ImportPresets(arg1:Array<main.PresetData>):Promise<Array<preset.Preset>>;
+
 export function IsKidsModeActive():Promise<boolean>;
 
 export function ListDescriptions():Promise<Array<preset.SavedDescription>>;
@@ -42,6 +46,8 @@ export function ListPresets():Promise<Array<preset.Preset>>;
 export function ListPresetsByType(arg1:string):Promise<Array<preset.Preset>>;
 
 export function ListPrompts():Promise<Array<preset.SavedPrompt>>;
+
+export function OpenImportFile():Promise<main.ImportPreview>;
 
 export function SaveImage(arg1:string,arg2:string):Promise<string>;
 
