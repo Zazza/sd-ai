@@ -4,20 +4,7 @@ import (
 	"strings"
 )
 
-var russianBlocklist = []string{
-	"убийство", "убить", "убей", "мертвый", "смерть", "труп", "кровь", "кровавый",
-	"насилие", "насиловать", "изнасилование", "пытка", "пытки", "мучить", "мучение",
-	"оружие", "пистолет", "винтовка", "automatic", "нож", "заточка", "удушить",
-	"наркотик", "наркотики", "кокаин", "героин", "марихуана", "амфетамин",
-	"алкоголь", "водка", "пиво", "вино", "спиртное", "пьяный",
-	"курить", "сигарета", "табак", "вейп",
-	"суицид", "самоубийство", "покончить с собой", "убить себя",
-	"порно", "порнография", "секс", "эротика", "голый", "голая", "обнажённый", "обнаженная",
-	"ужас", "кошмар", "страшный", "пугающий", "крипи", "зомби", "монстр",
-	"расизм", "расист", "дискриминация", "ненависть",
-}
-
-var englishBlocklist = []string{
+var blocklist = []string{
 	"nsfw", "nude", "naked", "porn", "pornography", "erotic", "sexual", "sexy",
 	"boobs", "breasts", "nipples", "genitals", "penis", "vagina", "anus",
 	"sex", "orgasm", "fetish", "bondage", "bdsm", "hentai",
@@ -38,7 +25,7 @@ var safeDefault = "safe landscape, beautiful nature, sunny day, clear sky, peace
 
 func FilterInput(desc string) string {
 	lower := strings.ToLower(desc)
-	for _, w := range russianBlocklist {
+	for _, w := range blocklist {
 		if strings.Contains(lower, w) {
 			return ""
 		}
@@ -56,7 +43,7 @@ func FilterOutput(prompt string) string {
 		}
 		lower := strings.ToLower(tag)
 		blocked := false
-		for _, w := range englishBlocklist {
+		for _, w := range blocklist {
 			if strings.Contains(lower, w) {
 				blocked = true
 				break

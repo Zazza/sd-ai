@@ -263,7 +263,7 @@ onUnmounted(() => {
 
           <div class="form-group">
             <div style="display: flex; justify-content: space-between; align-items: center;">
-              <label class="form-label" style="margin-bottom: 0;">Describe in Russian</label>
+              <label class="form-label" style="margin-bottom: 0;">Description</label>
               <div style="display: flex; gap: 6px;">
                 <button class="btn btn-secondary btn-sm" @click="saveDescription" :disabled="generatingPrompt || !description.trim()" title="Save description">
                   &#9776; Save
@@ -275,7 +275,7 @@ onUnmounted(() => {
             </div>
 
             <div style="display: flex; gap: 8px; margin-top: 8px;">
-              <textarea class="form-textarea" v-model="description" rows="3" placeholder="Магический меч с синим свечением..." :disabled="generatingPrompt"></textarea>
+              <textarea class="form-textarea" v-model="description" rows="3" placeholder="A glowing magic sword..." :disabled="generatingPrompt"></textarea>
               <div style="display: flex; flex-direction: column; gap: 4px;">
                 <button class="btn btn-secondary" @click="generatePrompt" :disabled="generatingPrompt || !description.trim()" style="white-space: nowrap;">
                   <span v-if="generatingPrompt" style="display: inline-flex; align-items: center; gap: 6px;">

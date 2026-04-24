@@ -1,29 +1,30 @@
 # SD Studio
 
-Desktop-приложение для генерации изображений через [Stable Diffusion WebUI](https://github.com/AUTOMATIC1111/stable-diffusion-webui) с LLM-генерацией промптов.
+Desktop application for image generation via [Stable Diffusion WebUI](https://github.com/AUTOMATIC1111/stable-diffusion-webui) with LLM-powered prompt generation.
 
-## Технологии
+## Tech Stack
 
-| Слой | Стек |
-|------|------|
+| Layer | Stack |
+|-------|-------|
 | Backend | Go 1.25 |
 | Desktop | [Wails](https://wails.io/) v2 |
 | Frontend | Vue 3 + Vite |
-| БД | SQLite ([modernc.org/sqlite](https://gitlab.com/cznic/sqlite), pure Go) |
+| Database | SQLite ([modernc.org/sqlite](https://gitlab.com/cznic/sqlite), pure Go) |
 | LLM | OpenAI-compatible API |
 | SD | Stable Diffusion WebUI API |
 
-## Возможности
+## Features
 
-- Генерация SD-промптов через LLM по текстовому описанию
-- Генерация изображений через Stable Diffusion WebUI API
-- Управление пресетами (параметры генерации: sampler, steps, cfg_scale, размер, seed)
-- Настройка подключения к LLM и SD API (URL, модели)
-- Сохранение описаний для повторного использования
+- Generate SD prompts via LLM from text descriptions (any language)
+- Generate images through Stable Diffusion WebUI API
+- Manage presets (generation parameters: sampler, steps, cfg_scale, size, seed)
+- Configure LLM and SD API connections (URL, models)
+- Save descriptions for reuse
+- Kids Mode with content filtering and PIN protection
 
-## Требования
+## Requirements
 
-### Общие
+### General
 
 - [Go](https://go.dev/dl/) >= 1.25
 - [Node.js](https://nodejs.org/) >= 18
@@ -31,78 +32,78 @@ Desktop-приложение для генерации изображений ч
 
 ### Linux
 
-- `libgtk-3-dev`, `libwebkit2gtk-4.1-dev` (или `libwebkit2gtk-4.0-dev`)
+- `libgtk-3-dev`, `libwebkit2gtk-4.1-dev` (or `libwebkit2gtk-4.0-dev`)
 
 ### Windows
 
-- [WebView2](https://developer.microsoft.com/en-us/microsoft-edge/webview2/) (встроена в Windows 10/11)
+- [WebView2](https://developer.microsoft.com/en-us/microsoft-edge/webview2/) (built into Windows 10/11)
 
 ### macOS
 
 - Xcode Command Line Tools (`xcode-select --install`)
 - macOS 10.15+ (Catalina)
 
-## Сборка
+## Build
 
-### Установка Wails CLI
+### Install Wails CLI
 
 ```bash
 go install github.com/wailsapp/wails/v2/cmd/wails@latest
 ```
 
-### Разработка
+### Development
 
 ```bash
 wails dev
 ```
 
-Frontend hot-reload на `http://localhost:34115`, desktop-окно открывается автоматически.
+Frontend hot-reload at `http://localhost:34115`, desktop window opens automatically.
 
-### Production-сборка
+### Production Build
 
 ```bash
 wails build
 ```
 
-Бинарник: `build/bin/sd-studio` (Linux/macOS) или `build/bin/sd-studio.exe` (Windows).
+Binary: `build/bin/sd-studio` (Linux/macOS) or `build/bin/sd-studio.exe` (Windows).
 
-### Сборка через Docker
+### Docker Build
 
 ```bash
 docker compose up --build
 ```
 
-## Конфигурация
+## Configuration
 
-Приложение подключается к внешним сервисам, указываемым в настройках интерфейса:
+The application connects to external services configured via the settings UI:
 
-| Параметр | По умолчанию | Описание |
-|----------|-------------|----------|
-| `llm_url` | `http://localhost:11434/v1` | URL LLM API (Ollama, OpenAI-compatible) |
-| `sd_url` | `http://localhost:7860` | URL Stable Diffusion WebUI API |
-| `llm_model` | — | Модель LLM для генерации промптов |
-| `sd_prompt_model` | — | Модель LLM для системного промпта |
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `llm_url` | `http://localhost:11434/v1` | LLM API URL (Ollama, OpenAI-compatible) |
+| `sd_url` | `http://localhost:7860` | Stable Diffusion WebUI API URL |
+| `llm_model` | — | LLM model for prompt generation |
+| `sd_prompt_model` | — | LLM model for system prompt |
 
-Настройки хранятся в SQLite (`data/presets.db`) и переживают переустановку.
+Settings are stored in SQLite (`data/presets.db`) and persist across reinstalls.
 
-## Структура проекта
+## Project Structure
 
 ```
 ├── main.go              # Entrypoint
 ├── app.go               # Wails RPC bindings
 ├── internal/
-│   ├── config/          # Конфигурация
-│   ├── llm/             # LLM клиент
-│   ├── preset/          # SQLite CRUD (пресеты, настройки)
-│   ├── sd/              # Stable Diffusion клиент
+│   ├── config/          # Configuration
+│   ├── llm/             # LLM client
+│   ├── preset/          # SQLite CRUD (presets, settings)
+│   ├── sd/              # Stable Diffusion client
 │   └── api/             # HTTP API
 ├── frontend/
 │   └── src/
-│       ├── components/  # Vue компоненты
+│       ├── components/  # Vue components
 │       └── wailsjs/     # Auto-generated Wails bindings
 └── data/                # SQLite DB (runtime)
 ```
 
-## Лицензия
+## License
 
-Приватный проект.
+Private project.

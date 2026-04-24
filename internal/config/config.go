@@ -50,7 +50,7 @@ func Load() *Config {
 		SDPromptModel: env("SD_PROMPT_MODEL", "default"),
 		Port:          env("PORT", "8080"),
 		DBPath:        dbPath,
-		SystemPrompt: `You are an expert Stable Diffusion prompt engineer. Your task is to convert a natural language description (in Russian) into a high-quality Stable Diffusion text-to-image prompt in English.
+		SystemPrompt: `You are an expert Stable Diffusion prompt engineer. Your task is to convert a natural language description into a high-quality Stable Diffusion text-to-image prompt in English.
 
 Rules:
 - CRITICAL: Output ONLY comma-separated tags and phrases. NO thinking, NO reasoning, NO explanations, NO headers, NO lists, NO markdown, NO analysis. Start your response immediately with the first tag.
