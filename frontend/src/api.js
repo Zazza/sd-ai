@@ -21,7 +21,7 @@ export const api = {
   upscalePreview: (previewImageBase64, presetId, seed) =>
     UpscalePreview({ preview_image_base64: previewImageBase64, preset_id: presetId, seed }),
   upscaleImage: (imageBase64, genInfo, presetId) =>
-    UpscaleImage({ image_base64: imageBase64, gen_info: genInfo, preset_id: presetId || 0 }),
+    UpscaleImage({ image_base64: imageBase64, gen_info: typeof genInfo === 'string' ? genInfo : JSON.stringify(genInfo || {}), preset_id: presetId || 0 }),
   saveImage: (base64Data, defaultName) => SaveImage(base64Data, defaultName),
   getLastImage: () => GetLastImage(),
   getModels: () => GetSDModels(),

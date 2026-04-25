@@ -374,9 +374,9 @@ func (a *App) GenerateImage(params GenerateImageParams) (*GenerateImageResult, e
 }
 
 type UpscaleImageParams struct {
-	ImageBase64 string          `json:"image_base64"`
-	GenInfo     json.RawMessage `json:"gen_info"`
-	PresetID    int64           `json:"preset_id"`
+	ImageBase64 string `json:"image_base64"`
+	GenInfo     string `json:"gen_info"`
+	PresetID    int64  `json:"preset_id"`
 }
 
 func (a *App) UpscaleImage(params UpscaleImageParams) (*GenerateImageResult, error) {
@@ -399,7 +399,7 @@ func (a *App) UpscaleImage(params UpscaleImageParams) (*GenerateImageResult, err
 		CfgScale       float64 `json:"cfg_scale"`
 		ClipSkip       int     `json:"clip_skip"`
 	}
-	if err := json.Unmarshal(params.GenInfo, &info); err != nil {
+	if err := json.Unmarshal([]byte(params.GenInfo), &info); err != nil {
 		return nil, fmt.Errorf("parse gen_info: %w", err)
 	}
 

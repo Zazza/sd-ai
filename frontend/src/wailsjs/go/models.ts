@@ -186,7 +186,7 @@ export namespace main {
 	}
 	export class UpscaleImageParams {
 	    image_base64: string;
-	    gen_info: number[];
+	    gen_info: string;
 	    preset_id: number;
 	
 	    static createFrom(source: any = {}) {
