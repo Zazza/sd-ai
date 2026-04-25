@@ -39,6 +39,7 @@ export namespace main {
 	    image: any;
 	    parameters: any;
 	    info: any;
+	    is_preview: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new GenerateImageResult(source);
@@ -49,6 +50,7 @@ export namespace main {
 	        this.image = source["image"];
 	        this.parameters = source["parameters"];
 	        this.info = source["info"];
+	        this.is_preview = source["is_preview"];
 	    }
 	}
 	export class PresetData {
@@ -181,6 +183,24 @@ export namespace main {
 		    }
 		    return a;
 		}
+	}
+	export class UpscalePreviewParams {
+	    preview_image_base64: string;
+	    preset_id: number;
+	    seed: number;
+	    denoising_strength?: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new UpscalePreviewParams(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.preview_image_base64 = source["preview_image_base64"];
+	        this.preset_id = source["preset_id"];
+	        this.seed = source["seed"];
+	        this.denoising_strength = source["denoising_strength"];
+	    }
 	}
 
 }

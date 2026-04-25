@@ -47,6 +47,14 @@ const showPinModal = ref(false)
 const pinMode = ref('set')
 const pinError = ref('')
 
+const generationForm = reactive({
+  preview_mode: false,
+  preview_width: 512,
+  preview_height: 512,
+})
+const generationSaved = ref(false)
+const generationError = ref('')
+
 watch(() => connectionForm.llm_backend, (newVal, oldVal) => {
   if (oldVal && defaultURLs[oldVal] && connectionForm.llm_url === defaultURLs[oldVal]) {
     connectionForm.llm_url = defaultURLs[newVal] || defaultURLs.lmstudio
@@ -66,6 +74,9 @@ async function loadSettings() {
     connectionForm.llm_num_gpu = settings.llm_num_gpu || '0'
     loadConnectionLLMModels()
     kidsMode.value = await api.isKidsModeActive()
+    generationForm.preview_mode = settings.preview_mode === 'true'
+    generationForm.preview_width = parseInt(settings.preview_width) || 512
+    generationForm.preview_height = parseInt(settings.preview_height) || 512
   } catch {}
 }
 
@@ -160,6 +171,21 @@ function onPinCancel() {
   pinError.value = ''
 }
 
+async function saveGeneration() {
+  generationSaved.value = false
+  generationError.value = ''
+  try {
+    await api.updateSettings({
+      preview_mode: generationForm.preview_mode ? 'true' : 'false',
+      preview_width: String(generationForm.preview_width),
+      preview_height: String(generationForm.preview_height),
+    })
+    generationSaved.value = true
+  } catch (e) {
+    generationError.value = String(e)
+  }
+}
+
 onMounted(loadSettings)
 </script>
 
@@ -174,6 +200,7 @@ onMounted(loadSettings)
       <button class="tab" :class="{ active: activeTab === 'sd' }" @click="switchTab('sd')">Stable Diffusion</button>
       <button class="tab" :class="{ active: activeTab === 'llm' }" @click="switchTab('llm')">LLM</button>
       <button class="tab" :class="{ active: activeTab === 'safety' }" @click="switchTab('safety')">Safety</button>
+      <button class="tab" :class="{ active: activeTab === 'generation' }" @click="switchTab('generation')">Generation</button>
     </div>
 
     <!-- Connection Tab -->
@@ -308,6 +335,38 @@ onMounted(loadSettings)
         </ul>
         <div style="margin-top: 8px;">Protected by 4-digit PIN to prevent children from disabling it.</div>
       </div>
+    </div>
+
+    <!-- Generation Tab -->
+    <div v-if="activeTab === 'generation'" class="card">
+      <h3 style="color: var(--text-bright); margin-bottom: 16px;">Preview Generation</h3>
+      <div v-if="generationSaved" class="status status-success" style="margin-bottom: 16px;">Settings saved.</div>
+      <div v-if="generationError" class="status status-error" style="margin-bottom: 16px;">{{ generationError }}</div>
+
+      <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 16px;">
+        <ToggleSwitch v-model="generationForm.preview_mode" />
+        <div>
+          <div style="color: var(--text-bright); font-weight: 500;">{{ generationForm.preview_mode ? 'Enabled' : 'Disabled' }}</div>
+          <div style="color: var(--text-dim); font-size: 12px; margin-top: 2px;">
+            Generate a small preview first, then upscale to full resolution
+          </div>
+        </div>
+      </div>
+
+      <template v-if="generationForm.preview_mode">
+        <div class="form-row-2">
+          <div class="form-group">
+            <label class="form-label">Preview Width</label>
+            <input class="form-input" type="number" v-model.number="generationForm.preview_width" step="64" min="64" max="2048" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Preview Height</label>
+            <input class="form-input" type="number" v-model.number="generationForm.preview_height" step="64" min="64" max="2048" />
+          </div>
+        </div>
+      </template>
+
+      <button class="btn btn-primary" @click="saveGeneration">Save Generation Settings</button>
     </div>
 
     <PinModal v-if="showPinModal" :mode="pinMode" :error="pinError" @confirm="onPinConfirm" @cancel="onPinCancel" />

@@ -73,6 +73,8 @@ type Txt2ImgRequest struct {
 	HiresUpscaler          string   `json:"hr_upscaler,omitempty"`
 	HiresResizeX           int      `json:"hr_resize_x"`
 	HiresResizeY           int      `json:"hr_resize_y"`
+	DoNotSaveImages        bool     `json:"do_not_save_images"`
+	DoNotSaveGrid          bool     `json:"do_not_save_grid"`
 }
 
 type Txt2ImgResponse struct {
@@ -220,6 +222,58 @@ func (c *Client) GetVAEs() ([]VAE, error) {
 		return nil, fmt.Errorf("decode vae: %w", err)
 	}
 	return vaes, nil
+}
+
+type Img2ImgRequest struct {
+	InitImages        []string `json:"init_images"`
+	Prompt            string   `json:"prompt"`
+	NegativePrompt    string   `json:"negative_prompt"`
+	SamplerName       string   `json:"sampler_name"`
+	Scheduler         string   `json:"scheduler,omitempty"`
+	Steps             int      `json:"steps"`
+	CfgScale          float64  `json:"cfg_scale"`
+	Width             int      `json:"width"`
+	Height            int      `json:"height"`
+	Seed              *int64   `json:"seed,omitempty"`
+	DenoisingStrength *float64 `json:"denoising_strength,omitempty"`
+	ClipSkip          *int     `json:"clip_skip,omitempty"`
+	BatchSize         *int     `json:"batch_size,omitempty"`
+	BatchCount        *int     `json:"n_iter,omitempty"`
+	DoNotSaveImages   bool     `json:"do_not_save_images"`
+	DoNotSaveGrid     bool     `json:"do_not_save_grid"`
+}
+
+func (c *Client) Img2Img(req Img2ImgRequest) (*Txt2ImgResponse, error) {
+	body, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("marshal request: %w", err)
+	}
+
+	resp, err := c.httpClient.Post(c.baseURL+"/sdapi/v1/img2img", "application/json", bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("API error %d: %s\nRequest: %s", resp.StatusCode, string(respBody), string(body))
+	}
+
+	var result Txt2ImgResponse
+	if err := json.Unmarshal(respBody, &result); err != nil {
+		return nil, fmt.Errorf("decode response: %w", err)
+	}
+
+	if result.Error != "" {
+		return &result, fmt.Errorf("SD error: %s", result.Error)
+	}
+
+	return &result, nil
 }
 
 func (c *Client) SetVAE(vaeName string) error {
