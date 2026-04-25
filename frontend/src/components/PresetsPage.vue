@@ -18,6 +18,8 @@ const importPresets = ref([])
 const pendingDeleteId = ref(null)
 let deleteTimer = null
 
+const showDeleteConfirm = ref(false)
+
 const selectedCount = computed(() => selectedIds.value.size)
 
 async function load() {
@@ -111,6 +113,26 @@ async function handleExport() {
   }
 }
 
+function requestBatchDelete() {
+  if (selectedIds.value.size === 0) return
+  showDeleteConfirm.value = true
+}
+
+async function confirmBatchDelete() {
+  showDeleteConfirm.value = false
+  const ids = [...selectedIds.value]
+  for (const id of ids) {
+    try {
+      await api.deletePreset(id)
+    } catch (e) {
+      console.error('Delete failed for', id, e)
+    }
+  }
+  selectedIds.value = new Set()
+  selectMode.value = false
+  await load()
+}
+
 async function handleOpenImport() {
   try {
     const result = await api.openImportFile()
@@ -144,11 +166,14 @@ onMounted(load)
           <button class="btn btn-primary btn-sm" @click="handleExport" :disabled="selectedCount === 0">
             Export ({{ selectedCount }})
           </button>
+          <button class="btn btn-danger btn-sm" @click="requestBatchDelete" :disabled="selectedCount === 0">
+            Delete ({{ selectedCount }})
+          </button>
           <button class="btn btn-secondary btn-sm" @click="toggleSelectMode">Cancel</button>
         </template>
         <template v-else>
           <button class="btn btn-secondary" @click="handleOpenImport">Import</button>
-          <button class="btn btn-secondary" @click="toggleSelectMode" :disabled="presets.length === 0">Export</button>
+          <button class="btn btn-secondary" @click="toggleSelectMode" :disabled="presets.length === 0">Select</button>
           <button class="btn btn-primary" @click="openCreate">+ New Preset</button>
         </template>
       </div>
@@ -200,5 +225,20 @@ onMounted(load)
       @done="handleImportDone"
       @close="showImport = false"
     />
+
+    <div v-if="showDeleteConfirm" class="modal-overlay" @click.self="showDeleteConfirm = false">
+      <div class="modal">
+        <div class="modal-header">
+          <h2 class="modal-title">Delete Presets</h2>
+          <button class="modal-close" @click="showDeleteConfirm = false">&times;</button>
+        </div>
+        <p>Are you sure you want to delete <strong>{{ selectedCount }}</strong> preset{{ selectedCount > 1 ? 's' : '' }}?</p>
+        <p style="color: var(--text-dim); font-size: 0.9em;">This action cannot be undone.</p>
+        <div style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px;">
+          <button class="btn btn-secondary" @click="showDeleteConfirm = false">Cancel</button>
+          <button class="btn btn-danger" @click="confirmBatchDelete">Delete</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>

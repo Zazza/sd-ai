@@ -9,6 +9,11 @@ const extraPrompt = ref('')
 const extraNegativePrompt = ref('')
 const generatedImage = ref('')
 const genInfo = ref(null)
+const sourceImage = ref('')
+const sourceGenInfo = ref(null)
+const isPreview = ref(false)
+const upscaling = ref(false)
+const previewMode = ref(false)
 
 const generatingPrompt = ref(false)
 const generatingImage = ref(false)
@@ -36,6 +41,16 @@ const promptTotalPages = computed(() => Math.max(1, Math.ceil(savedPrompts.value
 const promptPaginated = computed(() => {
   const start = (promptPage.value - 1) * PAGE_SIZE
   return savedPrompts.value.slice(start, start + PAGE_SIZE)
+})
+
+const formattedGenInfo = computed(() => {
+  if (!genInfo.value) return ''
+  try {
+    const parsed = typeof genInfo.value === 'string' ? JSON.parse(genInfo.value) : genInfo.value
+    return JSON.stringify(parsed, null, 2)
+  } catch {
+    return String(genInfo.value)
+  }
 })
 
 const llmAvailable = ref(false)
@@ -181,15 +196,26 @@ async function generatePrompt() {
   }
 }
 
+function saveGenState() {
+  api.updateSettings({
+    gen_preset_id: String(selectedPresetId.value || ''),
+    gen_description: description.value || '',
+    gen_extra_prompt: extraPrompt.value || '',
+    gen_extra_negative: extraNegativePrompt.value || '',
+  }).catch(() => {})
+}
+
 async function generateImage() {
   if (!selectedPresetId.value) {
     error.value = 'Select a preset first'
     return
   }
+  saveGenState()
   generatingImage.value = true
   error.value = ''
   generatedImage.value = ''
   genInfo.value = null
+  isPreview.value = false
   try {
     const result = await api.generateImage(selectedPresetId.value, extraPrompt.value, extraNegativePrompt.value)
     if (!result || !result.image) {
@@ -197,6 +223,9 @@ async function generateImage() {
     } else {
       generatedImage.value = result.image
       genInfo.value = result.info
+      sourceImage.value = result.image
+      sourceGenInfo.value = result.info
+      isPreview.value = result.is_preview || false
     }
   } catch (e) {
     error.value = String(e)
@@ -204,6 +233,38 @@ async function generateImage() {
     generatingImage.value = false
   }
 }
+
+async function upscalePreview() {
+  if (!generatedImage.value || !selectedPresetId.value || !genInfo.value) return
+  upscaling.value = true
+  error.value = ''
+  try {
+    let seed = -1
+    let info = genInfo.value
+    if (typeof info === 'string') {
+      try { info = JSON.parse(info) } catch { info = {} }
+    }
+    if (info && typeof info === 'object') {
+      const s = info.seed ?? info.Seed
+      if (s !== undefined) seed = Number(s)
+    }
+    const result = await api.upscalePreview(generatedImage.value, selectedPresetId.value, seed)
+    if (!result || !result.image) {
+      error.value = 'Upscale failed: no image returned'
+    } else {
+      generatedImage.value = result.image
+      genInfo.value = result.info
+      sourceImage.value = result.image
+      sourceGenInfo.value = result.info
+      isPreview.value = false
+    }
+  } catch (e) {
+    error.value = String(e)
+  } finally {
+    upscaling.value = false
+  }
+}
+
 
 async function downloadImage() {
   if (!generatedImage.value) return
@@ -218,12 +279,30 @@ async function downloadImage() {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
   loadPresets()
   loadDescriptions()
   loadPrompts()
   checkServices()
   statusInterval = setInterval(checkServices, 30000)
+  try {
+    const s = await api.getSettings()
+    previewMode.value = s.preview_mode === 'true'
+    if (s.gen_preset_id) selectedPresetId.value = Number(s.gen_preset_id)
+    if (s.gen_description) description.value = s.gen_description
+    if (s.gen_extra_prompt) extraPrompt.value = s.gen_extra_prompt
+    if (s.gen_extra_negative) extraNegativePrompt.value = s.gen_extra_negative
+  } catch {}
+  try {
+    const last = await api.getLastImage()
+    if (last && last.image) {
+      generatedImage.value = last.image
+      genInfo.value = last.info
+      sourceImage.value = last.image
+      sourceGenInfo.value = last.info
+      isPreview.value = last.is_preview || false
+    }
+  } catch {}
 })
 
 onUnmounted(() => {
@@ -322,13 +401,17 @@ onUnmounted(() => {
 
       <div class="generate-section">
         <div class="generate-image-area">
-          <div v-if="generatingImage" style="text-align: center;">
+          <div v-if="generatingImage || upscaling || refining" style="text-align: center;">
             <span class="spinner" style="width: 32px; height: 32px; border-width: 3px;"></span>
-            <p style="margin-top: 12px; color: var(--text-dim);">Generating image...</p>
+            <p style="margin-top: 12px; color: var(--text-dim);">{{ upscaling ? 'Upscaling to full resolution...' : refining ? 'Refining image...' : 'Generating image...' }}</p>
           </div>
           <div v-else-if="generatedImage" style="width: 100%; padding: 12px;">
+            <div v-if="isPreview && previewMode" class="status status-info" style="margin-bottom: 8px; text-align: center;">
+              Preview &mdash; click Upscale for full resolution. Tip: switch preset before upscale for style transfer.
+            </div>
             <img :src="'data:image/png;base64,' + generatedImage" alt="Generated" style="border-radius: var(--radius-sm);" />
             <div style="display: flex; gap: 8px; margin-top: 12px; justify-content: center;">
+              <button v-if="isPreview && previewMode" class="btn btn-primary btn-sm" @click="upscalePreview">Upscale to Full Size</button>
               <button class="btn btn-secondary btn-sm" @click="downloadImage">Download</button>
               <button class="btn btn-secondary btn-sm" @click="generateImage">Regenerate</button>
             </div>
@@ -341,7 +424,7 @@ onUnmounted(() => {
 
         <details v-if="genInfo" class="gen-info card">
           <summary>Generation Info</summary>
-          <pre>{{ JSON.stringify(genInfo, null, 2) }}</pre>
+          <pre style="white-space: pre-wrap; word-break: break-word; overflow-wrap: break-word;">{{ formattedGenInfo }}</pre>
         </details>
       </div>
     </div>

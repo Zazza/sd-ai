@@ -27,6 +27,8 @@ export function GenerateSDPrompt(arg1:string,arg2:string):Promise<string>;
 
 export function GetLLMModels():Promise<Array<llm.LLMModel>>;
 
+export function GetLastImage():Promise<main.GenerateImageResult>;
+
 export function GetPreset(arg1:number):Promise<preset.Preset>;
 
 export function GetSDModels():Promise<Array<sd.SDModel>>;
@@ -62,3 +64,5 @@ export function SetKidsMode(arg1:boolean,arg2:string):Promise<void>;
 export function UpdatePreset(arg1:preset.Preset):Promise<preset.Preset>;
 
 export function UpdateSettings(arg1:Record<string, string>):Promise<void>;
+
+export function UpscalePreview(arg1:main.UpscalePreviewParams):Promise<main.GenerateImageResult>;

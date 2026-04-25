@@ -24,15 +24,22 @@ import (
 )
 
 type App struct {
-	ctx     context.Context
-	presets *preset.DB
-	llm     *llm.Client
-	sd      *sd.Client
-	config  *config.Config
+	ctx      context.Context
+	presets  *preset.DB
+	llm      *llm.Client
+	sd       *sd.Client
+	config   *config.Config
+	dataDir  string
 }
 
 func NewApp(presets *preset.DB, llmClient *llm.Client, sdClient *sd.Client, cfg *config.Config) *App {
-	return &App{presets: presets, llm: llmClient, sd: sdClient, config: cfg}
+	return &App{
+		presets: presets,
+		llm:     llmClient,
+		sd:      sdClient,
+		config:  cfg,
+		dataDir: filepath.Dir(cfg.DBPath),
+	}
 }
 
 func (a *App) startup(ctx context.Context) {
@@ -205,9 +212,10 @@ type GenerateImageParams struct {
 }
 
 type GenerateImageResult struct {
-	Image      any `json:"image"`
-	Parameters any `json:"parameters"`
-	Info       any `json:"info"`
+	Image      any  `json:"image"`
+	Parameters any  `json:"parameters"`
+	Info       any  `json:"info"`
+	IsPreview  bool `json:"is_preview"`
 }
 
 func (a *App) GenerateImage(params GenerateImageParams) (*GenerateImageResult, error) {
@@ -266,6 +274,47 @@ func (a *App) GenerateImage(params GenerateImageParams) (*GenerateImageResult, e
 		denoisingStrength = &ds
 	}
 
+	isPreview := false
+	width := p.Width
+	height := p.Height
+	var hiresFix *bool
+	if p.HiresFix != nil {
+		hiresFix = p.HiresFix
+	}
+
+	if v, _ := a.presets.GetSetting("preview_mode"); v == "true" {
+		isPreview = true
+		maxW, maxH := 512, 512
+		if pw, _ := a.presets.GetSetting("preview_width"); pw != "" {
+			if n, err := strconv.Atoi(pw); err == nil && n > 0 {
+				maxW = n
+			}
+		}
+		if ph, _ := a.presets.GetSetting("preview_height"); ph != "" {
+			if n, err := strconv.Atoi(ph); err == nil && n > 0 {
+				maxH = n
+			}
+		}
+		targetRatio := float64(p.Width) / float64(p.Height)
+		maxRatio := float64(maxW) / float64(maxH)
+		if maxRatio > targetRatio {
+			height = maxH
+			width = int(float64(maxH) * targetRatio)
+		} else {
+			width = maxW
+			height = int(float64(maxW) / targetRatio)
+		}
+		width = (width / 8) * 8
+		height = (height / 8) * 8
+		if width < 64 {
+			width = 64
+		}
+		if height < 64 {
+			height = 64
+		}
+		hiresFix = nil
+	}
+
 	result, err := a.sd.Txt2Img(sd.Txt2ImgRequest{
 		Prompt:                 prompt,
 		NegativePrompt:         negativePrompt,
@@ -273,17 +322,19 @@ func (a *App) GenerateImage(params GenerateImageParams) (*GenerateImageResult, e
 		Scheduler:              p.ScheduleType,
 		Steps:                  p.Steps,
 		CfgScale:               p.CfgScale,
-		Width:                  p.Width,
-		Height:                 p.Height,
+		Width:                  width,
+		Height:                 height,
 		Seed:                   p.Seed,
 		DenoisingStrength:      denoisingStrength,
 		ClipSkip:               &clipSkip,
 		BatchSize:              &batchSize,
 		BatchCount:             &batchCount,
-		HiresFix:               p.HiresFix,
+		HiresFix:               hiresFix,
 		HiresUpscale:           p.HiresUpscale,
 		HiresDenoisingStrength: p.HiresDenoisingStrength,
 		HiresUpscaler:          p.HiresUpscaler,
+		DoNotSaveImages:        true,
+		DoNotSaveGrid:          true,
 	})
 	if err != nil {
 		return nil, err
@@ -305,11 +356,102 @@ func (a *App) GenerateImage(params GenerateImageParams) (*GenerateImageResult, e
 			reason, p.Sampler, p.ScheduleType, p.ModelName)
 	}
 
-	return &GenerateImageResult{
+	img := &GenerateImageResult{
 		Image:      result.Images[0],
 		Parameters: result.Parameters,
 		Info:       result.Info,
-	}, nil
+		IsPreview:  isPreview,
+	}
+	a.saveLastImage(result.Images[0], result.Info, isPreview)
+	return img, nil
+}
+
+type UpscalePreviewParams struct {
+	PreviewImageBase64 string   `json:"preview_image_base64"`
+	PresetID           int64    `json:"preset_id"`
+	Seed               int64    `json:"seed"`
+	DenoisingStrength  *float64 `json:"denoising_strength,omitempty"`
+}
+
+func (a *App) UpscalePreview(params UpscalePreviewParams) (*GenerateImageResult, error) {
+	p, err := a.presets.Get(params.PresetID)
+	if err != nil {
+		return nil, err
+	}
+
+	prompt := p.Prompt
+	negativePrompt := p.NegativePrompt
+
+	if a.isKidsMode() {
+		negativePrompt += ", " + config.KidsModeNegativePrompt
+	}
+
+	if p.ModelName != "" {
+		_ = a.sd.SetModel(p.ModelName)
+	}
+
+	if p.VAE != "" {
+		_ = a.sd.SetVAE(p.VAE)
+	}
+
+	samplerName := p.Sampler
+	if p.ScheduleType != "" {
+		st := strings.ToUpper(p.ScheduleType[:1]) + p.ScheduleType[1:]
+		samplerName = p.Sampler + " " + st
+	}
+
+	batchSize := 1
+	if p.BatchSize != nil {
+		batchSize = *p.BatchSize
+	}
+	batchCount := 1
+	if p.BatchCount != nil {
+		batchCount = *p.BatchCount
+	}
+	clipSkip := 1
+	if p.ClipSkip != nil {
+		clipSkip = *p.ClipSkip
+	}
+
+	denoisingStrength := 0.55
+	if params.DenoisingStrength != nil && *params.DenoisingStrength > 0 {
+		denoisingStrength = *params.DenoisingStrength
+	}
+
+	result, err := a.sd.Img2Img(sd.Img2ImgRequest{
+		InitImages:        []string{params.PreviewImageBase64},
+		Prompt:            prompt,
+		NegativePrompt:    negativePrompt,
+		SamplerName:       samplerName,
+		Scheduler:         p.ScheduleType,
+		Steps:             p.Steps,
+		CfgScale:          p.CfgScale,
+		Width:             p.Width,
+		Height:            p.Height,
+		Seed:              &params.Seed,
+		DenoisingStrength: &denoisingStrength,
+		ClipSkip:          &clipSkip,
+		BatchSize:         &batchSize,
+		BatchCount:        &batchCount,
+		DoNotSaveImages:   true,
+		DoNotSaveGrid:     true,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	if len(result.Images) == 0 {
+		return nil, fmt.Errorf("no image generated during upscale")
+	}
+
+	img := &GenerateImageResult{
+		Image:      result.Images[0],
+		Parameters: result.Parameters,
+		Info:       result.Info,
+		IsPreview:  false,
+	}
+	a.saveLastImage(result.Images[0], result.Info, false)
+	return img, nil
 }
 
 // --- SD Info ---
@@ -358,6 +500,9 @@ func (a *App) GetSettings() (map[string]string, error) {
 		"llm_num_ctx":     "4096",
 		"llm_num_gpu":     "0",
 		"kids_mode":       "false",
+		"preview_mode":    "false",
+		"preview_width":   "512",
+		"preview_height":  "512",
 	}
 	for k, v := range defaults {
 		if _, ok := settings[k]; !ok {
@@ -372,6 +517,8 @@ func (a *App) UpdateSettings(data map[string]string) error {
 		"llm_url": true, "sd_url": true, "llm_model": true, "sd_prompt_model": true,
 		"llm_backend": true, "llm_keep_alive": true, "llm_num_ctx": true, "llm_num_gpu": true,
 		"kids_mode": true, "kids_pin_hash": true,
+		"preview_mode": true, "preview_width": true, "preview_height": true,
+		"gen_preset_id": true, "gen_description": true, "gen_extra_prompt": true, "gen_extra_negative": true,
 	}
 
 	for k, v := range data {
@@ -469,6 +616,65 @@ func (a *App) CreatePrompt(text string) (*preset.SavedPrompt, error) {
 
 func (a *App) DeletePrompt(id int64) error {
 	return a.presets.DeletePrompt(id)
+}
+
+// --- Last Image Persistence ---
+
+type lastImageMeta struct {
+	IsPreview bool            `json:"is_preview"`
+	Info      json.RawMessage `json:"info"`
+}
+
+func (a *App) saveLastImage(imageBase64 string, info json.RawMessage, isPreview bool) {
+	if imageBase64 == "" {
+		return
+	}
+
+	pngData, err := base64.StdEncoding.DecodeString(imageBase64)
+	if err != nil {
+		return
+	}
+
+	if err := os.MkdirAll(a.dataDir, 0o755); err != nil {
+		return
+	}
+
+	pngPath := filepath.Join(a.dataDir, "last_image.png")
+	if err := os.WriteFile(pngPath, pngData, 0o644); err != nil {
+		return
+	}
+
+	meta := lastImageMeta{IsPreview: isPreview, Info: info}
+	metaBytes, err := json.Marshal(meta)
+	if err != nil {
+		return
+	}
+
+	metaPath := filepath.Join(a.dataDir, "last_image.json")
+	_ = os.WriteFile(metaPath, metaBytes, 0o644)
+}
+
+func (a *App) GetLastImage() (*GenerateImageResult, error) {
+	pngPath := filepath.Join(a.dataDir, "last_image.png")
+	pngData, err := os.ReadFile(pngPath)
+	if err != nil {
+		return nil, nil
+	}
+
+	metaPath := filepath.Join(a.dataDir, "last_image.json")
+	metaBytes, err := os.ReadFile(metaPath)
+
+	var meta lastImageMeta
+	if err == nil {
+		_ = json.Unmarshal(metaBytes, &meta)
+	}
+
+	return &GenerateImageResult{
+		Image:     base64.StdEncoding.EncodeToString(pngData),
+		Parameters: nil,
+		Info:      meta.Info,
+		IsPreview: meta.IsPreview,
+	}, nil
 }
 
 // --- Save Image ---

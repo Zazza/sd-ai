@@ -46,6 +46,10 @@ export function GetLLMModels() {
   return window['go']['main']['App']['GetLLMModels']();
 }
 
+export function GetLastImage() {
+  return window['go']['main']['App']['GetLastImage']();
+}
+
 export function GetPreset(arg1) {
   return window['go']['main']['App']['GetPreset'](arg1);
 }
@@ -116,4 +120,8 @@ export function UpdatePreset(arg1) {
 
 export function UpdateSettings(arg1) {
   return window['go']['main']['App']['UpdateSettings'](arg1);
+}
+
+export function UpscalePreview(arg1) {
+  return window['go']['main']['App']['UpscalePreview'](arg1);
 }
