@@ -44,7 +44,14 @@ input, textarea, select {
 /* Layout */
 .app {
   display: flex;
-  min-height: 100vh;
+  flex-direction: column;
+  height: 100vh;
+}
+
+.app-body {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
 }
 
 .sidebar {
@@ -104,6 +111,83 @@ input, textarea, select {
   flex: 1;
   padding: 24px 32px;
   overflow-y: auto;
+}
+
+/* Titlebar */
+.titlebar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 36px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.titlebar-drag {
+  --wails-draggable: drag;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-left: 16px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-dim);
+  height: 100%;
+  flex: 1;
+}
+
+.titlebar-logo {
+  color: var(--accent);
+  font-size: 14px;
+}
+
+.titlebar-controls {
+  display: flex;
+  height: 100%;
+}
+
+.titlebar-btn {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 14px;
+  width: 46px;
+  height: 100%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+}
+
+.titlebar-btn:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.titlebar-btn-close:hover {
+  background: var(--danger);
+  color: white;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-dim);
 }
 
 /* Page header */

@@ -45,6 +45,9 @@ func main() {
 	if v, _ := presets.GetSetting("sd_prompt_model"); v != "" {
 		cfg.SDPromptModel = v
 	}
+	if v, _ := presets.GetSetting("vision_model"); v != "" {
+		cfg.VisionModel = v
+	}
 	if v, _ := presets.GetSetting("llm_backend"); v != "" {
 		cfg.LLMBackend = v
 		llmClient.SetBackend(v)
@@ -69,9 +72,10 @@ func main() {
 	app := NewApp(presets, llmClient, sdClient, cfg)
 
 	if err := wails.Run(&options.App{
-		Title:  "SD Studio",
-		Width:  1280,
-		Height: 800,
+		Title:     "SD Studio",
+		Width:     1280,
+		Height:    800,
+		Frameless: true,
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},

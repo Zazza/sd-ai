@@ -7,6 +7,7 @@ import {
   ListPrompts, CreatePrompt, DeletePrompt,
   SetKidsMode, IsKidsModeActive,
   ExportPresets, OpenImportFile, ImportPresets,
+  AnalyzeImage, ReadImageFile,
 } from './wailsjs/go/main/App.js'
 
 export const api = {
@@ -44,4 +45,6 @@ export const api = {
   exportPresets: (ids) => ExportPresets(ids),
   openImportFile: () => OpenImportFile(),
   importPresets: (items) => ImportPresets(items),
+  analyzeImage: (imageBase64) => AnalyzeImage(imageBase64),
+  readImageFile: () => ReadImageFile(),
 }

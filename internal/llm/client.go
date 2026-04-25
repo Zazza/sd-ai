@@ -34,7 +34,17 @@ func New(baseURL, backend string) *Client {
 
 type Message struct {
 	Role    string `json:"role"`
-	Content string `json:"content"`
+	Content any    `json:"content"`
+}
+
+type ContentPart struct {
+	Type     string       `json:"type"`
+	Text     string       `json:"text,omitempty"`
+	ImageURL *ImageURLPart `json:"image_url,omitempty"`
+}
+
+type ImageURLPart struct {
+	URL string `json:"url"`
 }
 
 type ChatOptions struct {
@@ -69,6 +79,7 @@ func (c *Client) Chat(model, systemPrompt, userMessage string, temperature float
 		},
 		Temperature: temperature,
 		MaxTokens:   maxTokens,
+		Stream:      false,
 	}
 
 	if c.backend == BackendOllama {
@@ -120,6 +131,76 @@ func (c *Client) Chat(model, systemPrompt, userMessage string, temperature float
 	content := chatResp.Choices[0].Message.Content
 	content = strings.TrimSpace(stripThinkTags(content))
 	return content, nil
+}
+
+func (c *Client) ChatVision(model, systemPrompt, userText, imageBase64 string, temperature float64, maxTokens int) (string, error) {
+	reqBody := ChatRequest{
+		Model: model,
+		Messages: []Message{
+			{Role: "system", Content: systemPrompt},
+			{Role: "user", Content: []ContentPart{
+				{Type: "text", Text: userText},
+				{Type: "image_url", ImageURL: &ImageURLPart{URL: "data:image/png;base64," + imageBase64}},
+			}},
+		},
+		Temperature: temperature,
+		MaxTokens:   maxTokens,
+		Stream:      false,
+	}
+
+	if c.backend == BackendOllama {
+		reqBody.KeepAlive = c.backendCfg.KeepAlive
+		opts := ChatOptions{
+			NumCtx: c.backendCfg.NumCtx,
+			NumGPU: c.backendCfg.NumGPU,
+		}
+		reqBody.Options = &opts
+	}
+
+	body, err := json.Marshal(reqBody)
+	if err != nil {
+		return "", fmt.Errorf("marshal request: %w", err)
+	}
+
+	url := c.baseURL + "/v1/chat/completions"
+	log.Printf("[LLM Vision] POST %s model=%s", url, model)
+
+	resp, err := c.httpClient.Post(url, "application/json", bytes.NewReader(body))
+	if err != nil {
+		return "", fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("read response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("API error %d: %s", resp.StatusCode, string(respBody))
+	}
+
+	var chatResp ChatResponse
+	if err := json.Unmarshal(respBody, &chatResp); err != nil {
+		return "", fmt.Errorf("decode response: %w", err)
+	}
+
+	if len(chatResp.Choices) == 0 {
+		return "", fmt.Errorf("empty response from vision model")
+	}
+
+	return strings.TrimSpace(stripThinkTags(chatResp.Choices[0].Message.Content)), nil
+}
+
+func (c *Client) AnalyzeImage(model, systemPrompt, imageBase64 string, maxTokens int) (string, error) {
+	userText := "Describe this image as comma-separated SD tags. Output ONLY tags, nothing else."
+	result, err := c.ChatVision(model, systemPrompt, userText, imageBase64, 0.4, maxTokens)
+	if err != nil {
+		return "", err
+	}
+	result = strings.TrimSpace(extractTags(result))
+	result = truncateRepetitive(result, 1000)
+	return result, nil
 }
 
 var thinkRe = regexp.MustCompile(`(?s)<think\s*>.*?</think\s*>`)

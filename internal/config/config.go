@@ -10,6 +10,7 @@ type Config struct {
 	SDUrl              string
 	LLMModel           string
 	SDPromptModel      string
+	VisionModel        string
 	LLMBackend         string
 	Port               string
 	DBPath             string
@@ -53,6 +54,7 @@ func Load() *Config {
 		SystemPrompt: `You are an SD prompt generator. Output ONLY comma-separated tags. Nothing else.
 
 MANDATORY:
+- If the input is NOT in English — translate it to English first, then generate tags
 - Start with: masterpiece, best quality, highly detailed
 - Then add subject, pose, clothing, expression, lighting, background tags
 - Use (keyword:1.2) for emphasis

@@ -22,6 +22,7 @@ const connectionForm = reactive({
   llm_url: '',
   sd_url: '',
   sd_prompt_model: '',
+  vision_model: '',
   llm_backend: 'lmstudio',
   llm_keep_alive: '5m',
   llm_num_ctx: '4096',
@@ -69,6 +70,7 @@ async function loadSettings() {
     connectionForm.llm_url = settings.llm_url || ''
     connectionForm.sd_url = settings.sd_url || ''
     connectionForm.sd_prompt_model = settings.sd_prompt_model || ''
+    connectionForm.vision_model = settings.vision_model || ''
     connectionForm.llm_backend = settings.llm_backend || 'lmstudio'
     connectionForm.llm_keep_alive = settings.llm_keep_alive || '5m'
     connectionForm.llm_num_ctx = settings.llm_num_ctx || '4096'
@@ -102,6 +104,7 @@ async function saveConnection() {
       llm_url: connectionForm.llm_url,
       sd_url: connectionForm.sd_url,
       sd_prompt_model: connectionForm.sd_prompt_model,
+      vision_model: connectionForm.vision_model,
       llm_backend: connectionForm.llm_backend,
       llm_keep_alive: String(connectionForm.llm_keep_alive),
       llm_num_ctx: String(connectionForm.llm_num_ctx),
@@ -229,6 +232,14 @@ onMounted(loadSettings)
         <label class="form-label">SD Prompt Model (model for prompt generation)</label>
         <select class="form-input" v-model="connectionForm.sd_prompt_model">
           <option value="default">default</option>
+          <option v-for="m in connectionLLMModels" :key="m.id" :value="m.id">{{ m.id }}</option>
+        </select>
+      </div>
+
+      <div class="form-group" v-if="connectionForm.llm_backend !== 'llamacpp'">
+        <label class="form-label">Vision Model (model for image analysis)</label>
+        <select class="form-input" v-model="connectionForm.vision_model">
+          <option value="">Same as SD Prompt Model</option>
           <option v-for="m in connectionLLMModels" :key="m.id" :value="m.id">{{ m.id }}</option>
         </select>
       </div>

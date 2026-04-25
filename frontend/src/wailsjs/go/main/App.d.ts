@@ -5,6 +5,8 @@ import {preset} from '../models';
 import {llm} from '../models';
 import {sd} from '../models';
 
+export function AnalyzeImage(arg1:string):Promise<string>;
+
 export function CheckServices():Promise<main.ServiceStatus>;
 
 export function CreateDescription(arg1:string):Promise<preset.SavedDescription>;
@@ -56,6 +58,8 @@ export function ListPresetsByType(arg1:string):Promise<Array<preset.Preset>>;
 export function ListPrompts():Promise<Array<preset.SavedPrompt>>;
 
 export function OpenImportFile():Promise<main.ImportPreview>;
+
+export function ReadImageFile():Promise<string>;
 
 export function SaveImage(arg1:string,arg2:string):Promise<string>;
 

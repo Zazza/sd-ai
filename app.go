@@ -1,12 +1,19 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"image"
+	"image/color"
+	"image/draw"
+	_ "image/jpeg"
+	"image/png"
+	"math"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -216,6 +223,58 @@ If space is tight, drop weak tags rather than cutting important details short.`,
 	}
 
 	return result, nil
+}
+
+func (a *App) AnalyzeImage(imageBase64 string) (string, error) {
+	if imageBase64 == "" {
+		return "", fmt.Errorf("image is required")
+	}
+
+	model := a.config.VisionModel
+	if model == "" {
+		model = a.config.SDPromptModel
+	}
+
+	systemPrompt := `You are an SD tag extractor. Describe the given image as comma-separated Stable Diffusion tags.
+Output ONLY tags, nothing else. Start with quality tags (masterpiece, best quality, highly detailed).
+Then describe: subject, pose, clothing, expression, lighting, background, style, camera angle.
+Use (keyword:1.2) for emphasis on important elements.`
+
+	maxTokens := 256
+	if v, err := a.presets.GetSetting("llm_max_tokens"); err == nil && v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			maxTokens = n
+		}
+	}
+
+	result, err := a.llm.AnalyzeImage(model, systemPrompt, imageBase64, maxTokens)
+	if err != nil {
+		return "", err
+	}
+
+	return result, nil
+}
+
+func (a *App) ReadImageFile() (string, error) {
+	path, err := runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{
+		Filters: []runtime.FileFilter{
+			{DisplayName: "Images", Pattern: "*.png;*.jpg;*.jpeg;*.webp"},
+		},
+	})
+	if err != nil || path == "" {
+		return "", err
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", fmt.Errorf("failed to read file: %w", err)
+	}
+
+	if len(data) > 16*1024*1024 {
+		return "", fmt.Errorf("image too large (max 16 MB)")
+	}
+
+	return base64.StdEncoding.EncodeToString(data), nil
 }
 
 type GenerateImageParams struct {
@@ -526,6 +585,53 @@ func (a *App) UpscaleImage(params UpscaleImageParams) (*GenerateImageResult, err
 
 func intPtr(v int) *int { return &v }
 
+func padToAspectRatio(imageBase64 string, targetW, targetH int) (string, error) {
+	imgData, err := base64.StdEncoding.DecodeString(imageBase64)
+	if err != nil {
+		return "", fmt.Errorf("decode base64: %w", err)
+	}
+
+	img, _, err := image.Decode(bytes.NewReader(imgData))
+	if err != nil {
+		return "", fmt.Errorf("decode image: %w", err)
+	}
+
+	imgW := img.Bounds().Dx()
+	imgH := img.Bounds().Dy()
+
+	targetRatio := float64(targetW) / float64(targetH)
+	imgRatio := float64(imgW) / float64(imgH)
+
+	if math.Abs(targetRatio-imgRatio) < 0.01 {
+		return imageBase64, nil
+	}
+
+	var padW, padH int
+	if imgRatio > targetRatio {
+		padW = imgW
+		padH = int(float64(imgW) / targetRatio)
+	} else {
+		padH = imgH
+		padW = int(float64(imgH) * targetRatio)
+	}
+	padW = (padW / 8) * 8
+	padH = (padH / 8) * 8
+
+	canvas := image.NewRGBA(image.Rect(0, 0, padW, padH))
+	draw.Draw(canvas, canvas.Bounds(), &image.Uniform{color.Black}, image.Point{}, draw.Src)
+
+	offsetX := (padW - imgW) / 2
+	offsetY := (padH - imgH) / 2
+	draw.Draw(canvas, image.Rect(offsetX, offsetY, offsetX+imgW, offsetY+imgH), img, image.Point{}, draw.Over)
+
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, canvas); err != nil {
+		return "", fmt.Errorf("encode image: %w", err)
+	}
+
+	return base64.StdEncoding.EncodeToString(buf.Bytes()), nil
+}
+
 type UpscalePreviewParams struct {
 	PreviewImageBase64 string   `json:"preview_image_base64"`
 	PresetID           int64    `json:"preset_id"`
@@ -578,8 +684,14 @@ func (a *App) UpscalePreview(params UpscalePreviewParams) (*GenerateImageResult,
 		denoisingStrength = *params.DenoisingStrength
 	}
 
+	initImage := params.PreviewImageBase64
+	padded, err := padToAspectRatio(initImage, p.Width, p.Height)
+	if err == nil {
+		initImage = padded
+	}
+
 	result, err := a.sd.Img2Img(sd.Img2ImgRequest{
-		InitImages:        []string{params.PreviewImageBase64},
+		InitImages:        []string{initImage},
 		Prompt:            prompt,
 		NegativePrompt:    negativePrompt,
 		SamplerName:       samplerName,
@@ -655,6 +767,7 @@ func (a *App) GetSettings() (map[string]string, error) {
 		"sd_url":          a.config.SDUrl,
 		"llm_model":       a.config.LLMModel,
 		"sd_prompt_model": a.config.SDPromptModel,
+		"vision_model":    a.config.VisionModel,
 		"llm_backend":     a.config.LLMBackend,
 		"llm_keep_alive":  "5m",
 		"llm_num_ctx":     "4096",
@@ -676,6 +789,7 @@ func (a *App) GetSettings() (map[string]string, error) {
 func (a *App) UpdateSettings(data map[string]string) error {
 	allowed := map[string]bool{
 		"llm_url": true, "sd_url": true, "llm_model": true, "sd_prompt_model": true,
+		"vision_model": true,
 		"llm_backend": true, "llm_keep_alive": true, "llm_num_ctx": true, "llm_num_gpu": true, "llm_max_tokens": true,
 		"kids_mode": true, "kids_pin_hash": true,
 		"preview_mode": true, "preview_width": true, "preview_height": true,
@@ -704,6 +818,9 @@ func (a *App) UpdateSettings(data map[string]string) error {
 	}
 	if v, ok := data["sd_prompt_model"]; ok {
 		a.config.SDPromptModel = v
+	}
+	if v, ok := data["vision_model"]; ok {
+		a.config.VisionModel = v
 	}
 	if v, ok := data["llm_backend"]; ok {
 		a.llm.SetBackend(v)
