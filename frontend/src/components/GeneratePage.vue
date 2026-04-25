@@ -14,6 +14,7 @@ const sourceImage = ref('')
 const sourceGenInfo = ref(null)
 const isPreview = ref(false)
 const upscaling = ref(false)
+const upscalingX2 = ref(false)
 const previewMode = ref(false)
 
 const generatingPrompt = ref(false)
@@ -276,6 +277,29 @@ async function upscalePreview() {
 }
 
 
+async function upscaleImageX2() {
+  if (!generatedImage.value) return
+  upscalingX2.value = true
+  error.value = ''
+  try {
+    const result = await api.upscaleImage(generatedImage.value, genInfo.value, selectedPresetId.value)
+    if (!result || !result.image) {
+      error.value = 'Upscale x2 failed: no image returned'
+    } else {
+      generatedImage.value = result.image
+      genInfo.value = result.info
+      sourceImage.value = result.image
+      sourceGenInfo.value = result.info
+      isPreview.value = false
+    }
+  } catch (e) {
+    error.value = String(e)
+  } finally {
+    upscalingX2.value = false
+  }
+}
+
+
 async function downloadImage() {
   if (!generatedImage.value) return
   try {
@@ -411,9 +435,9 @@ onUnmounted(() => {
 
       <div class="generate-section">
         <div class="generate-image-area">
-          <div v-if="generatingImage || upscaling || refining" style="text-align: center;">
+          <div v-if="generatingImage || upscaling || upscalingX2" style="text-align: center;">
             <span class="spinner" style="width: 32px; height: 32px; border-width: 3px;"></span>
-            <p style="margin-top: 12px; color: var(--text-dim);">{{ upscaling ? 'Upscaling to full resolution...' : refining ? 'Refining image...' : 'Generating image...' }}</p>
+            <p style="margin-top: 12px; color: var(--text-dim);">{{ upscalingX2 ? 'Upscaling x2...' : upscaling ? 'Upscaling to full resolution...' : 'Generating image...' }}</p>
           </div>
           <div v-else-if="generatedImage" style="width: 100%; padding: 12px;">
             <div v-if="isPreview && previewMode" class="status status-info" style="margin-bottom: 8px; text-align: center;">
@@ -422,6 +446,7 @@ onUnmounted(() => {
             <img :src="'data:image/png;base64,' + generatedImage" alt="Generated" style="border-radius: var(--radius-sm);" />
             <div style="display: flex; gap: 8px; margin-top: 12px; justify-content: center;">
               <button v-if="isPreview && previewMode" class="btn btn-primary btn-sm" @click="upscalePreview">Upscale to Full Size</button>
+              <button v-if="generatedImage && !isPreview" class="btn btn-secondary btn-sm" @click="upscaleImageX2" :disabled="upscalingX2">Upscale x2</button>
               <button class="btn btn-secondary btn-sm" @click="downloadImage">Download</button>
               <button class="btn btn-secondary btn-sm" @click="generateImage">Regenerate</button>
             </div>

@@ -184,6 +184,22 @@ export namespace main {
 		    return a;
 		}
 	}
+	export class UpscaleImageParams {
+	    image_base64: string;
+	    gen_info: number[];
+	    preset_id: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new UpscaleImageParams(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.image_base64 = source["image_base64"];
+	        this.gen_info = source["gen_info"];
+	        this.preset_id = source["preset_id"];
+	    }
+	}
 	export class UpscalePreviewParams {
 	    preview_image_base64: string;
 	    preset_id: number;

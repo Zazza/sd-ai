@@ -196,7 +196,51 @@ func (c *Client) GenerateSDPrompt(systemPrompt, description, presetType, model s
 	if err != nil {
 		return "", err
 	}
-	return strings.TrimSpace(extractTags(result)), nil
+	result = strings.TrimSpace(extractTags(result))
+	result = truncateRepetitive(result, 1000)
+	return result, nil
+}
+
+func truncateRepetitive(s string, maxLen int) string {
+	if s == "" {
+		return s
+	}
+
+	parts := strings.Split(s, ", ")
+	result := make([]string, 0, len(parts))
+	prevPrefix := ""
+	repeatCount := 0
+
+	for _, part := range parts {
+		prefix := part
+		if idx := strings.Index(part, ":"); idx > 0 {
+			prefix = part[:idx]
+		}
+		prefix = strings.ToLower(strings.TrimSpace(prefix))
+
+		if prefix == prevPrefix && prefix != "" {
+			repeatCount++
+			if repeatCount >= 3 {
+				break
+			}
+		} else {
+			prevPrefix = prefix
+			repeatCount = 0
+		}
+		result = append(result, part)
+	}
+
+	s = strings.Join(result, ", ")
+
+	if len(s) > maxLen {
+		if idx := strings.LastIndex(s[:maxLen], ","); idx > 0 {
+			s = s[:idx]
+		} else {
+			s = s[:maxLen]
+		}
+	}
+
+	return strings.TrimSpace(s)
 }
 
 func (c *Client) HealthCheck() error {

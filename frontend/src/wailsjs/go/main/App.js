@@ -122,6 +122,10 @@ export function UpdateSettings(arg1) {
   return window['go']['main']['App']['UpdateSettings'](arg1);
 }
 
+export function UpscaleImage(arg1) {
+  return window['go']['main']['App']['UpscaleImage'](arg1);
+}
+
 export function UpscalePreview(arg1) {
   return window['go']['main']['App']['UpscalePreview'](arg1);
 }

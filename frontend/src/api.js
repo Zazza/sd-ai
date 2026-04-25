@@ -1,6 +1,6 @@
 import {
   ListPresets, ListPresetsByType, CreatePreset, UpdatePreset, DeletePreset,
-  GenerateSDPrompt, GenerateImage, UpscalePreview, SaveImage, GetLastImage,
+  GenerateSDPrompt, GenerateImage, UpscaleImage, UpscalePreview, SaveImage, GetLastImage,
   GetSDModels, GetSDSamplers, GetSDSchedulers, GetSDUpscalers, GetSDVAEs, GetLLMModels,
   GetSettings, UpdateSettings, CheckServices,
   ListDescriptions, CreateDescription, DeleteDescription,
@@ -20,6 +20,8 @@ export const api = {
     GenerateImage({ preset_id: presetId, extra_prompt: extraPrompt, extra_negative_prompt: extraNegativePrompt }),
   upscalePreview: (previewImageBase64, presetId, seed) =>
     UpscalePreview({ preview_image_base64: previewImageBase64, preset_id: presetId, seed }),
+  upscaleImage: (imageBase64, genInfo, presetId) =>
+    UpscaleImage({ image_base64: imageBase64, gen_info: genInfo, preset_id: presetId || 0 }),
   saveImage: (base64Data, defaultName) => SaveImage(base64Data, defaultName),
   getLastImage: () => GetLastImage(),
   getModels: () => GetSDModels(),

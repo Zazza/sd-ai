@@ -26,7 +26,7 @@ const connectionForm = reactive({
   llm_keep_alive: '5m',
   llm_num_ctx: '4096',
   llm_num_gpu: '0',
-  llm_max_tokens: '1024',
+  llm_max_tokens: '256',
 })
 const connectionSaved = ref(false)
 const connectionError = ref('')
@@ -73,7 +73,7 @@ async function loadSettings() {
     connectionForm.llm_keep_alive = settings.llm_keep_alive || '5m'
     connectionForm.llm_num_ctx = settings.llm_num_ctx || '4096'
     connectionForm.llm_num_gpu = settings.llm_num_gpu || '0'
-    connectionForm.llm_max_tokens = settings.llm_max_tokens || '1024'
+    connectionForm.llm_max_tokens = settings.llm_max_tokens || '256'
     loadConnectionLLMModels()
     kidsMode.value = await api.isKidsModeActive()
     generationForm.preview_mode = settings.preview_mode === 'true'
@@ -235,7 +235,7 @@ onMounted(loadSettings)
 
       <div class="form-group">
         <label class="form-label">Max Tokens (prompt generation)</label>
-        <input class="form-input" type="number" v-model="connectionForm.llm_max_tokens" placeholder="1024" min="64" max="8192" />
+        <input class="form-input" type="number" v-model="connectionForm.llm_max_tokens" placeholder="256" min="64" max="8192" />
       </div>
 
       <div class="form-group">

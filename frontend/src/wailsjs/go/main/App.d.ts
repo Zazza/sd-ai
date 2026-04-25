@@ -65,4 +65,6 @@ export function UpdatePreset(arg1:preset.Preset):Promise<preset.Preset>;
 
 export function UpdateSettings(arg1:Record<string, string>):Promise<void>;
 
+export function UpscaleImage(arg1:main.UpscaleImageParams):Promise<main.GenerateImageResult>;
+
 export function UpscalePreview(arg1:main.UpscalePreviewParams):Promise<main.GenerateImageResult>;

@@ -193,7 +193,7 @@ func (a *App) GenerateSDPrompt(description, presetType string) (string, error) {
 		systemPrompt += config.KidsModePrompt
 	}
 
-	maxTokens := 1024
+	maxTokens := 256
 	if v, err := a.presets.GetSetting("llm_max_tokens"); err == nil && v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
 			maxTokens = n
@@ -373,6 +373,153 @@ func (a *App) GenerateImage(params GenerateImageParams) (*GenerateImageResult, e
 	return img, nil
 }
 
+type UpscaleImageParams struct {
+	ImageBase64 string          `json:"image_base64"`
+	GenInfo     json.RawMessage `json:"gen_info"`
+	PresetID    int64           `json:"preset_id"`
+}
+
+func (a *App) UpscaleImage(params UpscaleImageParams) (*GenerateImageResult, error) {
+	if params.ImageBase64 == "" {
+		return nil, fmt.Errorf("image is required")
+	}
+	if len(params.ImageBase64) > 67*1024*1024 {
+		return nil, fmt.Errorf("image too large (max 50 MB)")
+	}
+
+	var info struct {
+		Prompt         string  `json:"prompt"`
+		NegativePrompt string  `json:"negative_prompt"`
+		SamplerName    string  `json:"sampler_name"`
+		Scheduler      string  `json:"scheduler"`
+		Seed           int64   `json:"seed"`
+		Width          int     `json:"width"`
+		Height         int     `json:"height"`
+		Steps          int     `json:"steps"`
+		CfgScale       float64 `json:"cfg_scale"`
+		ClipSkip       int     `json:"clip_skip"`
+	}
+	if err := json.Unmarshal(params.GenInfo, &info); err != nil {
+		return nil, fmt.Errorf("parse gen_info: %w", err)
+	}
+
+	if info.Width <= 0 || info.Height <= 0 {
+		return nil, fmt.Errorf("invalid dimensions in gen_info: %dx%d", info.Width, info.Height)
+	}
+
+	const maxDim = 2048
+	if info.Width > maxDim || info.Height > maxDim {
+		return nil, fmt.Errorf("image is already %dx%d (max %d for upscale)", info.Width, info.Height, maxDim)
+	}
+
+	prompt := info.Prompt
+	negativePrompt := info.NegativePrompt
+
+	if a.isKidsMode() {
+		negativePrompt += ", " + config.KidsModeNegativePrompt
+	}
+
+	samplerName, scheduler := splitCompositeSampler(info.SamplerName, info.Scheduler)
+	steps := 30
+	if info.Steps > 0 {
+		steps = info.Steps
+	}
+	cfgScale := 7.0
+	if info.CfgScale > 0 {
+		cfgScale = info.CfgScale
+	}
+	clipSkip := 1
+	if info.ClipSkip > 0 {
+		clipSkip = info.ClipSkip
+	}
+
+	if params.PresetID > 0 {
+		p, err := a.presets.Get(params.PresetID)
+		if err != nil {
+			return nil, err
+		}
+		if p.Prompt != "" {
+			prompt = p.Prompt
+		}
+		if p.NegativePrompt != "" {
+			negativePrompt = p.NegativePrompt
+		}
+		if p.Sampler != "" {
+			samplerName = p.Sampler
+			if p.ScheduleType != "" {
+				st := strings.ToUpper(p.ScheduleType[:1]) + p.ScheduleType[1:]
+				samplerName = p.Sampler + " " + st
+			}
+		}
+		if p.ScheduleType != "" {
+			scheduler = p.ScheduleType
+		}
+		if p.Steps > 0 {
+			steps = p.Steps
+		}
+		if p.CfgScale > 0 {
+			cfgScale = p.CfgScale
+		}
+		if p.ClipSkip != nil {
+			clipSkip = *p.ClipSkip
+		}
+		if p.ModelName != "" {
+			_ = a.sd.SetModel(p.ModelName)
+		}
+		if p.VAE != "" {
+			_ = a.sd.SetVAE(p.VAE)
+		}
+	}
+
+	denoisingStrength := 0.4
+	newWidth := info.Width * 2
+	newHeight := info.Height * 2
+	if newWidth > maxDim*2 {
+		newWidth = maxDim * 2
+	}
+	if newHeight > maxDim*2 {
+		newHeight = maxDim * 2
+	}
+	seed := info.Seed
+
+	result, err := a.sd.Img2Img(sd.Img2ImgRequest{
+		InitImages:        []string{params.ImageBase64},
+		Prompt:            prompt,
+		NegativePrompt:    negativePrompt,
+		SamplerName:       samplerName,
+		Scheduler:         scheduler,
+		Steps:             steps,
+		CfgScale:          cfgScale,
+		Width:             newWidth,
+		Height:            newHeight,
+		Seed:              &seed,
+		DenoisingStrength: &denoisingStrength,
+		ClipSkip:          &clipSkip,
+		BatchSize:         intPtr(1),
+		BatchCount:        intPtr(1),
+		DoNotSaveImages:   true,
+		DoNotSaveGrid:     true,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	if len(result.Images) == 0 {
+		return nil, fmt.Errorf("no image generated during upscale")
+	}
+
+	img := &GenerateImageResult{
+		Image:      result.Images[0],
+		Parameters: result.Parameters,
+		Info:       result.Info,
+		IsPreview:  false,
+	}
+	a.saveLastImage(result.Images[0], result.Info, false)
+	return img, nil
+}
+
+func intPtr(v int) *int { return &v }
+
 type UpscalePreviewParams struct {
 	PreviewImageBase64 string   `json:"preview_image_base64"`
 	PresetID           int64    `json:"preset_id"`
@@ -506,7 +653,7 @@ func (a *App) GetSettings() (map[string]string, error) {
 		"llm_keep_alive":  "5m",
 		"llm_num_ctx":     "4096",
 		"llm_num_gpu":     "0",
-		"llm_max_tokens":  "1024",
+		"llm_max_tokens":  "256",
 		"kids_mode":       "false",
 		"preview_mode":    "false",
 		"preview_width":   "512",
