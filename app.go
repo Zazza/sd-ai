@@ -200,6 +200,12 @@ func (a *App) GenerateSDPrompt(description, presetType string) (string, error) {
 		}
 	}
 
+	systemPrompt += fmt.Sprintf(`
+
+RESPONSE LENGTH: your response is limited to ~%d tokens. You MUST fit within this limit.
+Prioritize: quality tags > subject details > composition > atmosphere > secondary details.
+If space is tight, drop weak tags rather than cutting important details short.`, maxTokens)
+
 	result, err := a.llm.GenerateSDPrompt(systemPrompt, description, presetType, a.config.SDPromptModel, maxTokens)
 	if err != nil {
 		return "", err
