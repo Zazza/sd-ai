@@ -13,6 +13,7 @@ const genInfo = ref(null)
 const sourceImage = ref('')
 const sourceGenInfo = ref(null)
 const isPreview = ref(false)
+const savedPreview = ref(null)
 const upscaling = ref(false)
 const upscalingX2 = ref(false)
 const previewMode = ref(false)
@@ -227,6 +228,7 @@ async function generateImage() {
   generatedImage.value = ''
   genInfo.value = null
   isPreview.value = false
+  savedPreview.value = null
   try {
     const result = await api.generateImage(selectedPresetId.value, extraPrompt.value, extraNegativePrompt.value)
     if (!result || !result.image) {
@@ -247,6 +249,12 @@ async function generateImage() {
 
 async function upscalePreview() {
   if (!generatedImage.value || !selectedPresetId.value || !genInfo.value) return
+  savedPreview.value = {
+    image: generatedImage.value,
+    info: genInfo.value,
+    sourceImage: sourceImage.value,
+    sourceGenInfo: sourceGenInfo.value,
+  }
   upscaling.value = true
   error.value = ''
   try {
@@ -274,6 +282,15 @@ async function upscalePreview() {
   } finally {
     upscaling.value = false
   }
+}
+
+function backToPreview() {
+  if (!savedPreview.value) return
+  generatedImage.value = savedPreview.value.image
+  genInfo.value = savedPreview.value.info
+  sourceImage.value = savedPreview.value.sourceImage
+  sourceGenInfo.value = savedPreview.value.sourceGenInfo
+  isPreview.value = true
 }
 
 
@@ -446,6 +463,7 @@ onUnmounted(() => {
             <img :src="'data:image/png;base64,' + generatedImage" alt="Generated" style="border-radius: var(--radius-sm);" />
             <div style="display: flex; gap: 8px; margin-top: 12px; justify-content: center;">
               <button v-if="isPreview && previewMode" class="btn btn-primary btn-sm" @click="upscalePreview">Upscale to Full Size</button>
+              <button v-if="!isPreview && savedPreview" class="btn btn-secondary btn-sm" @click="backToPreview">&larr; Back to Preview</button>
               <button v-if="generatedImage && !isPreview" class="btn btn-secondary btn-sm" @click="upscaleImageX2" :disabled="upscalingX2">Upscale x2</button>
               <button class="btn btn-secondary btn-sm" @click="downloadImage">Download</button>
               <button class="btn btn-secondary btn-sm" @click="generateImage">Regenerate</button>
