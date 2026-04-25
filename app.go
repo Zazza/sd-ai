@@ -193,7 +193,14 @@ func (a *App) GenerateSDPrompt(description, presetType string) (string, error) {
 		systemPrompt += config.KidsModePrompt
 	}
 
-	result, err := a.llm.GenerateSDPrompt(systemPrompt, description, presetType, a.config.SDPromptModel)
+	maxTokens := 1024
+	if v, err := a.presets.GetSetting("llm_max_tokens"); err == nil && v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			maxTokens = n
+		}
+	}
+
+	result, err := a.llm.GenerateSDPrompt(systemPrompt, description, presetType, a.config.SDPromptModel, maxTokens)
 	if err != nil {
 		return "", err
 	}
@@ -499,6 +506,7 @@ func (a *App) GetSettings() (map[string]string, error) {
 		"llm_keep_alive":  "5m",
 		"llm_num_ctx":     "4096",
 		"llm_num_gpu":     "0",
+		"llm_max_tokens":  "1024",
 		"kids_mode":       "false",
 		"preview_mode":    "false",
 		"preview_width":   "512",
@@ -515,7 +523,7 @@ func (a *App) GetSettings() (map[string]string, error) {
 func (a *App) UpdateSettings(data map[string]string) error {
 	allowed := map[string]bool{
 		"llm_url": true, "sd_url": true, "llm_model": true, "sd_prompt_model": true,
-		"llm_backend": true, "llm_keep_alive": true, "llm_num_ctx": true, "llm_num_gpu": true,
+		"llm_backend": true, "llm_keep_alive": true, "llm_num_ctx": true, "llm_num_gpu": true, "llm_max_tokens": true,
 		"kids_mode": true, "kids_pin_hash": true,
 		"preview_mode": true, "preview_width": true, "preview_height": true,
 		"gen_preset_id": true, "gen_description": true, "gen_extra_prompt": true, "gen_extra_negative": true,

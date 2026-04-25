@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { api } from '../api.js'
 
 const presets = ref([])
@@ -8,6 +8,7 @@ const description = ref('')
 const extraPrompt = ref('')
 const extraNegativePrompt = ref('')
 const generatedImage = ref('')
+const extraPromptEl = ref(null)
 const genInfo = ref(null)
 const sourceImage = ref('')
 const sourceGenInfo = ref(null)
@@ -59,6 +60,15 @@ const sdAvailable = ref(false)
 const sdModel = ref('')
 const kidsModeActive = ref(false)
 let statusInterval = null
+
+function autoResize() {
+  const el = extraPromptEl.value
+  if (!el) return
+  el.style.height = 'auto'
+  el.style.height = el.scrollHeight + 'px'
+}
+
+watch(extraPrompt, () => nextTick(autoResize))
 
 async function checkServices() {
   try {
@@ -385,7 +395,7 @@ onUnmounted(() => {
               </div>
             </div>
 
-            <textarea class="form-textarea" v-model="extraPrompt" rows="2" placeholder="Additional tags..." style="margin-top: 8px;" :disabled="generatingPrompt"></textarea>
+            <textarea ref="extraPromptEl" class="form-textarea" v-model="extraPrompt" rows="2" placeholder="Additional tags..." style="margin-top: 8px; resize: none; overflow: hidden;" :disabled="generatingPrompt" @input="autoResize"></textarea>
           </div>
 
           <div class="form-group">

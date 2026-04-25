@@ -144,7 +144,16 @@ func (h *Handler) generateSDPrompt(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	prompt, err := h.llm.GenerateSDPrompt(h.config.SystemPrompt, req.Description, req.PresetType, h.config.SDPromptModel)
+	maxTokens := 1024
+	if h.presets != nil {
+		if v, err := h.presets.GetSetting("llm_max_tokens"); err == nil && v != "" {
+			if n, err := strconv.Atoi(v); err == nil && n > 0 {
+				maxTokens = n
+			}
+		}
+	}
+
+	prompt, err := h.llm.GenerateSDPrompt(h.config.SystemPrompt, req.Description, req.PresetType, h.config.SDPromptModel, maxTokens)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "LLM error: "+err.Error())
 		return

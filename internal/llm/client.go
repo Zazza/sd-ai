@@ -186,13 +186,13 @@ func cleanResponse(s string) string {
 	return s
 }
 
-func (c *Client) GenerateSDPrompt(systemPrompt, description, presetType, model string) (string, error) {
+func (c *Client) GenerateSDPrompt(systemPrompt, description, presetType, model string, maxTokens int) (string, error) {
 	userMessage := description
 	if presetType != "" {
 		userMessage = fmt.Sprintf("[Type: %s] %s", presetType, description)
 	}
 
-	result, err := c.Chat(model, systemPrompt, userMessage, 0.4, 500)
+	result, err := c.Chat(model, systemPrompt, userMessage, 0.4, maxTokens)
 	if err != nil {
 		return "", err
 	}

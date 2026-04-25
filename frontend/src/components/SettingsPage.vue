@@ -26,6 +26,7 @@ const connectionForm = reactive({
   llm_keep_alive: '5m',
   llm_num_ctx: '4096',
   llm_num_gpu: '0',
+  llm_max_tokens: '1024',
 })
 const connectionSaved = ref(false)
 const connectionError = ref('')
@@ -72,6 +73,7 @@ async function loadSettings() {
     connectionForm.llm_keep_alive = settings.llm_keep_alive || '5m'
     connectionForm.llm_num_ctx = settings.llm_num_ctx || '4096'
     connectionForm.llm_num_gpu = settings.llm_num_gpu || '0'
+    connectionForm.llm_max_tokens = settings.llm_max_tokens || '1024'
     loadConnectionLLMModels()
     kidsMode.value = await api.isKidsModeActive()
     generationForm.preview_mode = settings.preview_mode === 'true'
@@ -104,6 +106,7 @@ async function saveConnection() {
       llm_keep_alive: String(connectionForm.llm_keep_alive),
       llm_num_ctx: String(connectionForm.llm_num_ctx),
       llm_num_gpu: String(connectionForm.llm_num_gpu),
+      llm_max_tokens: String(connectionForm.llm_max_tokens),
     })
     connectionSaved.value = true
   } catch (e) {
@@ -228,6 +231,11 @@ onMounted(loadSettings)
           <option value="default">default</option>
           <option v-for="m in connectionLLMModels" :key="m.id" :value="m.id">{{ m.id }}</option>
         </select>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Max Tokens (prompt generation)</label>
+        <input class="form-input" type="number" v-model="connectionForm.llm_max_tokens" placeholder="1024" min="64" max="8192" />
       </div>
 
       <div class="form-group">
