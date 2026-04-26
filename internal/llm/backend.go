@@ -7,9 +7,12 @@ const (
 )
 
 type BackendConfig struct {
-	KeepAlive string
-	NumCtx    int
-	NumGPU    int
+	KeepAlive  string
+	NumCtx     int
+	NumGPU     int
+	NumPredict int
+	NumThread  int
+	TopP       float64
 }
 
 func DefaultURL(backend string) string {

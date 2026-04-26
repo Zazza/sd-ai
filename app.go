@@ -301,7 +301,7 @@ RESPONSE LENGTH: your response is limited to ~%d tokens. You MUST fit within thi
 	}
 	userMessage := strings.Join(userParts, "\n\n")
 
-	raw, err := a.llm.GenerateSDPrompt(systemPrompt, userMessage, generateModel, maxTokens)
+	raw, err := a.llm.GenerateSDPrompt(systemPrompt, userMessage, p.PresetType, generateModel, maxTokens)
 	if err != nil {
 		return nil, err
 	}
@@ -391,7 +391,7 @@ OUTPUT — valid JSON only, no markdown:
 		}
 	}
 
-	raw, err := a.llm.GenerateSDPrompt(systemPrompt, userMessage, generateModel, maxTokens)
+	raw, err := a.llm.GenerateSDPrompt(systemPrompt, userMessage, "", generateModel, maxTokens)
 	if err != nil {
 		return nil, err
 	}

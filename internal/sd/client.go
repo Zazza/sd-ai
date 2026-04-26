@@ -285,3 +285,22 @@ func (c *Client) SetVAE(vaeName string) error {
 	defer resp.Body.Close()
 	return nil
 }
+
+type LoRA struct {
+	Name string `json:"name"`
+	Path string `json:"path"`
+}
+
+func (c *Client) GetLoRAs() ([]LoRA, error) {
+	resp, err := c.httpClient.Get(c.baseURL + "/sdapi/v1/loras")
+	if err != nil {
+		return nil, fmt.Errorf("get loras: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var loras []LoRA
+	if err := json.NewDecoder(resp.Body).Decode(&loras); err != nil {
+		return nil, fmt.Errorf("decode loras: %w", err)
+	}
+	return loras, nil
+}

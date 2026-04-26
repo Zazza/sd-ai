@@ -23,8 +23,24 @@ type Preset struct {
 	HiresDenoisingStrength *float64 `json:"hires_denoising_strength"`
 	HiresUpscaler          string   `json:"hires_upscaler"`
 	VAE                    string   `json:"vae"`
+	TypeID                 *int64   `json:"type_id"`
+	Tags                   string   `json:"tags"`
+	Loras                  string   `json:"loras"`
 	CreatedAt              string   `json:"created_at"`
 	UpdatedAt              string   `json:"updated_at"`
+}
+
+type PresetType struct {
+	ID          int64  `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	SortOrder   int    `json:"sort_order"`
+	CreatedAt   string `json:"created_at"`
+}
+
+type LoRAEntry struct {
+	Name   string  `json:"name"`
+	Weight float64 `json:"weight"`
 }
 
 type SavedDescription struct {

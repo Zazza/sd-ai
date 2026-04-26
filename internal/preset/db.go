@@ -42,6 +42,10 @@ func Open(dbPath string) (*DB, error) {
 		return nil, fmt.Errorf("migrate v4: %w", err)
 	}
 
+	if err := migrateV5(db); err != nil {
+		return nil, fmt.Errorf("migrate v5: %w", err)
+	}
+
 	return &DB{db: db}, nil
 }
 
@@ -142,7 +146,7 @@ func (d *DB) Close() error {
 	return d.db.Close()
 }
 
-const presetColumns = `id, name, preset_type, prompt, negative_prompt, sampler, schedule_type, steps, cfg_scale, width, height, model_name, seed, denoising_strength, clip_skip, batch_size, batch_count, hires_fix, hires_upscale, hires_denoising_strength, hires_upscaler, vae, created_at, updated_at`
+const presetColumns = `id, name, preset_type, prompt, negative_prompt, sampler, schedule_type, steps, cfg_scale, width, height, model_name, seed, denoising_strength, clip_skip, batch_size, batch_count, hires_fix, hires_upscale, hires_denoising_strength, hires_upscaler, vae, type_id, tags, loras, created_at, updated_at`
 
 func scanPreset(scanner interface{ Scan(...any) error }, p *Preset) error {
 	var seed sql.NullInt64
@@ -153,6 +157,7 @@ func scanPreset(scanner interface{ Scan(...any) error }, p *Preset) error {
 	var hiresFix sql.NullInt64
 	var hiresUpscale sql.NullFloat64
 	var hiresDenoisingStrength sql.NullFloat64
+	var typeID sql.NullInt64
 
 	err := scanner.Scan(
 		&p.ID, &p.Name, &p.PresetType, &p.Prompt, &p.NegativePrompt,
@@ -161,6 +166,7 @@ func scanPreset(scanner interface{ Scan(...any) error }, p *Preset) error {
 		&denoisingStrength, &clipSkip, &batchSize, &batchCount,
 		&hiresFix, &hiresUpscale, &hiresDenoisingStrength,
 		&p.HiresUpscaler, &p.VAE,
+		&typeID, &p.Tags, &p.Loras,
 		&p.CreatedAt, &p.UpdatedAt,
 	)
 	if err != nil {
@@ -194,6 +200,9 @@ func scanPreset(scanner interface{ Scan(...any) error }, p *Preset) error {
 	}
 	if hiresDenoisingStrength.Valid {
 		p.HiresDenoisingStrength = &hiresDenoisingStrength.Float64
+	}
+	if typeID.Valid {
+		p.TypeID = &typeID.Int64
 	}
 	return nil
 }
@@ -244,9 +253,10 @@ func (d *DB) Get(id int64) (*Preset, error) {
 }
 
 func (d *DB) Create(p *Preset) error {
-	result, err := d.db.Exec(`INSERT INTO presets (name, preset_type, prompt, negative_prompt, sampler, schedule_type, steps, cfg_scale, width, height, model_name, seed, denoising_strength, clip_skip, batch_size, batch_count, hires_fix, hires_upscale, hires_denoising_strength, hires_upscaler, vae) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+	result, err := d.db.Exec(`INSERT INTO presets (name, preset_type, prompt, negative_prompt, sampler, schedule_type, steps, cfg_scale, width, height, model_name, seed, denoising_strength, clip_skip, batch_size, batch_count, hires_fix, hires_upscale, hires_denoising_strength, hires_upscaler, vae, type_id, tags, loras) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		p.Name, p.PresetType, p.Prompt, p.NegativePrompt, p.Sampler, p.ScheduleType, p.Steps, p.CfgScale, p.Width, p.Height, p.ModelName, p.Seed,
-		p.DenoisingStrength, p.ClipSkip, p.BatchSize, p.BatchCount, p.HiresFix, p.HiresUpscale, p.HiresDenoisingStrength, p.HiresUpscaler, p.VAE)
+		p.DenoisingStrength, p.ClipSkip, p.BatchSize, p.BatchCount, p.HiresFix, p.HiresUpscale, p.HiresDenoisingStrength, p.HiresUpscaler, p.VAE,
+		p.TypeID, p.Tags, p.Loras)
 	if err != nil {
 		return err
 	}
@@ -255,9 +265,10 @@ func (d *DB) Create(p *Preset) error {
 }
 
 func (d *DB) Update(p *Preset) error {
-	_, err := d.db.Exec(`UPDATE presets SET name=?, preset_type=?, prompt=?, negative_prompt=?, sampler=?, schedule_type=?, steps=?, cfg_scale=?, width=?, height=?, model_name=?, seed=?, denoising_strength=?, clip_skip=?, batch_size=?, batch_count=?, hires_fix=?, hires_upscale=?, hires_denoising_strength=?, hires_upscaler=?, vae=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`,
+	_, err := d.db.Exec(`UPDATE presets SET name=?, preset_type=?, prompt=?, negative_prompt=?, sampler=?, schedule_type=?, steps=?, cfg_scale=?, width=?, height=?, model_name=?, seed=?, denoising_strength=?, clip_skip=?, batch_size=?, batch_count=?, hires_fix=?, hires_upscale=?, hires_denoising_strength=?, hires_upscaler=?, vae=?, type_id=?, tags=?, loras=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`,
 		p.Name, p.PresetType, p.Prompt, p.NegativePrompt, p.Sampler, p.ScheduleType, p.Steps, p.CfgScale, p.Width, p.Height, p.ModelName, p.Seed,
-		p.DenoisingStrength, p.ClipSkip, p.BatchSize, p.BatchCount, p.HiresFix, p.HiresUpscale, p.HiresDenoisingStrength, p.HiresUpscaler, p.VAE, p.ID)
+		p.DenoisingStrength, p.ClipSkip, p.BatchSize, p.BatchCount, p.HiresFix, p.HiresUpscale, p.HiresDenoisingStrength, p.HiresUpscaler, p.VAE,
+		p.TypeID, p.Tags, p.Loras, p.ID)
 	return err
 }
 
@@ -304,9 +315,10 @@ func (d *DB) CreateBatch(items []Preset) ([]Preset, error) {
 
 	var created []Preset
 	for _, item := range items {
-		result, err := tx.Exec(`INSERT INTO presets (name, preset_type, prompt, negative_prompt, sampler, schedule_type, steps, cfg_scale, width, height, model_name, seed, denoising_strength, clip_skip, batch_size, batch_count, hires_fix, hires_upscale, hires_denoising_strength, hires_upscaler, vae) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		result, err := tx.Exec(`INSERT INTO presets (name, preset_type, prompt, negative_prompt, sampler, schedule_type, steps, cfg_scale, width, height, model_name, seed, denoising_strength, clip_skip, batch_size, batch_count, hires_fix, hires_upscale, hires_denoising_strength, hires_upscaler, vae, type_id, tags, loras) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			item.Name, item.PresetType, item.Prompt, item.NegativePrompt, item.Sampler, item.ScheduleType, item.Steps, item.CfgScale, item.Width, item.Height, item.ModelName, item.Seed,
-			item.DenoisingStrength, item.ClipSkip, item.BatchSize, item.BatchCount, item.HiresFix, item.HiresUpscale, item.HiresDenoisingStrength, item.HiresUpscaler, item.VAE)
+			item.DenoisingStrength, item.ClipSkip, item.BatchSize, item.BatchCount, item.HiresFix, item.HiresUpscale, item.HiresDenoisingStrength, item.HiresUpscaler, item.VAE,
+			item.TypeID, item.Tags, item.Loras)
 		if err != nil {
 			tx.Rollback()
 			return nil, err
@@ -417,4 +429,115 @@ func (d *DB) CreatePrompt(text string) (*SavedPrompt, error) {
 func (d *DB) DeletePrompt(id int64) error {
 	_, err := d.db.Exec(`DELETE FROM saved_prompts WHERE id = ?`, id)
 	return err
+}
+
+func migrateV5(db *sql.DB) error {
+	_, err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS preset_types (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			name TEXT NOT NULL,
+			description TEXT NOT NULL DEFAULT '',
+			sort_order INTEGER NOT NULL DEFAULT 0,
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		)
+	`)
+	if err != nil {
+		return err
+	}
+
+	newCols := []struct {
+		name string
+		typ  string
+	}{
+		{"type_id", "INTEGER"},
+		{"tags", "TEXT DEFAULT ''"},
+		{"loras", "TEXT DEFAULT ''"},
+	}
+	for _, col := range newCols {
+		_, err := db.Exec("ALTER TABLE presets ADD COLUMN " + col.name + " " + col.typ)
+		if err != nil && strings.Contains(err.Error(), "duplicate column name") {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (d *DB) ListPresetTypes() ([]PresetType, error) {
+	rows, err := d.db.Query(`SELECT id, name, description, sort_order, created_at FROM preset_types ORDER BY sort_order, name`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var items []PresetType
+	for rows.Next() {
+		var pt PresetType
+		if err := rows.Scan(&pt.ID, &pt.Name, &pt.Description, &pt.SortOrder, &pt.CreatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, pt)
+	}
+	return items, rows.Err()
+}
+
+func (d *DB) GetPresetType(id int64) (*PresetType, error) {
+	var pt PresetType
+	err := d.db.QueryRow(`SELECT id, name, description, sort_order, created_at FROM preset_types WHERE id = ?`, id).
+		Scan(&pt.ID, &pt.Name, &pt.Description, &pt.SortOrder, &pt.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return &pt, nil
+}
+
+func (d *DB) CreatePresetType(pt *PresetType) error {
+	result, err := d.db.Exec(`INSERT INTO preset_types (name, description, sort_order) VALUES (?, ?, ?)`,
+		pt.Name, pt.Description, pt.SortOrder)
+	if err != nil {
+		return err
+	}
+	pt.ID, _ = result.LastInsertId()
+	return nil
+}
+
+func (d *DB) UpdatePresetType(pt *PresetType) error {
+	_, err := d.db.Exec(`UPDATE preset_types SET name=?, description=?, sort_order=? WHERE id=?`,
+		pt.Name, pt.Description, pt.SortOrder, pt.ID)
+	return err
+}
+
+func (d *DB) DeletePresetType(id int64) error {
+	_, err := d.db.Exec(`DELETE FROM preset_types WHERE id = ?`, id)
+	return err
+}
+
+func (d *DB) GetAllTags() ([]string, error) {
+	rows, err := d.db.Query(`SELECT DISTINCT tags FROM presets WHERE tags != ''`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	tagSet := make(map[string]bool)
+	for rows.Next() {
+		var tagsStr string
+		if err := rows.Scan(&tagsStr); err != nil {
+			return nil, err
+		}
+		for _, t := range strings.Split(tagsStr, ",") {
+			t = strings.TrimSpace(t)
+			if t != "" {
+				tagSet[t] = true
+			}
+		}
+	}
+
+	var tags []string
+	for t := range tagSet {
+		tags = append(tags, t)
+	}
+	return tags, rows.Err()
 }
