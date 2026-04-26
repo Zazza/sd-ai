@@ -18,6 +18,10 @@ export function CreatePreset(arg1) {
   return window['go']['main']['App']['CreatePreset'](arg1);
 }
 
+export function CreatePresetType(arg1) {
+  return window['go']['main']['App']['CreatePresetType'](arg1);
+}
+
 export function CreatePrompt(arg1) {
   return window['go']['main']['App']['CreatePrompt'](arg1);
 }
@@ -28,6 +32,10 @@ export function DeleteDescription(arg1) {
 
 export function DeletePreset(arg1) {
   return window['go']['main']['App']['DeletePreset'](arg1);
+}
+
+export function DeletePresetType(arg1) {
+  return window['go']['main']['App']['DeletePresetType'](arg1);
 }
 
 export function DeletePrompt(arg1) {
@@ -42,8 +50,12 @@ export function GenerateImage(arg1) {
   return window['go']['main']['App']['GenerateImage'](arg1);
 }
 
-export function GenerateSDPrompt(arg1, arg2) {
-  return window['go']['main']['App']['GenerateSDPrompt'](arg1, arg2);
+export function GenerateSDPrompt(arg1) {
+  return window['go']['main']['App']['GenerateSDPrompt'](arg1);
+}
+
+export function GetAllTags() {
+  return window['go']['main']['App']['GetAllTags']();
 }
 
 export function GetLLMModels() {
@@ -56,6 +68,14 @@ export function GetLastImage() {
 
 export function GetPreset(arg1) {
   return window['go']['main']['App']['GetPreset'](arg1);
+}
+
+export function GetPresetType(arg1) {
+  return window['go']['main']['App']['GetPresetType'](arg1);
+}
+
+export function GetSDLoRAs() {
+  return window['go']['main']['App']['GetSDLoRAs']();
 }
 
 export function GetSDModels() {
@@ -94,6 +114,10 @@ export function ListDescriptions() {
   return window['go']['main']['App']['ListDescriptions']();
 }
 
+export function ListPresetTypes() {
+  return window['go']['main']['App']['ListPresetTypes']();
+}
+
 export function ListPresets() {
   return window['go']['main']['App']['ListPresets']();
 }
@@ -114,6 +138,10 @@ export function ReadImageFile() {
   return window['go']['main']['App']['ReadImageFile']();
 }
 
+export function RecommendPreset(arg1) {
+  return window['go']['main']['App']['RecommendPreset'](arg1);
+}
+
 export function SaveImage(arg1, arg2) {
   return window['go']['main']['App']['SaveImage'](arg1, arg2);
 }
@@ -126,6 +154,10 @@ export function UpdatePreset(arg1) {
   return window['go']['main']['App']['UpdatePreset'](arg1);
 }
 
+export function UpdatePresetType(arg1) {
+  return window['go']['main']['App']['UpdatePresetType'](arg1);
+}
+
 export function UpdateSettings(arg1) {
   return window['go']['main']['App']['UpdateSettings'](arg1);
 }
@@ -136,4 +168,8 @@ export function UpscaleImage(arg1) {
 
 export function UpscalePreview(arg1) {
   return window['go']['main']['App']['UpscalePreview'](arg1);
+}
+
+export function ValidateImportModels(arg1) {
+  return window['go']['main']['App']['ValidateImportModels'](arg1);
 }

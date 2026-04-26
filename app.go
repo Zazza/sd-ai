@@ -181,22 +181,94 @@ func (a *App) DeletePreset(id int64) error {
 	return a.presets.Delete(id)
 }
 
+func (a *App) ListPresetTypes() ([]preset.PresetType, error) {
+	items, err := a.presets.ListPresetTypes()
+	if err != nil {
+		return nil, err
+	}
+	if items == nil {
+		items = []preset.PresetType{}
+	}
+	return items, nil
+}
+
+func (a *App) GetPresetType(id int64) (*preset.PresetType, error) {
+	return a.presets.GetPresetType(id)
+}
+
+func (a *App) CreatePresetType(pt preset.PresetType) (*preset.PresetType, error) {
+	if err := a.presets.CreatePresetType(&pt); err != nil {
+		return nil, err
+	}
+	return &pt, nil
+}
+
+func (a *App) UpdatePresetType(pt preset.PresetType) (*preset.PresetType, error) {
+	if err := a.presets.UpdatePresetType(&pt); err != nil {
+		return nil, err
+	}
+	return &pt, nil
+}
+
+func (a *App) DeletePresetType(id int64) error {
+	return a.presets.DeletePresetType(id)
+}
+
+func (a *App) GetAllTags() ([]string, error) {
+	tags, err := a.presets.GetAllTags()
+	if err != nil {
+		return nil, err
+	}
+	if tags == nil {
+		tags = []string{}
+	}
+	return tags, nil
+}
+
+func (a *App) GetSDLoRAs() ([]sd.LoRA, error) {
+	return a.sd.GetLoRAs()
+}
+
 // --- Generation ---
 
-func (a *App) GenerateSDPrompt(description, presetType string) (string, error) {
-	description = strings.TrimSpace(description)
-	if description == "" {
-		return "", nil
+type GenerateSDPromptParams struct {
+	PresetID    int64  `json:"preset_id"`
+	Description string `json:"description"`
+	Negative    string `json:"negative"`
+}
+
+type GenerateSDPromptResult struct {
+	Prompt         string `json:"prompt"`
+	NegativePrompt string `json:"negative_prompt"`
+}
+
+func (a *App) GenerateSDPrompt(params GenerateSDPromptParams) (*GenerateSDPromptResult, error) {
+	if params.PresetID <= 0 {
+		return nil, fmt.Errorf("preset is required")
 	}
 
-	systemPrompt := a.config.SystemPrompt
+	p, err := a.presets.Get(params.PresetID)
+	if err != nil {
+		return nil, fmt.Errorf("preset not found: %w", err)
+	}
+
+	description := strings.TrimSpace(params.Description)
+	negative := strings.TrimSpace(params.Negative)
+
+	if description == "" && negative == "" {
+		return nil, nil
+	}
+
+	sdPromptInstruction := config.DefaultSDPromptInstruction
+	if v, err := a.presets.GetSetting("sd_prompt_instruction"); err == nil && v != "" {
+		sdPromptInstruction = v
+	}
+
+	systemPrompt := sdPromptInstruction
 
 	if a.isKidsMode() {
-		filtered := kids.FilterInput(description)
-		if filtered == "" {
-			return "", fmt.Errorf("description contains restricted content")
-		}
-		description = filtered
+		description = kids.FilterInput(description)
+		negative = kids.FilterInput(negative)
 		systemPrompt += config.KidsModePrompt
 	}
 
@@ -207,22 +279,129 @@ func (a *App) GenerateSDPrompt(description, presetType string) (string, error) {
 		}
 	}
 
+	generateModel := a.config.SDPromptModel
+	if v, err := a.presets.GetSetting("llm_generate_model"); err == nil && v != "" {
+		generateModel = v
+	}
+
+	a.applyLLMConfig("generate")
+
 	systemPrompt += fmt.Sprintf(`
 
-RESPONSE LENGTH: your response is limited to ~%d tokens. You MUST fit within this limit.
-Prioritize: quality tags > subject details > composition > atmosphere > secondary details.
-If space is tight, drop weak tags rather than cutting important details short.`, maxTokens)
+RESPONSE LENGTH: your response is limited to ~%d tokens. You MUST fit within this limit.`, maxTokens)
 
-	result, err := a.llm.GenerateSDPrompt(systemPrompt, description, presetType, a.config.SDPromptModel, maxTokens)
-	if err != nil {
-		return "", err
+	var userParts []string
+	userParts = append(userParts, "BASE POSITIVE PROMPT: "+p.Prompt)
+	userParts = append(userParts, "BASE NEGATIVE PROMPT: "+p.NegativePrompt)
+	if description != "" {
+		userParts = append(userParts, "USER DESCRIPTION: "+description)
 	}
+	if negative != "" {
+		userParts = append(userParts, "USER NEGATIVE: "+negative)
+	}
+	userMessage := strings.Join(userParts, "\n\n")
+
+	raw, err := a.llm.GenerateSDPrompt(systemPrompt, userMessage, generateModel, maxTokens)
+	if err != nil {
+		return nil, err
+	}
+
+	var result GenerateSDPromptResult
+	if err := json.Unmarshal([]byte(extractJSON(raw)), &result); err != nil {
+		result = GenerateSDPromptResult{
+			Prompt:         truncateRepetitive(raw, 1000),
+			NegativePrompt: p.NegativePrompt,
+		}
+	}
+
+	result.Prompt = truncateRepetitive(result.Prompt, 1000)
+	result.NegativePrompt = truncateRepetitive(result.NegativePrompt, 500)
 
 	if a.isKidsMode() {
-		result = kids.FilterOutput(result)
+		result.Prompt = kids.FilterOutput(result.Prompt)
+		result.NegativePrompt = kids.FilterOutput(result.NegativePrompt)
 	}
 
-	return result, nil
+	return &result, nil
+}
+
+type RecommendPresetResult struct {
+	PresetID    int64  `json:"preset_id"`
+	PresetName  string `json:"preset_name"`
+	ExtraPrompt string `json:"extra_prompt"`
+	Reasoning   string `json:"reasoning"`
+}
+
+func (a *App) RecommendPreset(description string) (*RecommendPresetResult, error) {
+	if strings.TrimSpace(description) == "" {
+		return nil, fmt.Errorf("description is required")
+	}
+
+	allPresets, err := a.presets.List()
+	if err != nil {
+		return nil, fmt.Errorf("load presets: %w", err)
+	}
+	if len(allPresets) == 0 {
+		return nil, fmt.Errorf("no presets available")
+	}
+
+	typesMap := make(map[int64]string)
+	types, _ := a.presets.ListPresetTypes()
+	if types != nil {
+		for _, t := range types {
+			typesMap[t.ID] = t.Name
+		}
+	}
+
+	var presetList []string
+	for _, p := range allPresets {
+		typeName := ""
+		if p.TypeID != nil {
+			typeName = typesMap[*p.TypeID]
+		}
+		entry := fmt.Sprintf("ID:%d | Name:%q | Type:%q | Tags:%q", p.ID, p.Name, typeName, p.Tags)
+		presetList = append(presetList, entry)
+	}
+
+	systemPrompt := `You are a Stable Diffusion preset recommender. Given a user's description of what they want to generate, you must select the BEST matching preset from the available list and suggest any additional prompt enhancements.
+
+RULES:
+1. Select EXACTLY ONE preset that best matches the user's description
+2. Consider: subject matter, style, quality, and technical aspects
+3. In extra_prompt, suggest additional SD tags that would improve the result based on the user's description
+4. Keep extra_prompt as comma-separated SD tags only
+5. Translate non-English to English
+
+OUTPUT — valid JSON only, no markdown:
+{"preset_id": 123, "preset_name": "exact name", "extra_prompt": "additional tags", "reasoning": "why this preset"}`
+
+	userMessage := "AVAILABLE PRESETS:\n" + strings.Join(presetList, "\n") + "\n\nUSER DESCRIPTION: " + strings.TrimSpace(description)
+
+	generateModel := a.config.SDPromptModel
+	if v, err := a.presets.GetSetting("llm_generate_model"); err == nil && v != "" {
+		generateModel = v
+	}
+
+	a.applyLLMConfig("generate")
+
+	maxTokens := 512
+	if v, err := a.presets.GetSetting("llm_max_tokens"); err == nil && v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			maxTokens = n
+		}
+	}
+
+	raw, err := a.llm.GenerateSDPrompt(systemPrompt, userMessage, generateModel, maxTokens)
+	if err != nil {
+		return nil, err
+	}
+
+	var result RecommendPresetResult
+	if err := json.Unmarshal([]byte(extractJSON(raw)), &result); err != nil {
+		return nil, fmt.Errorf("failed to parse LLM response: %w", err)
+	}
+
+	return &result, nil
 }
 
 func (a *App) AnalyzeImage(imageBase64 string) (string, error) {
@@ -231,9 +410,17 @@ func (a *App) AnalyzeImage(imageBase64 string) (string, error) {
 	}
 
 	model := a.config.VisionModel
+	if v, err := a.presets.GetSetting("llm_analyze_model"); err == nil && v != "" {
+		model = v
+	}
 	if model == "" {
 		model = a.config.SDPromptModel
+		if v, err := a.presets.GetSetting("llm_generate_model"); err == nil && v != "" {
+			model = v
+		}
 	}
+
+	a.applyLLMConfig("analyze")
 
 	systemPrompt := `You are an SD tag extractor. Describe the given image as comma-separated Stable Diffusion tags.
 Output ONLY tags, nothing else. Start with quality tags (masterpiece, best quality, highly detailed).
@@ -297,8 +484,16 @@ func (a *App) GenerateImage(params GenerateImageParams) (*GenerateImageResult, e
 	}
 
 	prompt := p.Prompt
+	if p.Loras != "" {
+		var loras []preset.LoRAEntry
+		if err := json.Unmarshal([]byte(p.Loras), &loras); err == nil {
+			for _, l := range loras {
+				prompt += fmt.Sprintf(" <lora:%s:%g>", l.Name, l.Weight)
+			}
+		}
+	}
 	if params.ExtraPrompt != "" {
-		prompt += ", " + params.ExtraPrompt
+		prompt += " BREAK " + params.ExtraPrompt
 	}
 
 	negativePrompt := p.NegativePrompt
@@ -763,20 +958,32 @@ func (a *App) GetSettings() (map[string]string, error) {
 	}
 
 	defaults := map[string]string{
-		"llm_url":         a.config.LLMUrl,
-		"sd_url":          a.config.SDUrl,
-		"llm_model":       a.config.LLMModel,
-		"sd_prompt_model": a.config.SDPromptModel,
-		"vision_model":    a.config.VisionModel,
-		"llm_backend":     a.config.LLMBackend,
-		"llm_keep_alive":  "5m",
-		"llm_num_ctx":     "4096",
-		"llm_num_gpu":     "0",
-		"llm_max_tokens":  "256",
-		"kids_mode":       "false",
-		"preview_mode":    "false",
-		"preview_width":   "512",
-		"preview_height":  "512",
+		"llm_url":                   a.config.LLMUrl,
+		"sd_url":                    a.config.SDUrl,
+		"llm_model":                 a.config.LLMModel,
+		"sd_prompt_model":           a.config.SDPromptModel,
+		"vision_model":              a.config.VisionModel,
+		"llm_backend":               a.config.LLMBackend,
+		"llm_keep_alive":            "5m",
+		"llm_num_ctx":               "4096",
+		"llm_num_gpu":               "0",
+		"llm_max_tokens":            "256",
+		"llm_generate_model":        a.config.SDPromptModel,
+		"llm_analyze_model":         a.config.VisionModel,
+		"llm_generate_temperature":  "0.4",
+		"llm_generate_num_ctx":      "4096",
+		"llm_generate_num_predict":  "256",
+		"llm_generate_top_p":        "0.9",
+		"llm_generate_num_thread":   "0",
+		"llm_analyze_temperature":   "0.4",
+		"llm_analyze_num_ctx":       "4096",
+		"llm_analyze_num_predict":   "256",
+		"llm_analyze_top_p":         "0.9",
+		"llm_analyze_num_thread":    "0",
+		"kids_mode":                 "false",
+		"preview_mode":              "false",
+		"preview_width":             "512",
+		"preview_height":            "512",
 	}
 	for k, v := range defaults {
 		if _, ok := settings[k]; !ok {
@@ -791,9 +998,18 @@ func (a *App) UpdateSettings(data map[string]string) error {
 		"llm_url": true, "sd_url": true, "llm_model": true, "sd_prompt_model": true,
 		"vision_model": true,
 		"llm_backend": true, "llm_keep_alive": true, "llm_num_ctx": true, "llm_num_gpu": true, "llm_max_tokens": true,
+		"llm_generate_model": true, "llm_analyze_model": true,
+		"llm_generate_temperature": true, "llm_generate_num_ctx": true, "llm_generate_num_predict": true,
+		"llm_generate_top_p": true, "llm_generate_num_thread": true,
+		"llm_analyze_temperature": true, "llm_analyze_num_ctx": true, "llm_analyze_num_predict": true,
+		"llm_analyze_top_p": true, "llm_analyze_num_thread": true,
 		"kids_mode": true, "kids_pin_hash": true,
 		"preview_mode": true, "preview_width": true, "preview_height": true,
-		"gen_preset_id": true, "gen_description": true, "gen_extra_prompt": true, "gen_extra_negative": true,
+		"gen_preset_id": true, "gen_action_pose": true, "gen_characters": true,
+		"gen_clothing_details": true,
+		"gen_environment": true, "gen_lighting": true, "gen_negative": true,
+		"gen_extra_prompt": true, "gen_extra_negative": true,
+		"gen_type_id": true,
 	}
 
 	for k, v := range data {
@@ -826,24 +1042,52 @@ func (a *App) UpdateSettings(data map[string]string) error {
 		a.llm.SetBackend(v)
 		a.config.LLMBackend = v
 	}
+	if v, ok := data["llm_generate_model"]; ok {
+		a.config.SDPromptModel = v
+	}
+	if v, ok := data["llm_analyze_model"]; ok {
+		a.config.VisionModel = v
+	}
+
+	return nil
+}
+
+func (a *App) applyLLMConfig(mode string) {
+	prefix := "llm_generate_"
+	if mode == "analyze" {
+		prefix = "llm_analyze_"
+	}
 
 	var cfg llm.BackendConfig
-	if v, ok := data["llm_keep_alive"]; ok {
+	if v, err := a.presets.GetSetting("llm_keep_alive"); err == nil {
 		cfg.KeepAlive = v
 	}
-	if v, ok := data["llm_num_ctx"]; ok {
+	if v, err := a.presets.GetSetting(prefix + "num_ctx"); err == nil && v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
 			cfg.NumCtx = n
 		}
 	}
-	if v, ok := data["llm_num_gpu"]; ok {
+	if v, err := a.presets.GetSetting(prefix + "num_predict"); err == nil && v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.NumPredict = n
+		}
+	}
+	if v, err := a.presets.GetSetting(prefix + "top_p"); err == nil && v != "" {
+		if n, err := strconv.ParseFloat(v, 64); err == nil {
+			cfg.TopP = n
+		}
+	}
+	if v, err := a.presets.GetSetting(prefix + "num_thread"); err == nil && v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.NumThread = n
+		}
+	}
+	if v, err := a.presets.GetSetting("llm_num_gpu"); err == nil && v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
 			cfg.NumGPU = n
 		}
 	}
 	a.llm.SetBackendConfig(cfg)
-
-	return nil
 }
 
 // --- Saved Descriptions ---
@@ -1006,6 +1250,7 @@ type PresetExportFile struct {
 type PresetData struct {
 	Name           string  `json:"name"`
 	PresetType     string  `json:"preset_type"`
+	TypeName       string  `json:"type_name"`
 	Prompt         string  `json:"prompt"`
 	NegativePrompt string  `json:"negative_prompt"`
 	Sampler        string  `json:"sampler"`
@@ -1025,6 +1270,8 @@ type PresetData struct {
 	HiresDenoisingStrength *float64 `json:"hires_denoising_strength"`
 	HiresUpscaler          string   `json:"hires_upscaler"`
 	VAE                    string   `json:"vae"`
+	Tags                   string   `json:"tags"`
+	Loras                  string   `json:"loras"`
 }
 
 type ImportPreview struct {
@@ -1043,14 +1290,28 @@ func (a *App) ExportPresets(ids []int64) (string, error) {
 	}
 
 	data := PresetExportFile{
-		Version:    1,
+		Version:    2,
 		ExportedAt: time.Now().UTC(),
 		Presets:    make([]PresetData, len(selected)),
 	}
+
+	typeMap := make(map[int64]string)
+	types, _ := a.presets.ListPresetTypes()
+	for _, t := range types {
+		typeMap[t.ID] = t.Name
+	}
+
 	for i, p := range selected {
+		typeName := p.PresetType
+		if p.TypeID != nil {
+			if n, ok := typeMap[*p.TypeID]; ok {
+				typeName = n
+			}
+		}
 		data.Presets[i] = PresetData{
 			Name:                   p.Name,
 			PresetType:             p.PresetType,
+			TypeName:               typeName,
 			Prompt:                 p.Prompt,
 			NegativePrompt:         p.NegativePrompt,
 			Sampler:                p.Sampler,
@@ -1070,6 +1331,8 @@ func (a *App) ExportPresets(ids []int64) (string, error) {
 			HiresDenoisingStrength: p.HiresDenoisingStrength,
 			HiresUpscaler:          p.HiresUpscaler,
 			VAE:                    p.VAE,
+			Tags:                   p.Tags,
+			Loras:                  p.Loras,
 		}
 	}
 
@@ -1123,7 +1386,7 @@ func (a *App) OpenImportFile() (*ImportPreview, error) {
 		return nil, fmt.Errorf("invalid file format: %w", err)
 	}
 
-	if data.Version != 1 {
+	if data.Version < 1 || data.Version > 2 {
 		return nil, fmt.Errorf("unsupported file version: %d", data.Version)
 	}
 
@@ -1135,6 +1398,110 @@ func (a *App) OpenImportFile() (*ImportPreview, error) {
 		Presets: data.Presets,
 		Total:   len(data.Presets),
 	}, nil
+}
+
+type ValidationWarning struct {
+	PresetName string   `json:"preset_name"`
+	Warnings   []string `json:"warnings"`
+}
+
+func (a *App) ValidateImportModels(items []PresetData) ([]ValidationWarning, error) {
+	if len(items) == 0 {
+		return nil, nil
+	}
+
+	var warnings []ValidationWarning
+
+	sdModels, _ := a.sd.GetModels()
+	modelSet := make(map[string]bool)
+	for _, m := range sdModels {
+		modelSet[m.Name] = true
+	}
+
+	loras, _ := a.sd.GetLoRAs()
+	loraSet := make(map[string]bool)
+	for _, l := range loras {
+		loraSet[l.Name] = true
+	}
+
+	for _, item := range items {
+		var w []string
+		if item.ModelName != "" && !modelSet[item.ModelName] {
+			w = append(w, "Model not found: "+item.ModelName)
+		}
+		if item.Loras != "" {
+			var loraEntries []preset.LoRAEntry
+			if err := json.Unmarshal([]byte(item.Loras), &loraEntries); err == nil {
+				for _, l := range loraEntries {
+					if !loraSet[l.Name] {
+						w = append(w, "LoRA not found: "+l.Name)
+					}
+				}
+			}
+		}
+		if len(w) > 0 {
+			warnings = append(warnings, ValidationWarning{
+				PresetName: item.Name,
+				Warnings:   w,
+			})
+		}
+	}
+
+	return warnings, nil
+}
+
+func extractJSON(s string) string {
+	s = strings.TrimSpace(s)
+	s = strings.TrimPrefix(s, "```json")
+	s = strings.TrimPrefix(s, "```")
+	s = strings.TrimSuffix(s, "```")
+	s = strings.TrimSpace(s)
+	s = strings.ReplaceAll(s, `\_`, "_")
+	start := strings.Index(s, "{")
+	if start < 0 {
+		return s
+	}
+	end := strings.LastIndex(s, "}")
+	if end <= start {
+		return s
+	}
+	return s[start : end+1]
+}
+
+func truncateRepetitive(s string, maxLen int) string {
+	if s == "" {
+		return s
+	}
+	parts := strings.Split(s, ", ")
+	result := make([]string, 0, len(parts))
+	prevPrefix := ""
+	repeatCount := 0
+	for _, part := range parts {
+		prefix := part
+		if idx := strings.Index(part, ":"); idx > 0 {
+			prefix = part[:idx]
+		}
+		prefix = strings.ToLower(strings.TrimSpace(prefix))
+		if prefix == prevPrefix && prefix != "" {
+			repeatCount++
+			if repeatCount >= 3 {
+				break
+			}
+		} else {
+			prevPrefix = prefix
+			repeatCount = 0
+		}
+		result = append(result, part)
+	}
+	s = strings.Join(result, ", ")
+	if len(s) > maxLen {
+		if idx := strings.LastIndex(s[:maxLen], ","); idx > 0 {
+			s = s[:idx]
+		} else {
+			s = s[:maxLen]
+		}
+	}
+	return strings.TrimSpace(s)
 }
 
 func splitCompositeSampler(sampler, scheduleType string) (string, string) {
@@ -1171,6 +1538,7 @@ func (a *App) ImportPresets(items []PresetData) ([]preset.Preset, error) {
 		if item.CfgScale < 0 || item.CfgScale > 30 {
 			return nil, fmt.Errorf("invalid cfg_scale for %q: must be 0-30", item.Name)
 		}
+
 		if item.DenoisingStrength != nil && (*item.DenoisingStrength < 0 || *item.DenoisingStrength > 1) {
 			return nil, fmt.Errorf("invalid denoising_strength for %q: must be 0-1", item.Name)
 		}
@@ -1191,10 +1559,39 @@ func (a *App) ImportPresets(items []PresetData) ([]preset.Preset, error) {
 		}
 	}
 
+	typeCache := make(map[string]*int64)
+	for _, item := range items {
+		typeName := item.TypeName
+		if typeName == "" {
+			typeName = item.PresetType
+		}
+		if typeName == "" {
+			continue
+		}
+		if _, ok := typeCache[typeName]; ok {
+			continue
+		}
+		existing, err := a.presets.ListPresetTypes()
+		if err == nil {
+			for _, t := range existing {
+				if t.Name == typeName {
+					typeCache[typeName] = &t.ID
+					break
+				}
+			}
+		}
+		if _, ok := typeCache[typeName]; !ok {
+			pt := &preset.PresetType{Name: typeName}
+			if err := a.presets.CreatePresetType(pt); err == nil {
+				typeCache[typeName] = &pt.ID
+			}
+		}
+	}
+
 	batch := make([]preset.Preset, len(items))
 	for i, item := range items {
 		sampler, scheduleType := splitCompositeSampler(item.Sampler, item.ScheduleType)
-		batch[i] = preset.Preset{
+		p := preset.Preset{
 			Name:                   item.Name,
 			PresetType:             item.PresetType,
 			Prompt:                 item.Prompt,
@@ -1216,7 +1613,21 @@ func (a *App) ImportPresets(items []PresetData) ([]preset.Preset, error) {
 			HiresDenoisingStrength: item.HiresDenoisingStrength,
 			HiresUpscaler:          item.HiresUpscaler,
 			VAE:                    item.VAE,
+			Tags:                   item.Tags,
+			Loras:                  item.Loras,
 		}
+
+		typeName := item.TypeName
+		if typeName == "" {
+			typeName = item.PresetType
+		}
+		if typeName != "" {
+			if id, ok := typeCache[typeName]; ok {
+				p.TypeID = id
+			}
+		}
+
+		batch[i] = p
 	}
 
 	created, err := a.presets.CreateBatch(batch)

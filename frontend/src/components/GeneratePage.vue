@@ -1,14 +1,16 @@
 <script setup>
-import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { api } from '../api.js'
 
 const presets = ref([])
+const presetTypes = ref([])
+const selectedTypeId = ref(null)
 const selectedPresetId = ref(null)
 const description = ref('')
+const negative = ref('')
 const extraPrompt = ref('')
 const extraNegativePrompt = ref('')
 const generatedImage = ref('')
-const extraPromptEl = ref(null)
 const genInfo = ref(null)
 const sourceImage = ref('')
 const sourceGenInfo = ref(null)
@@ -18,32 +20,25 @@ const upscaling = ref(false)
 const upscalingX2 = ref(false)
 const previewMode = ref(false)
 
-const generatingPrompt = ref(false)
 const generatingImage = ref(false)
+const generationStage = ref('')
 const error = ref('')
-const promptElapsed = ref(0)
-let promptTimerInterval = null
-let cancelPromptFlag = false
+let promptDirty = true
 
-const savedDescriptions = ref([])
-const showDescModal = ref(false)
-const descPage = ref(1)
-const PAGE_SIZE = 10
+const llmAvailable = ref(false)
+const llmModel = ref('')
+const sdAvailable = ref(false)
+const sdModel = ref('')
+const kidsModeActive = ref(false)
+let statusInterval = null
 
-const savedPrompts = ref([])
-const showPromptModal = ref(false)
-const promptPage = ref(1)
+const recommendDesc = ref('')
+const recommending = ref(false)
+const recommendResult = ref(null)
 
-const descTotalPages = computed(() => Math.max(1, Math.ceil(savedDescriptions.value.length / PAGE_SIZE)))
-const descPaginated = computed(() => {
-  const start = (descPage.value - 1) * PAGE_SIZE
-  return savedDescriptions.value.slice(start, start + PAGE_SIZE)
-})
-
-const promptTotalPages = computed(() => Math.max(1, Math.ceil(savedPrompts.value.length / PAGE_SIZE)))
-const promptPaginated = computed(() => {
-  const start = (promptPage.value - 1) * PAGE_SIZE
-  return savedPrompts.value.slice(start, start + PAGE_SIZE)
+const filteredPresets = computed(() => {
+  if (!selectedTypeId.value) return presets.value
+  return presets.value.filter(p => p.type_id === selectedTypeId.value)
 })
 
 const formattedGenInfo = computed(() => {
@@ -56,21 +51,17 @@ const formattedGenInfo = computed(() => {
   }
 })
 
-const llmAvailable = ref(false)
-const llmModel = ref('')
-const sdAvailable = ref(false)
-const sdModel = ref('')
-const kidsModeActive = ref(false)
-let statusInterval = null
+watch([description, negative], () => {
+  promptDirty = true
+})
 
-function autoResize() {
-  const el = extraPromptEl.value
-  if (!el) return
-  el.style.height = 'auto'
-  el.style.height = el.scrollHeight + 'px'
-}
-
-watch(extraPrompt, () => nextTick(autoResize))
+watch(selectedTypeId, () => {
+  const filtered = filteredPresets.value
+  if (selectedPresetId.value && !filtered.find(p => p.id === selectedPresetId.value)) {
+    selectedPresetId.value = null
+  }
+  api.updateSettings({ gen_type_id: String(selectedTypeId.value || '') }).catch(() => {})
+})
 
 async function checkServices() {
   try {
@@ -85,136 +76,46 @@ async function checkServices() {
 
 async function loadPresets() {
   try {
-    presets.value = await api.listPresets()
+    const [p, t] = await Promise.all([api.listPresets(), api.listPresetTypes()])
+    presets.value = p || []
+    presetTypes.value = t || []
   } catch (e) {
     console.error(e)
-  }
-}
-
-async function loadDescriptions() {
-  try {
-    savedDescriptions.value = await api.listDescriptions()
-    if (descPage.value > descTotalPages.value) descPage.value = descTotalPages.value
-  } catch (e) {
-    console.error(e)
-  }
-}
-
-async function loadPrompts() {
-  try {
-    savedPrompts.value = await api.listPrompts()
-    if (promptPage.value > promptTotalPages.value) promptPage.value = promptTotalPages.value
-  } catch (e) {
-    console.error(e)
-  }
-}
-
-async function saveDescription() {
-  if (!description.value.trim()) return
-  try {
-    await api.createDescription(description.value)
-    await loadDescriptions()
-  } catch (e) {
-    error.value = String(e)
-  }
-}
-
-async function deleteDescription(id) {
-  try {
-    await api.deleteDescription(id)
-    await loadDescriptions()
-  } catch (e) {
-    error.value = String(e)
-  }
-}
-
-function useDescription(text) {
-  description.value = text
-  showDescModal.value = false
-}
-
-function openDescModal() {
-  showDescModal.value = true
-  descPage.value = 1
-}
-
-async function savePrompt() {
-  if (!extraPrompt.value.trim()) return
-  try {
-    await api.createPrompt(extraPrompt.value)
-    await loadPrompts()
-  } catch (e) {
-    error.value = String(e)
-  }
-}
-
-async function deletePrompt(id) {
-  try {
-    await api.deletePrompt(id)
-    await loadPrompts()
-  } catch (e) {
-    error.value = String(e)
-  }
-}
-
-function usePrompt(text) {
-  extraPrompt.value = text
-  showPromptModal.value = false
-}
-
-function openPromptModal() {
-  showPromptModal.value = true
-  promptPage.value = 1
-}
-
-function cancelPromptGeneration() {
-  cancelPromptFlag = true
-  generatingPrompt.value = false
-  if (promptTimerInterval) {
-    clearInterval(promptTimerInterval)
-    promptTimerInterval = null
-  }
-  promptElapsed.value = 0
-}
-
-async function generatePrompt() {
-  if (!description.value.trim()) return
-  generatingPrompt.value = true
-  cancelPromptFlag = false
-  promptElapsed.value = 0
-  error.value = ''
-  promptTimerInterval = setInterval(() => { promptElapsed.value++ }, 1000)
-  try {
-    const preset = presets.value.find(p => p.id === Number(selectedPresetId.value))
-    const result = await api.generateSdPrompt(description.value, preset?.preset_type || '')
-    if (cancelPromptFlag) return
-    if (result && result.trim()) {
-      extraPrompt.value = result
-    } else {
-      error.value = 'LLM returned empty response'
-    }
-  } catch (e) {
-    if (cancelPromptFlag) return
-    error.value = String(e)
-  } finally {
-    if (!cancelPromptFlag) {
-      generatingPrompt.value = false
-    }
-    if (promptTimerInterval) {
-      clearInterval(promptTimerInterval)
-      promptTimerInterval = null
-    }
-    promptElapsed.value = 0
   }
 }
 
 function saveGenState() {
   api.updateSettings({
     gen_preset_id: String(selectedPresetId.value || ''),
+    gen_type_id: String(selectedTypeId.value || ''),
     gen_description: description.value || '',
+    gen_negative: negative.value || '',
     gen_extra_prompt: extraPrompt.value || '',
     gen_extra_negative: extraNegativePrompt.value || '',
   }).catch(() => {})
+}
+
+async function recommendPreset() {
+  if (!recommendDesc.value.trim()) return
+  recommending.value = true
+  recommendResult.value = null
+  error.value = ''
+  try {
+    const result = await api.recommendPreset(recommendDesc.value)
+    if (result) {
+      recommendResult.value = result
+      if (result.preset_id) {
+        selectedPresetId.value = result.preset_id
+      }
+      if (result.extra_prompt) {
+        description.value = result.extra_prompt
+      }
+    }
+  } catch (e) {
+    error.value = 'Recommendation failed: ' + String(e)
+  } finally {
+    recommending.value = false
+  }
 }
 
 async function generateImage() {
@@ -223,8 +124,37 @@ async function generateImage() {
     return
   }
   saveGenState()
+
+  if (description.value.trim() && promptDirty) {
+    generatingImage.value = true
+    generationStage.value = 'prompt'
+    error.value = ''
+    try {
+      const promptResult = await api.generateSdPrompt({
+        preset_id: selectedPresetId.value,
+        description: description.value,
+        negative: negative.value,
+      })
+      if (promptResult && promptResult.prompt) {
+        extraPrompt.value = promptResult.prompt
+        extraNegativePrompt.value = promptResult.negative_prompt || ''
+        promptDirty = false
+      } else {
+        error.value = 'LLM returned empty response'
+        generatingImage.value = false
+        generationStage.value = ''
+        return
+      }
+    } catch (e) {
+      error.value = 'Prompt generation failed: ' + String(e)
+      generatingImage.value = false
+      generationStage.value = ''
+      return
+    }
+  }
+
+  generationStage.value = 'image'
   generatingImage.value = true
-  error.value = ''
   generatedImage.value = ''
   genInfo.value = null
   isPreview.value = false
@@ -244,6 +174,7 @@ async function generateImage() {
     error.value = String(e)
   } finally {
     generatingImage.value = false
+    generationStage.value = ''
   }
 }
 
@@ -293,7 +224,6 @@ function backToPreview() {
   isPreview.value = true
 }
 
-
 async function upscaleImageX2() {
   if (!generatedImage.value) return
   upscalingX2.value = true
@@ -316,7 +246,6 @@ async function upscaleImageX2() {
   }
 }
 
-
 async function downloadImage() {
   if (!generatedImage.value) return
   try {
@@ -332,15 +261,15 @@ async function downloadImage() {
 
 onMounted(async () => {
   loadPresets()
-  loadDescriptions()
-  loadPrompts()
   checkServices()
   statusInterval = setInterval(checkServices, 30000)
   try {
     const s = await api.getSettings()
     previewMode.value = s.preview_mode === 'true'
+    if (s.gen_type_id) selectedTypeId.value = Number(s.gen_type_id) || null
     if (s.gen_preset_id) selectedPresetId.value = Number(s.gen_preset_id)
     if (s.gen_description) description.value = s.gen_description
+    if (s.gen_negative) negative.value = s.gen_negative
     if (s.gen_extra_prompt) extraPrompt.value = s.gen_extra_prompt
     if (s.gen_extra_negative) extraNegativePrompt.value = s.gen_extra_negative
   } catch {}
@@ -385,67 +314,55 @@ onUnmounted(() => {
     <div class="generate-layout">
       <div class="generate-section">
         <div class="card">
-          <div class="form-group">
-            <label class="form-label">Preset</label>
-            <select class="form-select" v-model="selectedPresetId" :disabled="generatingPrompt">
-              <option :value="null" disabled>Select preset...</option>
-              <option v-for="p in presets" :key="p.id" :value="p.id">
-                {{ p.name }} ({{ p.preset_type || 'general' }})
-              </option>
-            </select>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+            <div class="form-group">
+              <label class="form-label">Type</label>
+              <select class="form-select" v-model="selectedTypeId" :disabled="generatingImage">
+                <option :value="null">All types</option>
+                <option v-for="t in presetTypes" :key="t.id" :value="t.id">{{ t.name }}</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Preset</label>
+              <select class="form-select" v-model="selectedPresetId" :disabled="generatingImage">
+                <option :value="null" disabled>Select preset...</option>
+                <option v-for="p in filteredPresets" :key="p.id" :value="p.id">
+                  {{ p.name }}
+                </option>
+              </select>
+            </div>
           </div>
 
-          <div class="form-group">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-              <label class="form-label" style="margin-bottom: 0;">Description</label>
-              <div style="display: flex; gap: 6px;">
-                <button class="btn btn-secondary btn-sm" @click="saveDescription" :disabled="generatingPrompt || !description.trim()" title="Save description">
-                  &#9776; Save
-                </button>
-                <button class="btn btn-secondary btn-sm" @click="openDescModal" :disabled="generatingPrompt" title="Load saved">
-                  &#128194; Saved
-                </button>
-              </div>
+          <div class="form-group" style="margin-top: 12px;">
+            <label class="form-label">Recommend Preset</label>
+            <div style="display: flex; gap: 8px;">
+              <input class="form-input" v-model="recommendDesc" placeholder="Describe what you want..." :disabled="recommending || generatingImage" style="flex: 1;" />
+              <button class="btn btn-secondary" @click="recommendPreset" :disabled="recommending || !recommendDesc.trim()">
+                {{ recommending ? '...' : 'Recommend' }}
+              </button>
             </div>
-
-            <div style="display: flex; gap: 8px; margin-top: 8px;">
-              <textarea class="form-textarea" v-model="description" rows="3" placeholder="A glowing magic sword..." :disabled="generatingPrompt"></textarea>
-              <div style="display: flex; flex-direction: column; gap: 4px;">
-                <button class="btn btn-secondary" @click="generatePrompt" :disabled="generatingPrompt || !description.trim()" style="white-space: nowrap;">
-                  <span v-if="generatingPrompt" style="display: inline-flex; align-items: center; gap: 6px;">
-                    <span class="spinner" style="width: 14px; height: 14px; border-width: 2px;"></span>
-                    {{ promptElapsed }}s
-                  </span>
-                  <span v-else>AI Prompt</span>
-                </button>
-                <button v-if="generatingPrompt" class="btn btn-danger btn-sm" @click="cancelPromptGeneration" style="white-space: nowrap;">Cancel</button>
-              </div>
+            <div v-if="recommendResult" style="margin-top: 8px; padding: 8px; background: var(--surface-2); border-radius: 6px; font-size: 13px;">
+              <div style="color: var(--text-bright);">{{ recommendResult.preset_name }}</div>
+              <div v-if="recommendResult.reasoning" style="color: var(--text-dim); margin-top: 4px;">{{ recommendResult.reasoning }}</div>
             </div>
           </div>
 
           <div class="form-group">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-              <label class="form-label" style="margin-bottom: 0;">Extra Prompt</label>
-              <div style="display: flex; gap: 6px;">
-                <button class="btn btn-secondary btn-sm" @click="savePrompt" :disabled="generatingPrompt || !extraPrompt.trim()" title="Save prompt">
-                  &#9776; Save
-                </button>
-                <button class="btn btn-secondary btn-sm" @click="openPromptModal" :disabled="generatingPrompt" title="Load saved">
-                  &#128194; Saved
-                </button>
-              </div>
-            </div>
-
-            <textarea ref="extraPromptEl" class="form-textarea" v-model="extraPrompt" rows="2" placeholder="Additional tags..." style="margin-top: 8px; resize: none; overflow: hidden;" :disabled="generatingPrompt" @input="autoResize"></textarea>
+            <label class="form-label">Description</label>
+            <textarea class="form-textarea" v-model="description" rows="4" placeholder="Describe what to add or change in the image..." :disabled="generatingImage"></textarea>
           </div>
 
           <div class="form-group">
-            <label class="form-label">Extra Negative</label>
-            <input class="form-input" v-model="extraNegativePrompt" placeholder="Additional negative tags..." :disabled="generatingPrompt" />
+            <label class="form-label">Negative</label>
+            <textarea class="form-textarea" v-model="negative" rows="2" placeholder="What should NOT be in the image..." :disabled="generatingImage"></textarea>
           </div>
 
-          <button class="btn btn-primary" style="width: 100%; justify-content: center; padding: 12px;" @click="generateImage" :disabled="generatingImage || generatingPrompt || !selectedPresetId">
-            {{ generatingImage ? 'Generating...' : 'Generate Image' }}
+          <button class="btn btn-primary" style="width: 100%; justify-content: center; padding: 12px;" @click="generateImage" :disabled="generatingImage || !selectedPresetId">
+            <span v-if="generatingImage" style="display: inline-flex; align-items: center; gap: 6px;">
+              <span class="spinner" style="width: 14px; height: 14px; border-width: 2px;"></span>
+              {{ generationStage === 'prompt' ? 'Generating prompt...' : 'Generating image...' }}
+            </span>
+            <span v-else>Generate Image</span>
           </button>
         </div>
       </div>
@@ -454,7 +371,7 @@ onUnmounted(() => {
         <div class="generate-image-area">
           <div v-if="generatingImage || upscaling || upscalingX2" style="text-align: center;">
             <span class="spinner" style="width: 32px; height: 32px; border-width: 3px;"></span>
-            <p style="margin-top: 12px; color: var(--text-dim);">{{ upscalingX2 ? 'Upscaling x2...' : upscaling ? 'Upscaling to full resolution...' : 'Generating image...' }}</p>
+            <p style="margin-top: 12px; color: var(--text-dim);">{{ upscalingX2 ? 'Upscaling x2...' : upscaling ? 'Upscaling to full resolution...' : generationStage === 'prompt' ? 'Generating prompt...' : 'Generating image...' }}</p>
           </div>
           <div v-else-if="generatedImage" style="width: 100%; padding: 12px;">
             <div v-if="isPreview && previewMode" class="status status-info" style="margin-bottom: 8px; text-align: center;">
@@ -479,54 +396,6 @@ onUnmounted(() => {
           <summary>Generation Info</summary>
           <pre style="white-space: pre-wrap; word-break: break-word; overflow-wrap: break-word;">{{ formattedGenInfo }}</pre>
         </details>
-      </div>
-    </div>
-
-    <!-- Saved Descriptions Modal -->
-    <div v-if="showDescModal" class="modal-overlay" @click.self="showDescModal = false">
-      <div class="modal">
-        <div class="modal-header">
-          <h2 class="modal-title">Saved Descriptions</h2>
-          <button class="modal-close" @click="showDescModal = false">&times;</button>
-        </div>
-        <div v-if="savedDescriptions.length === 0" style="color: var(--text-dim); text-align: center; padding: 24px;">
-          No saved descriptions yet
-        </div>
-        <div v-else class="saved-modal-list">
-          <div v-for="s in descPaginated" :key="s.id" class="saved-modal-item">
-            <div class="saved-modal-text" @click="useDescription(s.text)">{{ s.text }}</div>
-            <button class="btn btn-danger btn-sm" @click="deleteDescription(s.id)" title="Delete">&times;</button>
-          </div>
-        </div>
-        <div v-if="descTotalPages > 1" class="pager">
-          <button class="btn btn-secondary btn-sm" :disabled="descPage <= 1" @click="descPage--">&laquo;</button>
-          <span class="pager-info">{{ descPage }} / {{ descTotalPages }}</span>
-          <button class="btn btn-secondary btn-sm" :disabled="descPage >= descTotalPages" @click="descPage++">&raquo;</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Saved Prompts Modal -->
-    <div v-if="showPromptModal" class="modal-overlay" @click.self="showPromptModal = false">
-      <div class="modal">
-        <div class="modal-header">
-          <h2 class="modal-title">Saved Prompts</h2>
-          <button class="modal-close" @click="showPromptModal = false">&times;</button>
-        </div>
-        <div v-if="savedPrompts.length === 0" style="color: var(--text-dim); text-align: center; padding: 24px;">
-          No saved prompts yet
-        </div>
-        <div v-else class="saved-modal-list">
-          <div v-for="s in promptPaginated" :key="s.id" class="saved-modal-item">
-            <div class="saved-modal-text" @click="usePrompt(s.text)">{{ s.text }}</div>
-            <button class="btn btn-danger btn-sm" @click="deletePrompt(s.id)" title="Delete">&times;</button>
-          </div>
-        </div>
-        <div v-if="promptTotalPages > 1" class="pager">
-          <button class="btn btn-secondary btn-sm" :disabled="promptPage <= 1" @click="promptPage--">&laquo;</button>
-          <span class="pager-info">{{ promptPage }} / {{ promptTotalPages }}</span>
-          <button class="btn btn-secondary btn-sm" :disabled="promptPage >= promptTotalPages" @click="promptPage++">&raquo;</button>
-        </div>
       </div>
     </div>
   </div>

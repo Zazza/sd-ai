@@ -21,11 +21,8 @@ const backendLabel = {
 const connectionForm = reactive({
   llm_url: '',
   sd_url: '',
-  sd_prompt_model: '',
-  vision_model: '',
   llm_backend: 'lmstudio',
   llm_keep_alive: '5m',
-  llm_num_ctx: '4096',
   llm_num_gpu: '0',
   llm_max_tokens: '256',
 })
@@ -44,6 +41,28 @@ const llmError = ref('')
 const connectionLLMModels = ref([])
 const connectionLLMLoading = ref(false)
 
+const generateModel = ref('')
+const analyzeModel = ref('')
+
+const generateParams = reactive({
+  temperature: 0.4,
+  num_ctx: 4096,
+  num_predict: 256,
+  top_p: 0.9,
+  num_thread: 0,
+})
+
+const analyzeParams = reactive({
+  temperature: 0.4,
+  num_ctx: 4096,
+  num_predict: 256,
+  top_p: 0.9,
+  num_thread: 0,
+})
+
+const llmParamsSaved = ref(false)
+const llmParamsError = ref('')
+
 const kidsMode = ref(false)
 const showPinModal = ref(false)
 const pinMode = ref('set')
@@ -57,6 +76,10 @@ const generationForm = reactive({
 const generationSaved = ref(false)
 const generationError = ref('')
 
+const promptInstruction = ref('')
+const promptInstructionSaved = ref(false)
+const promptInstructionError = ref('')
+
 watch(() => connectionForm.llm_backend, (newVal, oldVal) => {
   if (oldVal && defaultURLs[oldVal] && connectionForm.llm_url === defaultURLs[oldVal]) {
     connectionForm.llm_url = defaultURLs[newVal] || defaultURLs.lmstudio
@@ -69,18 +92,28 @@ async function loadSettings() {
     const settings = await api.getSettings()
     connectionForm.llm_url = settings.llm_url || ''
     connectionForm.sd_url = settings.sd_url || ''
-    connectionForm.sd_prompt_model = settings.sd_prompt_model || ''
-    connectionForm.vision_model = settings.vision_model || ''
     connectionForm.llm_backend = settings.llm_backend || 'lmstudio'
     connectionForm.llm_keep_alive = settings.llm_keep_alive || '5m'
-    connectionForm.llm_num_ctx = settings.llm_num_ctx || '4096'
     connectionForm.llm_num_gpu = settings.llm_num_gpu || '0'
     connectionForm.llm_max_tokens = settings.llm_max_tokens || '256'
+    generateModel.value = settings.llm_generate_model || settings.sd_prompt_model || ''
+    analyzeModel.value = settings.llm_analyze_model || settings.vision_model || ''
+    generateParams.temperature = parseFloat(settings.llm_generate_temperature) || 0.4
+    generateParams.num_ctx = parseInt(settings.llm_generate_num_ctx) || 4096
+    generateParams.num_predict = parseInt(settings.llm_generate_num_predict) || 256
+    generateParams.top_p = parseFloat(settings.llm_generate_top_p) || 0.9
+    generateParams.num_thread = parseInt(settings.llm_generate_num_thread) || 0
+    analyzeParams.temperature = parseFloat(settings.llm_analyze_temperature) || 0.4
+    analyzeParams.num_ctx = parseInt(settings.llm_analyze_num_ctx) || 4096
+    analyzeParams.num_predict = parseInt(settings.llm_analyze_num_predict) || 256
+    analyzeParams.top_p = parseFloat(settings.llm_analyze_top_p) || 0.9
+    analyzeParams.num_thread = parseInt(settings.llm_analyze_num_thread) || 0
     loadConnectionLLMModels()
     kidsMode.value = await api.isKidsModeActive()
     generationForm.preview_mode = settings.preview_mode === 'true'
     generationForm.preview_width = parseInt(settings.preview_width) || 512
     generationForm.preview_height = parseInt(settings.preview_height) || 512
+    promptInstruction.value = settings.sd_prompt_instruction || ''
   } catch {}
 }
 
@@ -103,17 +136,38 @@ async function saveConnection() {
     await api.updateSettings({
       llm_url: connectionForm.llm_url,
       sd_url: connectionForm.sd_url,
-      sd_prompt_model: connectionForm.sd_prompt_model,
-      vision_model: connectionForm.vision_model,
       llm_backend: connectionForm.llm_backend,
       llm_keep_alive: String(connectionForm.llm_keep_alive),
-      llm_num_ctx: String(connectionForm.llm_num_ctx),
       llm_num_gpu: String(connectionForm.llm_num_gpu),
       llm_max_tokens: String(connectionForm.llm_max_tokens),
+      llm_generate_model: generateModel.value,
+      llm_analyze_model: analyzeModel.value,
     })
     connectionSaved.value = true
   } catch (e) {
     connectionError.value = String(e)
+  }
+}
+
+async function saveLLMParams() {
+  llmParamsSaved.value = false
+  llmParamsError.value = ''
+  try {
+    await api.updateSettings({
+      llm_generate_temperature: String(generateParams.temperature),
+      llm_generate_num_ctx: String(generateParams.num_ctx),
+      llm_generate_num_predict: String(generateParams.num_predict),
+      llm_generate_top_p: String(generateParams.top_p),
+      llm_generate_num_thread: String(generateParams.num_thread),
+      llm_analyze_temperature: String(analyzeParams.temperature),
+      llm_analyze_num_ctx: String(analyzeParams.num_ctx),
+      llm_analyze_num_predict: String(analyzeParams.num_predict),
+      llm_analyze_top_p: String(analyzeParams.top_p),
+      llm_analyze_num_thread: String(analyzeParams.num_thread),
+    })
+    llmParamsSaved.value = true
+  } catch (e) {
+    llmParamsError.value = String(e)
   }
 }
 
@@ -192,6 +246,17 @@ async function saveGeneration() {
   }
 }
 
+async function savePromptInstruction() {
+  promptInstructionSaved.value = false
+  promptInstructionError.value = ''
+  try {
+    await api.updateSettings({ sd_prompt_instruction: promptInstruction.value })
+    promptInstructionSaved.value = true
+  } catch (e) {
+    promptInstructionError.value = String(e)
+  }
+}
+
 onMounted(loadSettings)
 </script>
 
@@ -207,6 +272,7 @@ onMounted(loadSettings)
       <button class="tab" :class="{ active: activeTab === 'llm' }" @click="switchTab('llm')">LLM</button>
       <button class="tab" :class="{ active: activeTab === 'safety' }" @click="switchTab('safety')">Safety</button>
       <button class="tab" :class="{ active: activeTab === 'generation' }" @click="switchTab('generation')">Generation</button>
+      <button class="tab" :class="{ active: activeTab === 'prompt' }" @click="switchTab('prompt')">Prompt</button>
     </div>
 
     <!-- Connection Tab -->
@@ -229,19 +295,32 @@ onMounted(loadSettings)
       </div>
 
       <div class="form-group" v-if="connectionForm.llm_backend !== 'llamacpp'">
-        <label class="form-label">SD Prompt Model (model for prompt generation)</label>
-        <select class="form-input" v-model="connectionForm.sd_prompt_model">
-          <option value="default">default</option>
-          <option v-for="m in connectionLLMModels" :key="m.id" :value="m.id">{{ m.id }}</option>
-        </select>
+        <label class="form-label">Model for Generate</label>
+        <div style="display: flex; gap: 8px;">
+          <select class="form-input" v-model="generateModel" style="flex: 1;">
+            <option value="">default</option>
+            <option v-for="m in connectionLLMModels" :key="m.id" :value="m.id">{{ m.id }}</option>
+          </select>
+          <button class="btn btn-secondary btn-sm" @click="loadConnectionLLMModels" :disabled="connectionLLMLoading">
+            {{ connectionLLMLoading ? '...' : 'Refresh' }}
+          </button>
+        </div>
       </div>
 
       <div class="form-group" v-if="connectionForm.llm_backend !== 'llamacpp'">
-        <label class="form-label">Vision Model (model for image analysis)</label>
-        <select class="form-input" v-model="connectionForm.vision_model">
-          <option value="">Same as SD Prompt Model</option>
-          <option v-for="m in connectionLLMModels" :key="m.id" :value="m.id">{{ m.id }}</option>
-        </select>
+        <label class="form-label">Model for Analyze</label>
+        <div style="display: flex; gap: 8px;">
+          <select class="form-input" v-model="analyzeModel" style="flex: 1;">
+            <option value="">Same as Generate</option>
+            <option v-for="m in connectionLLMModels" :key="m.id" :value="m.id">{{ m.id }}</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-group" v-if="connectionForm.llm_backend === 'llamacpp'">
+        <div style="color: var(--text-dim); font-size: 13px; padding: 8px; background: var(--surface-2); border-radius: 6px;">
+          llama.cpp uses a single loaded model. Model selection is not available.
+        </div>
       </div>
 
       <div class="form-group">
@@ -259,10 +338,6 @@ onMounted(loadSettings)
         <div class="form-group">
           <label class="form-label">Keep Alive</label>
           <input class="form-input" v-model="connectionForm.llm_keep_alive" placeholder="5m" />
-        </div>
-        <div class="form-group">
-          <label class="form-label">Context Size (num_ctx)</label>
-          <input class="form-input" type="number" v-model="connectionForm.llm_num_ctx" placeholder="4096" />
         </div>
         <div class="form-group">
           <label class="form-label">GPU Layers (num_gpu)</label>
@@ -330,6 +405,70 @@ onMounted(loadSettings)
       <button class="btn btn-secondary" style="margin-top: 16px;" @click="loadLLM" :disabled="llmLoading">
         {{ llmLoading ? 'Loading...' : 'Refresh' }}
       </button>
+
+      <div class="card" style="margin-top: 16px;">
+        <h3 style="color: var(--text-bright); margin-bottom: 16px;">LLM Parameters</h3>
+        <div v-if="llmParamsSaved" class="status status-success" style="margin-bottom: 16px;">Parameters saved.</div>
+        <div v-if="llmParamsError" class="status status-error" style="margin-bottom: 16px;">{{ llmParamsError }}</div>
+
+        <h4 style="color: var(--text-bright); margin: 16px 0 8px; font-size: 14px;">Generate Parameters</h4>
+        <div class="form-row-2">
+          <div class="form-group">
+            <label class="form-label">Temperature</label>
+            <input class="form-input" type="number" v-model.number="generateParams.temperature" step="0.1" min="0" max="2" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Context Size (num_ctx)</label>
+            <input class="form-input" type="number" v-model.number="generateParams.num_ctx" step="512" min="512" max="32768" />
+          </div>
+        </div>
+        <div class="form-row-2">
+          <div class="form-group">
+            <label class="form-label">Max Predict (num_predict)</label>
+            <input class="form-input" type="number" v-model.number="generateParams.num_predict" min="32" max="8192" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Top P</label>
+            <input class="form-input" type="number" v-model.number="generateParams.top_p" step="0.05" min="0" max="1" />
+          </div>
+        </div>
+        <div class="form-row-2">
+          <div class="form-group">
+            <label class="form-label">Threads (0=auto)</label>
+            <input class="form-input" type="number" v-model.number="generateParams.num_thread" min="0" max="64" />
+          </div>
+        </div>
+
+        <h4 style="color: var(--text-bright); margin: 16px 0 8px; font-size: 14px;">Analyze Parameters</h4>
+        <div class="form-row-2">
+          <div class="form-group">
+            <label class="form-label">Temperature</label>
+            <input class="form-input" type="number" v-model.number="analyzeParams.temperature" step="0.1" min="0" max="2" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Context Size (num_ctx)</label>
+            <input class="form-input" type="number" v-model.number="analyzeParams.num_ctx" step="512" min="512" max="32768" />
+          </div>
+        </div>
+        <div class="form-row-2">
+          <div class="form-group">
+            <label class="form-label">Max Predict (num_predict)</label>
+            <input class="form-input" type="number" v-model.number="analyzeParams.num_predict" min="32" max="8192" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Top P</label>
+            <input class="form-input" type="number" v-model.number="analyzeParams.top_p" step="0.05" min="0" max="1" />
+          </div>
+        </div>
+        <div class="form-row-2">
+          <div class="form-group">
+            <label class="form-label">Threads (0=auto)</label>
+            <input class="form-input" type="number" v-model.number="analyzeParams.num_thread" min="0" max="64" />
+          </div>
+        </div>
+
+        <button class="btn btn-primary" @click="saveLLMParams" style="margin-top: 8px;">Save Parameters</button>
+      </div>
     </div>
 
     <!-- Safety Tab -->
@@ -386,6 +525,20 @@ onMounted(loadSettings)
       </template>
 
       <button class="btn btn-primary" @click="saveGeneration">Save Generation Settings</button>
+    </div>
+
+    <!-- Prompt Tab -->
+    <div v-if="activeTab === 'prompt'" class="card">
+      <h3 style="color: var(--text-bright); margin-bottom: 16px;">SD Prompt Instruction</h3>
+      <div v-if="promptInstructionSaved" class="status status-success" style="margin-bottom: 16px;">Instruction saved.</div>
+      <div v-if="promptInstructionError" class="status status-error" style="margin-bottom: 16px;">{{ promptInstructionError }}</div>
+      <div style="color: var(--text-dim); font-size: 13px; margin-bottom: 12px; line-height: 1.5;">
+        This instruction is sent to the LLM when generating SD prompts. It defines how the LLM should merge your preset with your description into a valid Stable Diffusion prompt. Edit carefully.
+      </div>
+      <div class="form-group">
+        <textarea class="form-textarea" v-model="promptInstruction" rows="16" style="font-family: monospace; font-size: 12px; line-height: 1.5;"></textarea>
+      </div>
+      <button class="btn btn-primary" @click="savePromptInstruction">Save Instruction</button>
     </div>
 
     <PinModal v-if="showPinModal" :mode="pinMode" :error="pinError" @confirm="onPinConfirm" @cancel="onPinCancel" />

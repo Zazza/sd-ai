@@ -13,11 +13,15 @@ export function CreateDescription(arg1:string):Promise<preset.SavedDescription>;
 
 export function CreatePreset(arg1:preset.Preset):Promise<preset.Preset>;
 
+export function CreatePresetType(arg1:preset.PresetType):Promise<preset.PresetType>;
+
 export function CreatePrompt(arg1:string):Promise<preset.SavedPrompt>;
 
 export function DeleteDescription(arg1:number):Promise<void>;
 
 export function DeletePreset(arg1:number):Promise<void>;
+
+export function DeletePresetType(arg1:number):Promise<void>;
 
 export function DeletePrompt(arg1:number):Promise<void>;
 
@@ -25,13 +29,19 @@ export function ExportPresets(arg1:Array<number>):Promise<string>;
 
 export function GenerateImage(arg1:main.GenerateImageParams):Promise<main.GenerateImageResult>;
 
-export function GenerateSDPrompt(arg1:string,arg2:string):Promise<string>;
+export function GenerateSDPrompt(arg1:main.GenerateSDPromptParams):Promise<main.GenerateSDPromptResult>;
+
+export function GetAllTags():Promise<Array<string>>;
 
 export function GetLLMModels():Promise<Array<llm.LLMModel>>;
 
 export function GetLastImage():Promise<main.GenerateImageResult>;
 
 export function GetPreset(arg1:number):Promise<preset.Preset>;
+
+export function GetPresetType(arg1:number):Promise<preset.PresetType>;
+
+export function GetSDLoRAs():Promise<Array<sd.LoRA>>;
 
 export function GetSDModels():Promise<Array<sd.SDModel>>;
 
@@ -51,6 +61,8 @@ export function IsKidsModeActive():Promise<boolean>;
 
 export function ListDescriptions():Promise<Array<preset.SavedDescription>>;
 
+export function ListPresetTypes():Promise<Array<preset.PresetType>>;
+
 export function ListPresets():Promise<Array<preset.Preset>>;
 
 export function ListPresetsByType(arg1:string):Promise<Array<preset.Preset>>;
@@ -61,14 +73,20 @@ export function OpenImportFile():Promise<main.ImportPreview>;
 
 export function ReadImageFile():Promise<string>;
 
+export function RecommendPreset(arg1:string):Promise<main.RecommendPresetResult>;
+
 export function SaveImage(arg1:string,arg2:string):Promise<string>;
 
 export function SetKidsMode(arg1:boolean,arg2:string):Promise<void>;
 
 export function UpdatePreset(arg1:preset.Preset):Promise<preset.Preset>;
 
+export function UpdatePresetType(arg1:preset.PresetType):Promise<preset.PresetType>;
+
 export function UpdateSettings(arg1:Record<string, string>):Promise<void>;
 
 export function UpscaleImage(arg1:main.UpscaleImageParams):Promise<main.GenerateImageResult>;
 
 export function UpscalePreview(arg1:main.UpscalePreviewParams):Promise<main.GenerateImageResult>;
+
+export function ValidateImportModels(arg1:Array<main.PresetData>):Promise<Array<main.ValidationWarning>>;

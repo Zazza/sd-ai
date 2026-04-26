@@ -25,12 +25,17 @@ Both services must be reachable from the machine running SD Studio. If they run 
 
 ## Features
 
-- Generate SD prompts via LLM from text descriptions (any language)
+- **Smart merge prompt generation** — describe what you want in natural language, LLM merges your description with the preset into a proper SD prompt
+- **Preset recommendation** — LLM analyzes your description and recommends the best matching preset from your library
+- **Editable SD prompt instruction** — customize how LLM formats SD prompts via Settings > Prompt tab
 - Generate images through Stable Diffusion WebUI API
-- Manage presets (generation parameters: sampler, steps, cfg_scale, size, seed)
-- Configure LLM and SD API connections (URL, models)
+- Manage presets (generation parameters: sampler, steps, cfg_scale, size, seed, LoRA)
+- Preset types with tags for organization
+- Configure LLM and SD API connections (URL, models, backend-specific params)
 - Save descriptions for reuse
 - Kids Mode with content filtering and PIN protection
+- Image analysis via vision LLM (extract SD tags from existing images)
+- Preview mode with upscale to full resolution
 
 ## Requirements
 
@@ -93,6 +98,7 @@ The application connects to external services configured via the settings UI:
 | `sd_url` | `http://localhost:7860` | Stable Diffusion WebUI API URL |
 | `llm_model` | — | LLM model for prompt generation |
 | `sd_prompt_model` | — | LLM model for system prompt |
+| `sd_prompt_instruction` | built-in default | Instruction sent to LLM for SD prompt formatting (editable in Settings > Prompt) |
 
 Settings are stored in SQLite (`data/presets.db`) and persist across reinstalls.
 
@@ -157,6 +163,31 @@ Prioritized findings from code review (2026-04-24).
 | **P1** | 5, 6, 8, 9 | Architecture improvements |
 | **P2** | 7, 11, 12, 13 | Tests, UX, migrations |
 | **P3** | 10, 14, 15, 16 | Ops, quality tooling |
+
+## Generation Flow
+
+```
+User selects preset + writes description
+         │
+         ▼
+  ┌─ Has description? ─┐
+  No                    Yes
+  │                     │
+  │              LLM Smart Merge
+  │         (preset prompt + description
+  │          + sd_prompt_instruction)
+  │                     │
+  │              Merged SD prompt
+  │                     │
+  └───────┬─────────────┘
+          ▼
+   Generate Image via SD API
+          │
+          ▼
+   Preview → Upscale → Download
+```
+
+Preset recommendation: user describes what they want → LLM selects best preset from library + suggests additional tags.
 
 ## License
 

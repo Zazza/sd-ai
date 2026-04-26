@@ -8,6 +8,9 @@ import {
   SetKidsMode, IsKidsModeActive,
   ExportPresets, OpenImportFile, ImportPresets,
   AnalyzeImage, ReadImageFile,
+  ListPresetTypes, GetPresetType, CreatePresetType, UpdatePresetType, DeletePresetType,
+  GetAllTags, GetSDLoRAs, ValidateImportModels,
+  RecommendPreset,
 } from './wailsjs/go/main/App.js'
 
 export const api = {
@@ -16,7 +19,7 @@ export const api = {
   createPreset: (data) => CreatePreset(data),
   updatePreset: (id, data) => UpdatePreset({ ...data, id }),
   deletePreset: (id) => DeletePreset(id),
-  generateSdPrompt: (description, presetType) => GenerateSDPrompt(description, presetType),
+  generateSdPrompt: (params) => GenerateSDPrompt(params),
   generateImage: (presetId, extraPrompt, extraNegativePrompt) =>
     GenerateImage({ preset_id: presetId, extra_prompt: extraPrompt, extra_negative_prompt: extraNegativePrompt }),
   upscalePreview: (previewImageBase64, presetId, seed) =>
@@ -47,4 +50,13 @@ export const api = {
   importPresets: (items) => ImportPresets(items),
   analyzeImage: (imageBase64) => AnalyzeImage(imageBase64),
   readImageFile: () => ReadImageFile(),
+  listPresetTypes: () => ListPresetTypes(),
+  getPresetType: (id) => GetPresetType(id),
+  createPresetType: (data) => CreatePresetType(data),
+  updatePresetType: (data) => UpdatePresetType(data),
+  deletePresetType: (id) => DeletePresetType(id),
+  getAllTags: () => GetAllTags(),
+  getLoRAs: () => GetSDLoRAs(),
+  validateImportModels: (items) => ValidateImportModels(items),
+  recommendPreset: (description) => RecommendPreset(description),
 }

@@ -53,9 +53,40 @@ export namespace main {
 	        this.is_preview = source["is_preview"];
 	    }
 	}
+	export class GenerateSDPromptParams {
+	    preset_id: number;
+	    description: string;
+	    negative: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new GenerateSDPromptParams(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.preset_id = source["preset_id"];
+	        this.description = source["description"];
+	        this.negative = source["negative"];
+	    }
+	}
+	export class GenerateSDPromptResult {
+	    prompt: string;
+	    negative_prompt: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new GenerateSDPromptResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.prompt = source["prompt"];
+	        this.negative_prompt = source["negative_prompt"];
+	    }
+	}
 	export class PresetData {
 	    name: string;
 	    preset_type: string;
+	    type_name: string;
 	    prompt: string;
 	    negative_prompt: string;
 	    sampler: string;
@@ -75,6 +106,8 @@ export namespace main {
 	    hires_denoising_strength?: number;
 	    hires_upscaler: string;
 	    vae: string;
+	    tags: string;
+	    loras: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new PresetData(source);
@@ -84,6 +117,7 @@ export namespace main {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.name = source["name"];
 	        this.preset_type = source["preset_type"];
+	        this.type_name = source["type_name"];
 	        this.prompt = source["prompt"];
 	        this.negative_prompt = source["negative_prompt"];
 	        this.sampler = source["sampler"];
@@ -103,6 +137,8 @@ export namespace main {
 	        this.hires_denoising_strength = source["hires_denoising_strength"];
 	        this.hires_upscaler = source["hires_upscaler"];
 	        this.vae = source["vae"];
+	        this.tags = source["tags"];
+	        this.loras = source["loras"];
 	    }
 	}
 	export class ImportPreview {
@@ -138,6 +174,24 @@ export namespace main {
 		}
 	}
 	
+	export class RecommendPresetResult {
+	    preset_id: number;
+	    preset_name: string;
+	    extra_prompt: string;
+	    reasoning: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new RecommendPresetResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.preset_id = source["preset_id"];
+	        this.preset_name = source["preset_name"];
+	        this.extra_prompt = source["extra_prompt"];
+	        this.reasoning = source["reasoning"];
+	    }
+	}
 	export class ServiceInfo {
 	    available: boolean;
 	    model: string;
@@ -218,6 +272,20 @@ export namespace main {
 	        this.denoising_strength = source["denoising_strength"];
 	    }
 	}
+	export class ValidationWarning {
+	    preset_name: string;
+	    warnings: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new ValidationWarning(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.preset_name = source["preset_name"];
+	        this.warnings = source["warnings"];
+	    }
+	}
 
 }
 
@@ -246,6 +314,9 @@ export namespace preset {
 	    hires_denoising_strength?: number;
 	    hires_upscaler: string;
 	    vae: string;
+	    type_id?: number;
+	    tags: string;
+	    loras: string;
 	    created_at: string;
 	    updated_at: string;
 	
@@ -277,8 +348,31 @@ export namespace preset {
 	        this.hires_denoising_strength = source["hires_denoising_strength"];
 	        this.hires_upscaler = source["hires_upscaler"];
 	        this.vae = source["vae"];
+	        this.type_id = source["type_id"];
+	        this.tags = source["tags"];
+	        this.loras = source["loras"];
 	        this.created_at = source["created_at"];
 	        this.updated_at = source["updated_at"];
+	    }
+	}
+	export class PresetType {
+	    id: number;
+	    name: string;
+	    description: string;
+	    sort_order: number;
+	    created_at: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new PresetType(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.description = source["description"];
+	        this.sort_order = source["sort_order"];
+	        this.created_at = source["created_at"];
 	    }
 	}
 	export class SavedDescription {
@@ -318,6 +412,20 @@ export namespace preset {
 
 export namespace sd {
 	
+	export class LoRA {
+	    name: string;
+	    path: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new LoRA(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.path = source["path"];
+	    }
+	}
 	export class SDModel {
 	    title: string;
 	    model_name: string;

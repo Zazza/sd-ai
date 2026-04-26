@@ -23,6 +23,23 @@ type Config struct {
 	DefaultHeight      int
 }
 
+const DefaultSDPromptInstruction = `You are an expert Stable Diffusion prompt engineer. Your task is to merge a BASE PROMPT (from a preset) with a user DESCRIPTION into a single optimized SD prompt.
+
+RULES:
+1. The BASE PROMPT contains quality tags, subject definition, and style — treat it as the FOUNDATION
+2. Extract from user DESCRIPTION: subjects, characters, clothing, poses, backgrounds, lighting, mood, style changes
+3. MERGE intelligently: integrate user elements INTO the base prompt structure, not append at the end
+4. Token order matters: quality tags first, then main subject, then details, then background/atmosphere
+5. Use SD weighting syntax: (keyword:1.2) for emphasis, (keyword:0.8) for de-emphasis
+6. Use BREAK to separate major concept sections if needed
+7. Keep total prompt under 75 tokens per chunk (SD processes in 75-token blocks)
+8. For negative prompt: merge base negative with user-specified negatives, remove duplicates
+9. Translate any non-English text to English
+10. Do NOT invent details not present in the base prompt or user description
+
+OUTPUT FORMAT — valid JSON only, no markdown:
+{"prompt": "merged positive prompt here", "negative_prompt": "merged negative prompt here"}`
+
 const KidsModePrompt = `
 
 SAFETY RULES (mandatory):
@@ -51,27 +68,28 @@ func Load() *Config {
 		SDPromptModel: env("SD_PROMPT_MODEL", "default"),
 		Port:          env("PORT", "8080"),
 		DBPath:        dbPath,
-		SystemPrompt: `You are an SD prompt generator. Output ONLY comma-separated tags. Nothing else.
+		SystemPrompt: `You convert user descriptions into SD (Stable Diffusion) comma-separated tags.
+You receive a STYLE REFERENCE (read-only context) and user descriptions in labeled fields.
 
-MANDATORY:
-- If the input is NOT in English — translate it to English first, then generate tags
-- Start with: masterpiece, best quality, highly detailed
-- Then add subject, pose, clothing, expression, lighting, background tags
-- Use (keyword:1.2) for emphasis
-- Do NOT write any analysis, explanation, commentary, headers, lists, or thinking
-- Do NOT write "Let me", "Here is", "Output:", "I'll", or anything except tags
-- Your entire response must be a single line of comma-separated tags starting with "masterpiece"
+ABSOLUTE RULES:
+1. Translate non-English text to English accurately — preserve the EXACT meaning
+2. Output ONLY tags derived from the user's field content
+3. Do NOT output field labels or category names as tags
+4. Do NOT copy tags from the STYLE REFERENCE
+5. Do NOT add quality tags or subject tags — they come from preset
+6. Do NOT invent details not present in user input
+7. If NEGATIVE field is empty, output "negative_prompt": ""
+8. Skip fields with no user content
 
-STYLE TAGS by [Type:]:
-- realistic: RAW photo, 8k uhd, DSLR, film grain, natural skin texture, professional photography, bokeh, detailed pores
-- anime: anime style, cel shading, clean lineart, detailed anime eyes, vibrant colors, anime coloring
-- cartoon: cartoon style, bold outlines, flat colors, stylized, colorful illustration, exaggerated features
-- adult: NSFW, detailed body, anatomical detail, sensual lighting, detailed skin texture
+CHARACTERS field — IMPORTANT:
+- These are ADDITIONAL characters that must appear ALONGSIDE the main subject from the preset
+- Describe each character fully for SD: species, size, pose, action, expression
+- Use high emphasis: (bear:1.3), (large angry bear:1.2)
+- Example: user writes "медведь" → output "(angry bear:1.3), large brown bear, on all fours, growling, facing viewer"
+- This ensures SD treats it as a separate visible entity, not a background detail
 
-EXAMPLES:
-"девушка в лесу на закате" → masterpiece, best quality, highly detailed, 1girl, solo, standing in forest, sunset backlight, golden hour, volumetric rays through trees, detailed foliage, depth of field, cinematic lighting, warm palette, (detailed face:1.2), wind-blown hair, long hair, serene expression, natural environment, tranquil
-"anime warrior with sword" → masterpiece, best quality, highly detailed, anime style, 1boy, warrior, holding sword, dynamic pose, detailed armor, flowing cape, intense expression, detailed anime eyes, vibrant colors, dramatic lighting, cel shading
-"cartoon cat playing piano" → masterpiece, best quality, highly detailed, cartoon style, cute cat, sitting at piano, playing keys, cheerful, bold outlines, flat colors, colorful, musical notes, whimsical, playful pose, fun`,
+OUTPUT — valid JSON only, no markdown, no explanation:
+{"prompt": "tag1, tag2", "negative_prompt": "neg1, neg2"}`,
 		DefaultNegative: "blurry, low quality, watermark, text, signature",
 		DefaultSampler:  "Euler a",
 		DefaultSteps:    20,
