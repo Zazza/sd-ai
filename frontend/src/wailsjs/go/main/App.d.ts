@@ -33,6 +33,10 @@ export function GenerateSDPrompt(arg1:main.GenerateSDPromptParams):Promise<main.
 
 export function GetAllTags():Promise<Array<string>>;
 
+export function GetDefaultAnalyzePrompts():Promise<main.AnalyzePrompts>;
+
+export function GetDefaultPromptInstruction():Promise<string>;
+
 export function GetLLMModels():Promise<Array<llm.LLMModel>>;
 
 export function GetLastImage():Promise<main.GenerateImageResult>;

@@ -16,6 +16,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -307,14 +308,26 @@ RESPONSE LENGTH: your response is limited to ~%d tokens. You MUST fit within thi
 	}
 
 	var result GenerateSDPromptResult
-	if err := json.Unmarshal([]byte(extractJSON(raw)), &result); err != nil {
+	jsonRaw := extractJSON(raw)
+	if err := json.Unmarshal([]byte(jsonRaw), &result); err != nil {
 		result = GenerateSDPromptResult{
 			Prompt:         truncateRepetitive(raw, 1000),
 			NegativePrompt: p.NegativePrompt,
 		}
+		}
+
+	if containsCyrillic(result.Prompt) {
+		result.Prompt = extractTagsFromRaw(raw)
+	}
+	if containsCyrillic(result.NegativePrompt) {
+		result.NegativePrompt = extractNegativeFromRaw(raw)
 	}
 
+	extractEmbeddedNegative(&result)
+
+	result.Prompt = stripJunk(result.Prompt)
 	result.Prompt = truncateRepetitive(result.Prompt, 1000)
+	result.NegativePrompt = stripJunk(result.NegativePrompt)
 	result.NegativePrompt = truncateRepetitive(result.NegativePrompt, 500)
 
 	if a.isKidsMode() {
@@ -323,6 +336,10 @@ RESPONSE LENGTH: your response is limited to ~%d tokens. You MUST fit within thi
 	}
 
 	return &result, nil
+}
+
+func (a *App) GetDefaultPromptInstruction() string {
+	return config.DefaultSDPromptInstruction
 }
 
 type RecommendPresetResult struct {
@@ -422,10 +439,10 @@ func (a *App) AnalyzeImage(imageBase64 string) (string, error) {
 
 	a.applyLLMConfig("analyze")
 
-	systemPrompt := `You are an SD tag extractor. Describe the given image as comma-separated Stable Diffusion tags.
-Output ONLY tags, nothing else. Start with quality tags (masterpiece, best quality, highly detailed).
-Then describe: subject, pose, clothing, expression, lighting, background, style, camera angle.
-Use (keyword:1.2) for emphasis on important elements.`
+	systemPrompt, _ := a.presets.GetSetting("analyze_system_prompt")
+	if systemPrompt == "" {
+		systemPrompt = config.DefaultAnalyzeSystemPrompt
+	}
 
 	maxTokens := 256
 	if v, err := a.presets.GetSetting("llm_max_tokens"); err == nil && v != "" {
@@ -434,12 +451,89 @@ Use (keyword:1.2) for emphasis on important elements.`
 		}
 	}
 
-	result, err := a.llm.AnalyzeImage(model, systemPrompt, imageBase64, maxTokens)
-	if err != nil {
-		return "", err
+	useChain := true
+	if v, err := a.presets.GetSetting("analyze_use_chain"); err == nil {
+		useChain = v != "false"
 	}
 
-	return result, nil
+	if !useChain {
+		prompt, _ := a.presets.GetSetting("analyze_prompt")
+		if prompt == "" {
+			prompt = config.DefaultAnalyzePrompt
+		}
+		return a.llm.AnalyzeImage(model, systemPrompt+"\n\n"+prompt, imageBase64, maxTokens)
+	}
+
+	chainPrompts := a.getAnalyzeChainPrompts()
+	messages := []llm.Message{
+		{Role: "system", Content: systemPrompt},
+		{Role: "user", Content: []llm.ContentPart{
+			{Type: "text", Text: chainPrompts[0]},
+			{Type: "image_url", ImageURL: &llm.ImageURLPart{URL: "data:image/png;base64," + imageBase64}},
+		}},
+	}
+
+	for i := 0; i < len(chainPrompts); i++ {
+		resp, err := a.llm.ChatWithMessages(model, messages, 0.4, maxTokens)
+		if err != nil {
+			if i == 0 {
+				return "", err
+			}
+			break
+		}
+
+		messages = append(messages, llm.Message{Role: "assistant", Content: resp})
+
+		if i+1 < len(chainPrompts) {
+			messages = append(messages, llm.Message{
+				Role:    "user",
+				Content: chainPrompts[i+1],
+			})
+		}
+
+		if a.ctx != nil {
+			runtime.EventsEmit(a.ctx, "analyze:step", i+1, len(chainPrompts))
+		}
+	}
+
+	lastResp := ""
+	for j := len(messages) - 1; j >= 0; j-- {
+		if messages[j].Role == "assistant" {
+			if s, ok := messages[j].Content.(string); ok {
+				lastResp = s
+			}
+			break
+		}
+	}
+
+	return llm.CleanTags(lastResp), nil
+}
+
+func (a *App) getAnalyzeChainPrompts() []string {
+	prompts := make([]string, 4)
+	for i := range prompts {
+		key := "analyze_chain_" + strconv.Itoa(i+1)
+		if v, err := a.presets.GetSetting(key); err == nil && v != "" {
+			prompts[i] = v
+		} else if i < len(config.DefaultAnalyzeChainPrompts) {
+			prompts[i] = config.DefaultAnalyzeChainPrompts[i]
+		}
+	}
+	return prompts
+}
+
+type AnalyzePrompts struct {
+	SystemPrompt string   `json:"system_prompt"`
+	SinglePrompt string   `json:"single_prompt"`
+	ChainPrompts []string `json:"chain_prompts"`
+}
+
+func (a *App) GetDefaultAnalyzePrompts() *AnalyzePrompts {
+	return &AnalyzePrompts{
+		SystemPrompt: config.DefaultAnalyzeSystemPrompt,
+		SinglePrompt: config.DefaultAnalyzePrompt,
+		ChainPrompts: config.DefaultAnalyzeChainPrompts,
+	}
 }
 
 func (a *App) ReadImageFile() (string, error) {
@@ -471,10 +565,12 @@ type GenerateImageParams struct {
 }
 
 type GenerateImageResult struct {
-	Image      any  `json:"image"`
-	Parameters any  `json:"parameters"`
-	Info       any  `json:"info"`
-	IsPreview  bool `json:"is_preview"`
+	Image                   any    `json:"image"`
+	Parameters              any    `json:"parameters"`
+	Info                    any    `json:"info"`
+	IsPreview               bool   `json:"is_preview"`
+	EffectivePrompt         string `json:"effective_prompt"`
+	EffectiveNegativePrompt string `json:"effective_negative_prompt"`
 }
 
 func (a *App) GenerateImage(params GenerateImageParams) (*GenerateImageResult, error) {
@@ -484,6 +580,9 @@ func (a *App) GenerateImage(params GenerateImageParams) (*GenerateImageResult, e
 	}
 
 	prompt := p.Prompt
+	if params.ExtraPrompt != "" {
+		prompt = params.ExtraPrompt
+	}
 	if p.Loras != "" {
 		var loras []preset.LoRAEntry
 		if err := json.Unmarshal([]byte(p.Loras), &loras); err == nil {
@@ -492,13 +591,10 @@ func (a *App) GenerateImage(params GenerateImageParams) (*GenerateImageResult, e
 			}
 		}
 	}
-	if params.ExtraPrompt != "" {
-		prompt += " BREAK " + params.ExtraPrompt
-	}
 
 	negativePrompt := p.NegativePrompt
 	if params.ExtraNegativePrompt != "" {
-		negativePrompt += ", " + params.ExtraNegativePrompt
+		negativePrompt = params.ExtraNegativePrompt
 	}
 
 	if a.isKidsMode() {
@@ -624,10 +720,12 @@ func (a *App) GenerateImage(params GenerateImageParams) (*GenerateImageResult, e
 	}
 
 	img := &GenerateImageResult{
-		Image:      result.Images[0],
-		Parameters: result.Parameters,
-		Info:       result.Info,
-		IsPreview:  isPreview,
+		Image:                   result.Images[0],
+		Parameters:              result.Parameters,
+		Info:                    result.Info,
+		IsPreview:               isPreview,
+		EffectivePrompt:         prompt,
+		EffectiveNegativePrompt: negativePrompt,
 	}
 	a.saveLastImage(result.Images[0], result.Info, isPreview)
 	return img, nil
@@ -1009,7 +1107,7 @@ func (a *App) UpdateSettings(data map[string]string) error {
 		"gen_clothing_details": true,
 		"gen_environment": true, "gen_lighting": true, "gen_negative": true,
 		"gen_extra_prompt": true, "gen_extra_negative": true,
-		"gen_type_id": true,
+		"gen_description": true, "gen_type_id": true,
 	}
 
 	for k, v := range data {
@@ -1450,6 +1548,87 @@ func (a *App) ValidateImportModels(items []PresetData) ([]ValidationWarning, err
 	return warnings, nil
 }
 
+var reCyrillicCheck = regexp.MustCompile(`[а-яА-ЯёЁ]`)
+
+func containsCyrillic(s string) bool {
+	return reCyrillicCheck.MatchString(s)
+}
+
+func extractTagsFromRaw(raw string) string {
+	var best string
+	for _, m := range reQuotedStrings.FindAllString(raw, -1) {
+		m = strings.Trim(m, `"`)
+		m = strings.TrimSpace(m)
+		if len(m) > len(best) && !strings.Contains(m, `"`) && !containsCyrillic(m) && (strings.Contains(m, ", ") || strings.Contains(m, "quality")) {
+			best = m
+		}
+	}
+	return best
+}
+
+func extractNegativeFromRaw(raw string) string {
+	jsonRaw := extractJSON(raw)
+	if jsonRaw == "" {
+		return ""
+	}
+	var obj map[string]string
+	if err := json.Unmarshal([]byte(jsonRaw), &obj); err != nil {
+		return ""
+	}
+	if np, ok := obj["negative_prompt"]; ok && !containsCyrillic(np) {
+		return np
+	}
+	return ""
+}
+
+var reJunkLabels = regexp.MustCompile(`(?i)\b(BASE (POSITIVE|NEGATIVE) PROMPT|USER DESCRIPTION|USER NEGATIVE|MERGED PROMPT|NEGATIVE[_ ]PROMPT|Translation of non-English text|translates to|Merged Prompt)\s*:\s*`)
+var reJSONFragments = regexp.MustCompile(`\{[^{}]*"(prompt|negative_prompt)"[^{}]*\}`)
+var reQuotedStrings = regexp.MustCompile(`"[^"]{0,500}"`)
+var reCyrillic = regexp.MustCompile(`[а-яА-ЯёЁ]+[^,(\[<]*,?`)
+
+func extractEmbeddedNegative(result *GenerateSDPromptResult) {
+	idx := strings.Index(result.Prompt, "negative_prompt")
+	if idx <= 0 {
+		return
+	}
+	embeddedNeg := result.Prompt[idx:]
+	result.Prompt = strings.TrimRight(result.Prompt[:idx], " ,\n\r\t")
+	embeddedNeg = strings.TrimPrefix(embeddedNeg, "negative_prompt")
+	embeddedNeg = strings.TrimLeft(embeddedNeg, `: "'`)
+	embeddedNeg = strings.TrimRight(embeddedNeg, `"}'`)
+	embeddedNeg = strings.Trim(embeddedNeg, " ,\n\r\t")
+	if embeddedNeg == "" {
+		return
+	}
+	if result.NegativePrompt != "" {
+		result.NegativePrompt = embeddedNeg + ", " + result.NegativePrompt
+	} else {
+		result.NegativePrompt = embeddedNeg
+	}
+}
+
+func stripJunk(s string) string {
+	if s == "" {
+		return s
+	}
+	for reJunkLabels.MatchString(s) {
+		s = reJunkLabels.ReplaceAllString(s, "")
+	}
+	for reJSONFragments.MatchString(s) {
+		s = reJSONFragments.ReplaceAllString(s, "")
+	}
+	for strings.Contains(s, `"prompt"`) || strings.Contains(s, `"negative_prompt"`) {
+		s = reQuotedStrings.ReplaceAllString(s, "")
+	}
+	for strings.Contains(s, "  ") {
+		s = strings.ReplaceAll(s, "  ", " ")
+	}
+	s = strings.ReplaceAll(s, ", ,", ",")
+	s = strings.ReplaceAll(s, ",,", ",")
+	s = strings.Trim(s, " ,.\n\r")
+	return s
+}
+
 func extractJSON(s string) string {
 	s = strings.TrimSpace(s)
 	s = strings.TrimPrefix(s, "```json")
@@ -1501,7 +1680,8 @@ func truncateRepetitive(s string, maxLen int) string {
 			s = s[:maxLen]
 		}
 	}
-	return strings.TrimSpace(s)
+	s = strings.TrimRight(s, " ,.")
+	return s
 }
 
 func splitCompositeSampler(sampler, scheduleType string) (string, string) {

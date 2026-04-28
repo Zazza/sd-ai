@@ -19,6 +19,22 @@ export namespace llm {
 
 export namespace main {
 	
+	export class AnalyzePrompts {
+	    system_prompt: string;
+	    single_prompt: string;
+	    chain_prompts: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new AnalyzePrompts(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.system_prompt = source["system_prompt"];
+	        this.single_prompt = source["single_prompt"];
+	        this.chain_prompts = source["chain_prompts"];
+	    }
+	}
 	export class GenerateImageParams {
 	    preset_id: number;
 	    extra_prompt: string;
@@ -40,6 +56,8 @@ export namespace main {
 	    parameters: any;
 	    info: any;
 	    is_preview: boolean;
+	    effective_prompt: string;
+	    effective_negative_prompt: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new GenerateImageResult(source);
@@ -51,6 +69,8 @@ export namespace main {
 	        this.parameters = source["parameters"];
 	        this.info = source["info"];
 	        this.is_preview = source["is_preview"];
+	        this.effective_prompt = source["effective_prompt"];
+	        this.effective_negative_prompt = source["effective_negative_prompt"];
 	    }
 	}
 	export class GenerateSDPromptParams {

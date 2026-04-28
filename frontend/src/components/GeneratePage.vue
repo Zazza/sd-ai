@@ -19,6 +19,8 @@ const savedPreview = ref(null)
 const upscaling = ref(false)
 const upscalingX2 = ref(false)
 const previewMode = ref(false)
+const effectivePrompt = ref('')
+const effectiveNegative = ref('')
 
 const generatingImage = ref(false)
 const generationStage = ref('')
@@ -35,6 +37,9 @@ let statusInterval = null
 const recommendDesc = ref('')
 const recommending = ref(false)
 const recommendResult = ref(null)
+
+const savedDescs = ref([])
+const showSavedDescs = ref(false)
 
 const filteredPresets = computed(() => {
   if (!selectedTypeId.value) return presets.value
@@ -118,6 +123,41 @@ async function recommendPreset() {
   }
 }
 
+async function sendToSD() {
+  if (!selectedPresetId.value) {
+    error.value = 'Select a preset first'
+    return
+  }
+  saveGenState()
+  generationStage.value = 'image'
+  generatingImage.value = true
+  generatedImage.value = ''
+  genInfo.value = null
+  isPreview.value = false
+  savedPreview.value = null
+  effectivePrompt.value = ''
+  effectiveNegative.value = ''
+  try {
+    const result = await api.generateImage(selectedPresetId.value, extraPrompt.value, extraNegativePrompt.value)
+    if (!result || !result.image) {
+      error.value = 'No image returned. Check preset settings (model, sampler, scheduler).'
+    } else {
+      generatedImage.value = result.image
+      genInfo.value = result.info
+      sourceImage.value = result.image
+      sourceGenInfo.value = result.info
+      isPreview.value = result.is_preview || false
+      effectivePrompt.value = result.effective_prompt || ''
+      effectiveNegative.value = result.effective_negative_prompt || ''
+    }
+  } catch (e) {
+    error.value = String(e)
+  } finally {
+    generatingImage.value = false
+    generationStage.value = ''
+  }
+}
+
 async function generateImage() {
   if (!selectedPresetId.value) {
     error.value = 'Select a preset first'
@@ -159,6 +199,8 @@ async function generateImage() {
   genInfo.value = null
   isPreview.value = false
   savedPreview.value = null
+  effectivePrompt.value = ''
+  effectiveNegative.value = ''
   try {
     const result = await api.generateImage(selectedPresetId.value, extraPrompt.value, extraNegativePrompt.value)
     if (!result || !result.image) {
@@ -169,6 +211,8 @@ async function generateImage() {
       sourceImage.value = result.image
       sourceGenInfo.value = result.info
       isPreview.value = result.is_preview || false
+      effectivePrompt.value = result.effective_prompt || ''
+      effectiveNegative.value = result.effective_negative_prompt || ''
     }
   } catch (e) {
     error.value = String(e)
@@ -246,6 +290,38 @@ async function upscaleImageX2() {
   }
 }
 
+async function loadSavedDescs() {
+  try {
+    savedDescs.value = await api.listDescriptions() || []
+  } catch (e) {
+    console.error(e)
+  }
+}
+
+async function saveDescription() {
+  if (!description.value.trim()) return
+  try {
+    await api.createDescription(description.value.trim())
+    await loadSavedDescs()
+  } catch (e) {
+    error.value = 'Save description failed: ' + String(e)
+  }
+}
+
+async function deleteDescription(id) {
+  try {
+    await api.deleteDescription(id)
+    await loadSavedDescs()
+  } catch (e) {
+    error.value = 'Delete description failed: ' + String(e)
+  }
+}
+
+function useDescription(text) {
+  description.value = text
+  showSavedDescs.value = false
+}
+
 async function downloadImage() {
   if (!generatedImage.value) return
   try {
@@ -262,6 +338,7 @@ async function downloadImage() {
 onMounted(async () => {
   loadPresets()
   checkServices()
+  loadSavedDescs()
   statusInterval = setInterval(checkServices, 30000)
   try {
     const s = await api.getSettings()
@@ -350,6 +427,19 @@ onUnmounted(() => {
           <div class="form-group">
             <label class="form-label">Description</label>
             <textarea class="form-textarea" v-model="description" rows="4" placeholder="Describe what to add or change in the image..." :disabled="generatingImage"></textarea>
+            <div style="display: flex; gap: 8px; margin-top: 6px;">
+              <button class="btn btn-sm btn-secondary" @click="saveDescription" :disabled="generatingImage || !description.trim()">Save</button>
+              <button class="btn btn-sm btn-secondary" @click="showSavedDescs = !showSavedDescs">
+                Saved {{ savedDescs.length ? '(' + savedDescs.length + ')' : '' }}
+              </button>
+            </div>
+            <div v-if="showSavedDescs && savedDescs.length" style="margin-top: 8px; max-height: 200px; overflow-y: auto;">
+              <div v-for="d in savedDescs" :key="d.id" style="display: flex; align-items: center; gap: 8px; padding: 6px 8px; background: var(--surface-2); border-radius: 6px; margin-bottom: 4px; cursor: pointer;" @click="useDescription(d.text)">
+                <span style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px;">{{ d.text }}</span>
+                <button class="btn btn-sm btn-secondary" style="padding: 2px 8px;" @click.stop="deleteDescription(d.id)">&times;</button>
+              </div>
+            </div>
+            <div v-if="showSavedDescs && !savedDescs.length" style="margin-top: 6px; color: var(--text-dim); font-size: 13px;">No saved descriptions yet</div>
           </div>
 
           <div class="form-group">
@@ -364,6 +454,23 @@ onUnmounted(() => {
             </span>
             <span v-else>Generate Image</span>
           </button>
+
+          <details style="margin-top: 8px;" class="card">
+            <summary style="cursor: pointer; color: var(--text-dim); font-size: 13px; padding: 8px;">Edit SD Prompt</summary>
+            <div style="margin-top: 8px;">
+              <div class="form-group">
+                <label class="form-label">Positive Prompt</label>
+                <textarea class="form-textarea" v-model="extraPrompt" rows="4" placeholder="SD positive prompt..." :disabled="generatingImage"></textarea>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Negative Prompt</label>
+                <textarea class="form-textarea" v-model="extraNegativePrompt" rows="2" placeholder="SD negative prompt..." :disabled="generatingImage"></textarea>
+              </div>
+              <button class="btn btn-secondary" style="width: 100%; justify-content: center;" @click="sendToSD" :disabled="generatingImage || !selectedPresetId || !extraPrompt">
+                Send to SD
+              </button>
+            </div>
+          </details>
         </div>
       </div>
 
@@ -395,6 +502,18 @@ onUnmounted(() => {
         <details v-if="genInfo" class="gen-info card">
           <summary>Generation Info</summary>
           <pre style="white-space: pre-wrap; word-break: break-word; overflow-wrap: break-word;">{{ formattedGenInfo }}</pre>
+        </details>
+
+        <details v-if="effectivePrompt" class="gen-info card">
+          <summary>Effective Prompt</summary>
+          <div style="margin-bottom: 8px;">
+            <div style="color: var(--text-dim); font-size: 11px; margin-bottom: 4px;">POSITIVE</div>
+            <div style="font-size: 12px; line-height: 1.5; word-break: break-word;">{{ effectivePrompt }}</div>
+          </div>
+          <div v-if="effectiveNegative" style="margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border);">
+            <div style="color: var(--text-dim); font-size: 11px; margin-bottom: 4px;">NEGATIVE</div>
+            <div style="font-size: 12px; line-height: 1.5; word-break: break-word;">{{ effectiveNegative }}</div>
+          </div>
         </details>
       </div>
     </div>

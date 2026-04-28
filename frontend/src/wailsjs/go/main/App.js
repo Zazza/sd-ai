@@ -58,6 +58,14 @@ export function GetAllTags() {
   return window['go']['main']['App']['GetAllTags']();
 }
 
+export function GetDefaultAnalyzePrompts() {
+  return window['go']['main']['App']['GetDefaultAnalyzePrompts']();
+}
+
+export function GetDefaultPromptInstruction() {
+  return window['go']['main']['App']['GetDefaultPromptInstruction']();
+}
+
 export function GetLLMModels() {
   return window['go']['main']['App']['GetLLMModels']();
 }

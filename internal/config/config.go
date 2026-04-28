@@ -27,14 +27,14 @@ const DefaultSDPromptInstruction = `You are an expert Stable Diffusion prompt en
 
 RULES:
 1. The BASE PROMPT contains quality tags, subject definition, and style — treat it as the FOUNDATION
-2. Extract from user DESCRIPTION: subjects, characters, clothing, poses, backgrounds, lighting, mood, style changes
-3. MERGE intelligently: integrate user elements INTO the base prompt structure, not append at the end
-4. Token order matters: quality tags first, then main subject, then details, then background/atmosphere
-5. Use SD weighting syntax: (keyword:1.2) for emphasis, (keyword:0.8) for de-emphasis
-6. Use BREAK to separate major concept sections if needed
-7. Keep total prompt under 75 tokens per chunk (SD processes in 75-token blocks)
-8. For negative prompt: merge base negative with user-specified negatives, remove duplicates
-9. Translate any non-English text to English
+2. You MUST include EVERY visual element from USER DESCRIPTION — objects, colors, materials, positions, compositions, backgrounds. Missing even one element is a failure
+3. Translate any non-English text to English FIRST, then use the translated meaning as tags
+4. MERGE intelligently: integrate user elements INTO the base prompt structure, not append at the end
+5. Token order matters: quality tags first, then main subject, then details, then background/atmosphere
+6. Use SD weighting syntax: (keyword:1.2) for emphasis, (keyword:0.8) for de-emphasis
+7. Use BREAK to separate major concept sections if needed
+8. Keep total prompt under 75 tokens per chunk (SD processes in 75-token blocks)
+9. For negative prompt: merge base negative with user-specified negatives, remove duplicates
 10. Do NOT invent details not present in the base prompt or user description
 
 OUTPUT FORMAT — valid JSON only, no markdown:
@@ -50,6 +50,26 @@ SAFETY RULES (mandatory):
 - If the request cannot be made safe, respond with: "safe landscape, beautiful nature, sunny day, clear sky, peaceful meadow, colorful flowers, butterflies, gentle breeze, warm sunlight, family-friendly, wholesome, cute animals playing, rainbow"`
 
 const KidsModeNegativePrompt = "nsfw, nude, naked, porn, erotic, sexual, violence, gore, blood, horror, torture, death, kill, murder, weapon harm, drugs, alcohol, smoking, self-harm, suicide, abuse, assault, mature content, explicit, suggestive, provocative, disturbing, frightening, scary, creepy, disgusting, obscene"
+
+const DefaultAnalyzeSystemPrompt = `You are an expert image analyst for Stable Diffusion tag extraction. Be precise, thorough, and specific in your descriptions.`
+
+const DefaultAnalyzePrompt = `Describe this image in extreme detail. Include:
+- Main subjects and their attributes (appearance, pose, expression)
+- Background elements, setting, and environment
+- Colors, lighting, shadows, and composition
+- Text visible in the image (if any)
+- Style, mood, and artistic technique
+- Any unusual or noteworthy details
+
+Be thorough and specific. Avoid vague terms like "something" or "some objects".
+Then convert your description into comma-separated SD tags. Start with quality tags (masterpiece, best quality, highly detailed). Use (keyword:1.2) for emphasis. Output ONLY tags.`
+
+var DefaultAnalyzeChainPrompts = []string{
+	`What is the main subject of this image? Describe in extreme detail: facial features, hair, clothing (fabric, color, style), accessories, pose, expression, lighting on the figure.`,
+	`Now describe the background and setting in detail. Include environment, objects, spatial relationships, time of day, weather, architectural style, human activity.`,
+	`What colors, lighting, shadows, and artistic style are used? Describe composition, mood, camera angle, and visual techniques.`,
+	`List any small details that might be easy to miss: textures, patterns, text, reflections, subtle elements. Now based on ALL your analysis above, convert everything into comma-separated Stable Diffusion tags. Start with quality tags (masterpiece, best quality, highly detailed). Use (keyword:1.2) for emphasis. Output ONLY tags, nothing else.`,
+}
 
 func Load() *Config {
 	exe, _ := os.Executable()

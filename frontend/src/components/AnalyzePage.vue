@@ -1,13 +1,18 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
 import { api } from '../api.js'
+import { EventsOn, EventsOff } from '../wailsjs/runtime/runtime'
 
 const imageBase64 = ref('')
 const imagePreview = ref('')
 const result = ref('')
 const analyzing = ref(false)
+const recommending = ref(false)
+const recommendation = ref(null)
 const error = ref('')
 const elapsed = ref(0)
+const chainStep = ref(0)
+const chainTotal = ref(0)
 let timerInterval = null
 
 const llmAvailable = ref(false)
@@ -74,11 +79,14 @@ async function analyze() {
   error.value = ''
   result.value = ''
   elapsed.value = 0
+  chainStep.value = 0
+  chainTotal.value = 0
   timerInterval = setInterval(() => { elapsed.value++ }, 1000)
   try {
     const tags = await api.analyzeImage(imageBase64.value)
     if (tags && tags.trim()) {
       result.value = tags
+      recommendPreset(tags)
     } else {
       error.value = 'Vision model returned empty response'
     }
@@ -98,20 +106,40 @@ function copyResult() {
   navigator.clipboard.writeText(result.value).catch(() => {})
 }
 
+async function recommendPreset(tags) {
+  recommending.value = true
+  recommendation.value = null
+  try {
+    const rec = await api.recommendPreset(tags)
+    if (rec) recommendation.value = rec
+  } catch (e) {
+    console.error('Recommend preset failed:', e)
+  } finally {
+    recommending.value = false
+  }
+}
+
 function clearImage() {
   imageBase64.value = ''
   imagePreview.value = ''
+  result.value = ''
+  recommendation.value = null
 }
 
 onMounted(() => {
   checkServices()
   statusInterval = setInterval(checkServices, 30000)
   document.addEventListener('paste', handlePaste)
+  EventsOn("analyze:step", (step, total) => {
+    chainStep.value = step
+    chainTotal.value = total
+  })
 })
 
 onUnmounted(() => {
   if (statusInterval) clearInterval(statusInterval)
   document.removeEventListener('paste', handlePaste)
+  EventsOff("analyze:step")
 })
 </script>
 
@@ -156,7 +184,7 @@ onUnmounted(() => {
           >
             <span v-if="analyzing" style="display: inline-flex; align-items: center; gap: 6px;">
               <span class="spinner" style="width: 14px; height: 14px; border-width: 2px;"></span>
-              {{ elapsed }}s
+              {{ chainStep > 0 ? `Step ${chainStep}/${chainTotal}` : 'Starting' }} — {{ elapsed }}s
             </span>
             <span v-else>Analyze Image</span>
           </button>
@@ -178,6 +206,27 @@ onUnmounted(() => {
 
           <div class="analyze-btn-row" style="margin-top: 12px;">
             <button class="btn btn-secondary" @click="copyResult" :disabled="!result">Copy</button>
+          </div>
+
+          <div v-if="recommending" style="margin-top: 16px; display: flex; align-items: center; gap: 8px; color: var(--text-dim); font-size: 13px;">
+            <span class="spinner" style="width: 14px; height: 14px; border-width: 2px;"></span>
+            Recommending preset...
+          </div>
+
+          <div v-if="recommendation" class="card" style="margin-top: 16px; border-left: 3px solid var(--accent);">
+            <div class="form-label" style="margin-bottom: 8px;">Recommended Preset</div>
+            <div style="font-size: 14px; font-weight: 600; margin-bottom: 6px;">
+              {{ recommendation.preset_name }}
+            </div>
+            <div v-if="recommendation.reasoning" style="font-size: 12px; color: var(--text-dim); margin-bottom: 8px;">
+              {{ recommendation.reasoning }}
+            </div>
+            <div v-if="recommendation.extra_prompt" style="font-size: 12px; color: var(--text-dim); margin-bottom: 8px;">
+              <span style="font-weight: 600;">Extra tags:</span> {{ recommendation.extra_prompt }}
+            </div>
+            <button class="btn btn-secondary" style="font-size: 12px;" @click="navigator.clipboard.writeText(recommendation.extra_prompt || recommendation.preset_name).catch(() => {})">
+              Copy Extra Tags
+            </button>
           </div>
         </div>
       </div>

@@ -79,6 +79,15 @@ const generationError = ref('')
 const promptInstruction = ref('')
 const promptInstructionSaved = ref(false)
 const promptInstructionError = ref('')
+const defaultPromptInstruction = ref('')
+
+const analyzeSystemPrompt = ref('')
+const analyzeSinglePrompt = ref('')
+const analyzeChainPrompts = reactive(['', '', '', ''])
+const analyzeUseChain = ref(true)
+const analyzeSaved = ref(false)
+const analyzeError = ref('')
+const defaultAnalyzePrompts = ref(null)
 
 watch(() => connectionForm.llm_backend, (newVal, oldVal) => {
   if (oldVal && defaultURLs[oldVal] && connectionForm.llm_url === defaultURLs[oldVal]) {
@@ -114,7 +123,49 @@ async function loadSettings() {
     generationForm.preview_width = parseInt(settings.preview_width) || 512
     generationForm.preview_height = parseInt(settings.preview_height) || 512
     promptInstruction.value = settings.sd_prompt_instruction || ''
-  } catch {}
+  } catch (e) {
+    console.error('loadSettings:', e)
+  }
+
+  try {
+    defaultPromptInstruction.value = await api.getDefaultPromptInstruction()
+  } catch (e) {
+    console.error('getDefaultPromptInstruction:', e)
+  }
+
+  if (!promptInstruction.value && defaultPromptInstruction.value) {
+    promptInstruction.value = defaultPromptInstruction.value
+  }
+
+  try {
+    const settings = await api.getSettings()
+    analyzeSystemPrompt.value = settings.analyze_system_prompt || ''
+    analyzeSinglePrompt.value = settings.analyze_prompt || ''
+    analyzeUseChain.value = settings.analyze_use_chain !== 'false'
+    for (let i = 0; i < 4; i++) {
+      analyzeChainPrompts[i] = settings['analyze_chain_' + (i + 1)] || ''
+    }
+  } catch (e) {
+    console.error('loadAnalyzeSettings:', e)
+  }
+
+  try {
+    defaultAnalyzePrompts.value = await api.getDefaultAnalyzePrompts()
+  } catch (e) {
+    console.error('getDefaultAnalyzePrompts:', e)
+  }
+
+  if (!analyzeSystemPrompt.value && defaultAnalyzePrompts.value) {
+    analyzeSystemPrompt.value = defaultAnalyzePrompts.value.system_prompt
+  }
+  if (!analyzeSinglePrompt.value && defaultAnalyzePrompts.value) {
+    analyzeSinglePrompt.value = defaultAnalyzePrompts.value.single_prompt
+  }
+  for (let i = 0; i < 4; i++) {
+    if (!analyzeChainPrompts[i] && defaultAnalyzePrompts.value) {
+      analyzeChainPrompts[i] = defaultAnalyzePrompts.value.chain_prompts[i] || ''
+    }
+  }
 }
 
 async function loadConnectionLLMModels() {
@@ -257,6 +308,34 @@ async function savePromptInstruction() {
   }
 }
 
+async function saveAnalyzePrompts() {
+  analyzeSaved.value = false
+  analyzeError.value = ''
+  try {
+    const data = {
+      analyze_system_prompt: analyzeSystemPrompt.value,
+      analyze_prompt: analyzeSinglePrompt.value,
+      analyze_use_chain: analyzeUseChain.value ? 'true' : 'false',
+    }
+    for (let i = 0; i < 4; i++) {
+      data['analyze_chain_' + (i + 1)] = analyzeChainPrompts[i]
+    }
+    await api.updateSettings(data)
+    analyzeSaved.value = true
+  } catch (e) {
+    analyzeError.value = String(e)
+  }
+}
+
+function resetAnalyzePrompts() {
+  if (!defaultAnalyzePrompts.value) return
+  analyzeSystemPrompt.value = defaultAnalyzePrompts.value.system_prompt
+  analyzeSinglePrompt.value = defaultAnalyzePrompts.value.single_prompt
+  for (let i = 0; i < 4; i++) {
+    analyzeChainPrompts[i] = defaultAnalyzePrompts.value.chain_prompts[i] || ''
+  }
+}
+
 onMounted(loadSettings)
 </script>
 
@@ -273,6 +352,7 @@ onMounted(loadSettings)
       <button class="tab" :class="{ active: activeTab === 'safety' }" @click="switchTab('safety')">Safety</button>
       <button class="tab" :class="{ active: activeTab === 'generation' }" @click="switchTab('generation')">Generation</button>
       <button class="tab" :class="{ active: activeTab === 'prompt' }" @click="switchTab('prompt')">Prompt</button>
+      <button class="tab" :class="{ active: activeTab === 'analyze' }" @click="switchTab('analyze')">Analyze</button>
     </div>
 
     <!-- Connection Tab -->
@@ -538,7 +618,63 @@ onMounted(loadSettings)
       <div class="form-group">
         <textarea class="form-textarea" v-model="promptInstruction" rows="16" style="font-family: monospace; font-size: 12px; line-height: 1.5;"></textarea>
       </div>
-      <button class="btn btn-primary" @click="savePromptInstruction">Save Instruction</button>
+      <div style="display: flex; gap: 8px;">
+        <button class="btn btn-primary" @click="savePromptInstruction">Save Instruction</button>
+        <button class="btn btn-secondary" @click="promptInstruction = defaultPromptInstruction">Reset to Default</button>
+      </div>
+    </div>
+
+    <!-- Analyze Tab -->
+    <div v-if="activeTab === 'analyze'" class="card">
+      <h3 style="color: var(--text-bright); margin-bottom: 16px;">Image Analysis Prompts</h3>
+      <div v-if="analyzeSaved" class="status status-success" style="margin-bottom: 16px;">Prompts saved.</div>
+      <div v-if="analyzeError" class="status status-error" style="margin-bottom: 16px;">{{ analyzeError }}</div>
+
+      <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 16px;">
+        <ToggleSwitch v-model="analyzeUseChain" />
+        <div>
+          <div style="color: var(--text-bright); font-weight: 500;">{{ analyzeUseChain ? 'Chain Mode (4 steps)' : 'Single Prompt' }}</div>
+          <div style="color: var(--text-dim); font-size: 12px; margin-top: 2px;">
+            Chain mode runs 4 sequential vision calls for 30-50% more detail
+          </div>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">System Prompt</label>
+        <textarea class="form-textarea" v-model="analyzeSystemPrompt" rows="3" style="font-family: monospace; font-size: 12px; line-height: 1.5;"></textarea>
+      </div>
+
+      <template v-if="!analyzeUseChain">
+        <div class="form-group">
+          <label class="form-label">Single Analysis Prompt</label>
+          <textarea class="form-textarea" v-model="analyzeSinglePrompt" rows="10" style="font-family: monospace; font-size: 12px; line-height: 1.5;"></textarea>
+        </div>
+      </template>
+
+      <template v-if="analyzeUseChain">
+        <div class="form-group">
+          <label class="form-label">Step 1 — Main Subject</label>
+          <textarea class="form-textarea" v-model="analyzeChainPrompts[0]" rows="3" style="font-family: monospace; font-size: 12px; line-height: 1.5;"></textarea>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Step 2 — Background & Setting</label>
+          <textarea class="form-textarea" v-model="analyzeChainPrompts[1]" rows="3" style="font-family: monospace; font-size: 12px; line-height: 1.5;"></textarea>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Step 3 — Colors, Lighting & Style</label>
+          <textarea class="form-textarea" v-model="analyzeChainPrompts[2]" rows="3" style="font-family: monospace; font-size: 12px; line-height: 1.5;"></textarea>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Step 4 — Details & Final Tags</label>
+          <textarea class="form-textarea" v-model="analyzeChainPrompts[3]" rows="3" style="font-family: monospace; font-size: 12px; line-height: 1.5;"></textarea>
+        </div>
+      </template>
+
+      <div style="display: flex; gap: 8px;">
+        <button class="btn btn-primary" @click="saveAnalyzePrompts">Save Prompts</button>
+        <button class="btn btn-secondary" @click="resetAnalyzePrompts">Reset to Default</button>
+      </div>
     </div>
 
     <PinModal v-if="showPinModal" :mode="pinMode" :error="pinError" @confirm="onPinConfirm" @cancel="onPinCancel" />

@@ -10,7 +10,7 @@ import {
   AnalyzeImage, ReadImageFile,
   ListPresetTypes, GetPresetType, CreatePresetType, UpdatePresetType, DeletePresetType,
   GetAllTags, GetSDLoRAs, ValidateImportModels,
-  RecommendPreset,
+  RecommendPreset, GetDefaultPromptInstruction, GetDefaultAnalyzePrompts,
 } from './wailsjs/go/main/App.js'
 
 export const api = {
@@ -59,4 +59,6 @@ export const api = {
   getLoRAs: () => GetSDLoRAs(),
   validateImportModels: (items) => ValidateImportModels(items),
   recommendPreset: (description) => RecommendPreset(description),
+  getDefaultPromptInstruction: () => GetDefaultPromptInstruction(),
+  getDefaultAnalyzePrompts: () => GetDefaultAnalyzePrompts(),
 }
