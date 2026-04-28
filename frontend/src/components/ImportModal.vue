@@ -11,12 +11,31 @@ const selected = ref(props.presets.map(() => true))
 const importing = ref(false)
 const error = ref('')
 
+const grouped = computed(() => {
+  const map = new Map()
+  for (let i = 0; i < props.presets.length; i++) {
+    const file = props.presets[i].source_file || 'Unknown file'
+    if (!map.has(file)) map.set(file, [])
+    map.get(file).push(i)
+  }
+  return map
+})
+
+const fileCount = computed(() => grouped.value.size)
+
 const allSelected = computed(() => selected.value.every(Boolean))
 const selectedCount = computed(() => selected.value.filter(Boolean).length)
 
 function toggleAll() {
   const val = !allSelected.value
   selected.value = selected.value.map(() => val)
+}
+
+function toggleFile(indices) {
+  const allOn = indices.every(i => selected.value[i])
+  for (const i of indices) {
+    selected.value[i] = !allOn
+  }
 }
 
 async function doImport() {
@@ -39,7 +58,7 @@ async function doImport() {
   <div class="modal-overlay" @click.self="$emit('close')">
     <div class="modal">
       <div class="modal-header">
-        <h2 class="modal-title">Import Presets ({{ presets.length }})</h2>
+        <h2 class="modal-title">Import Presets ({{ presets.length }} from {{ fileCount }} file{{ fileCount > 1 ? 's' : '' }})</h2>
         <button class="modal-close" @click="$emit('close')">&times;</button>
       </div>
 
@@ -54,17 +73,24 @@ async function doImport() {
       </div>
 
       <div class="import-list">
-        <label v-for="(p, i) in presets" :key="i" class="import-item">
-          <input type="checkbox" v-model="selected[i]" />
-          <div class="import-item-info">
-            <div class="import-item-name">{{ p.name || 'Untitled' }}</div>
-            <div class="import-item-meta">
-              <span>{{ p.preset_type || 'general' }}</span>
-              <span>{{ p.sampler }}</span>
-              <span>{{ p.width }}x{{ p.height }}</span>
-            </div>
+        <template v-for="[file, indices] of grouped" :key="file">
+          <div v-if="fileCount > 1" class="import-file-header" @click="toggleFile(indices)">
+            <input type="checkbox" :checked="indices.every(i => selected[i])" @click.stop="toggleFile(indices)" />
+            <span>{{ file }}</span>
+            <span class="import-file-count">{{ indices.length }}</span>
           </div>
-        </label>
+          <label v-for="i in indices" :key="i" class="import-item" :class="{ 'import-item-indented': fileCount > 1 }">
+            <input type="checkbox" v-model="selected[i]" />
+            <div class="import-item-info">
+              <div class="import-item-name">{{ presets[i].name || 'Untitled' }}</div>
+              <div class="import-item-meta">
+                <span>{{ presets[i].preset_type || 'general' }}</span>
+                <span>{{ presets[i].sampler }}</span>
+                <span>{{ presets[i].width }}x{{ presets[i].height }}</span>
+              </div>
+            </div>
+          </label>
+        </template>
       </div>
 
       <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">

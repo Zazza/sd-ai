@@ -1,468 +1,703 @@
 # LoRA Models Reference for Stable Diffusion
 
-## Characters & People
+---
 
-### detail_tweaker
-- **Weight:** 0.5–1.0
-- **Base:** SD 1.5
-- **Description:** Adjusts the level of detail in generated images. Use positive values to enhance detail or negative values to reduce it.
-- **Use with:** Any SD 1.5 checkpoint
-- **Tags:** detail, enhancement, tweak, face, body
+## Detail & Quality
 
-### add_detail
-- **Weight:** 0.5–0.9
-- **Base:** SD 1.5
-- **Description:** Increases overall image detail and sharpness across the entire composition. Particularly effective on skin textures and fabric.
-- **Use with:** Realistic and semi-realistic SD 1.5 checkpoints
-- **Tags:** detail, sharpness, texture, quality
+### add-detail-xl
+- **Weight:** 0.5-0.9
+- **Base:** SDXL
+- **Description:** Increases overall detail and sharpness in SDXL generation. Enhances textures, edges, and fine elements across the composition.
+- **Use with:** SDXL checkpoints (juggernautXL, realvisxl, sdXL_v10VAEFix)
+- **Tags:** detail, sharpness, quality, SDXL, texture
 
-### flat_color
-- **Weight:** 0.6–1.0
-- **Base:** SD 1.5
-- **Description:** Flattens colors and removes shading gradients for a clean anime cel-look. Ideal for flat illustration styles.
-- **Use with:** Anime SD 1.5 checkpoints (Anything, NAI-derived)
-- **Tags:** anime, flat, color, illustration, cel
+### Add_Details_v1.2
+- **Weight:** 0.5-0.8
+- **Base:** Universal
+- **Description:** General detail enhancement adding finer textures and micro-details. Effective on skin, fabric, and environmental surfaces.
+- **Use with:** Any checkpoint
+- **Tags:** detail, quality, texture, enhancement
 
-### epiNoiseoffset_v2
-- **Weight:** 0.3–0.7
+### Detail_Tweaker_Illustrious_BSY_V3
+- **Weight:** 0.5-1.0
+- **Base:** Illustrious XL
+- **Description:** Adjusts detail levels specifically for Illustrious XL checkpoints. Positive values enhance, negative values simplify detail.
+- **Use with:** Illustrious-based models (illustriousRealismBy, realismIllustriousBy, veloriamixIllustrious)
+- **Tags:** detail, tweak, illustrious, adjustment
+
+### ErnieSh4rpD3tails
+- **Weight:** 0.5-0.9
+- **Base:** SDXL
+- **Description:** Sharp detail enhancement with edge emphasis and crisp rendering. Improves clarity and definition.
+- **Use with:** SDXL checkpoints
+- **Tags:** sharp, detail, edge, crisp, definition
+
+### 500SharpCivitai_Lascalae
+- **Weight:** 0.5-0.8
+- **Base:** SDXL
+- **Description:** High-sharpness LoRA that brings out fine detail and texture clarity. Good for architectural and product shots.
+- **Use with:** SDXL photorealistic checkpoints
+- **Tags:** sharp, detail, clarity, texture
+
+### polyhedron_new_skin_v1.1
+- **Weight:** 0.4-0.8
+- **Base:** SDXL
+- **Description:** Improves skin rendering quality with better pore detail, subsurface scattering, and natural skin texture.
+- **Use with:** Photorealistic SDXL checkpoints
+- **Tags:** skin, detail, realism, pore, subsurface
+
+### st41nedg5CIVIT
+- **Weight:** 0.5-0.9
+- **Base:** SDXL
+- **Description:** Stained and textured edge enhancement adding artistic grain and detail to edges and surfaces.
+- **Use with:** SDXL checkpoints, especially artistic ones
+- **Tags:** edge, texture, grain, artistic, stain
+
+### to8contrast
+- **Weight:** 0.3-0.7
+- **Base:** Universal
+- **Description:** Boosts contrast for deeper blacks and brighter highlights. Prevents flat or washed-out output.
+- **Use with:** Any checkpoint
+- **Tags:** contrast, black, highlight, depth
+
+### epi_noiseoffset2
+- **Weight:** 0.3-0.7
 - **Base:** SD 1.5
-- **Description:** Adds noise offset to improve contrast in dark scenes. Produces richer blacks and more realistic lighting in low-light compositions.
+- **Description:** Adds noise offset to improve contrast in dark scenes. Produces richer blacks and more realistic low-light rendering.
 - **Use with:** Any SD 1.5 checkpoint, especially realistic ones
-- **Tags:** noise, offset, dark, lighting, contrast
+- **Tags:** noise, offset, dark, contrast, lighting
 
-### badhandv4
-- **Weight:** 0.5–0.8
-- **Base:** SD 1.5
-- **Description:** Improves hand generation by reducing common artifacts like extra fingers and malformed joints. Best used with negative prompts.
-- **Use with:** Any SD 1.5 checkpoint
-- **Tags:** hand, fix, anatomy, fingers, correction
-
-### corneo_hand_fix
-- **Weight:** 0.5–0.9
-- **Base:** SD 1.5
-- **Description:** Trained specifically to correct hand anatomy. Reduces fused fingers and improves hand pose accuracy.
-- **Use with:** Realistic and anime SD 1.5 checkpoints
-- **Tags:** hand, fix, anatomy, pose
-
-### realistic_hands
-- **Weight:** 0.5–0.8
+### Realism Lora By Stable Yogi_V3_Lite
+- **Weight:** 0.5-0.9
 - **Base:** Universal
-- **Description:** Produces photorealistic hands with proper proportions, knuckle detail, and natural skin texture. Works well for close-up hand shots.
-- **Use with:** Photorealistic checkpoints (SD 1.5 and SDXL)
-- **Tags:** hand, realistic, photorealistic, skin, anatomy
+- **Description:** Lightweight realism enhancement pushing output toward photographic quality. Improves skin texture, lighting, and camera-like composition.
+- **Use with:** Semi-realistic to realistic checkpoints
+- **Tags:** realism, photo, quality, enhancement
 
-### expressive_faces
-- **Weight:** 0.4–0.8
-- **Base:** SD 1.5
-- **Description:** Expands the range of facial expressions beyond the default neutral look. Adds nuance to smiles, frowns, and subtle emotions.
-- **Use with:** Any SD 1.5 checkpoint
-- **Tags:** face, expression, emotion, nuance
-
-### eye_details
-- **Weight:** 0.5–0.9
-- **Base:** SD 1.5
-- **Description:** Enhances iris patterns, reflections, eyelash detail, and sclera clarity. Creates striking close-up eye shots.
-- **Use with:** Anime and realistic SD 1.5 checkpoints
-- **Tags:** eye, iris, detail, reflection, close-up
-
-### hair_detail
-- **Weight:** 0.5–0.9
-- **Base:** SD 1.5
-- **Description:** Adds intricate individual hair strands, flyaways, and realistic hair texture. Works on all hair types and lengths.
-- **Use with:** Any SD 1.5 checkpoint
-- **Tags:** hair, strand, detail, texture, flyaway
-
-## Style
-
-### ink_style
-- **Weight:** 0.6–1.0
-- **Base:** SD 1.5
-- **Description:** Traditional ink drawing style with bold strokes, crosshatching, and ink wash effects. Simulates brush and pen ink techniques.
-- **Use with:** Any SD 1.5 checkpoint
-- **Tags:** ink, drawing, traditional, crosshatch, monochrome
-
-### watercolor_v2
-- **Weight:** 0.5–0.9
-- **Base:** SD 1.5
-- **Description:** Watercolor painting effect with visible paper texture, color bleeding, and soft wet edges. Mimics traditional watercolor media.
-- **Use with:** Any SD 1.5 checkpoint
-- **Tags:** watercolor, painting, paper, bleed, wet, traditional
-
-### oil_painting
-- **Weight:** 0.5–0.9
-- **Base:** SD 1.5
-- **Description:** Oil paint texture with visible brushstrokes, impasto effects, and rich color blending. Gives images a classical painterly quality.
-- **Use with:** Any SD 1.5 checkpoint
-- **Tags:** oil, painting, brushstroke, impasto, classical
-
-### pencil_sketch
-- **Weight:** 0.6–1.0
-- **Base:** SD 1.5
-- **Description:** Graphite pencil drawing style with hatching, shading, and visible pencil marks. Produces monochrome sketch-like output.
-- **Use with:** Any SD 1.5 checkpoint
-- **Tags:** pencil, sketch, graphite, hatching, monochrome
-
-### charcoal_draw
-- **Weight:** 0.6–1.0
-- **Base:** SD 1.5
-- **Description:** Charcoal drawing effect with smudged lines, rich dark values, and textured paper grain. High contrast and expressive marks.
-- **Use with:** Any SD 1.5 checkpoint
-- **Tags:** charcoal, drawing, smudge, texture, dark
-
-### pastel_style
-- **Weight:** 0.5–0.9
-- **Base:** SD 1.5
-- **Description:** Soft pastel chalk effect with gentle blending, chalky texture, and muted but warm color palette. Ideal for dreamy compositions.
-- **Use with:** Any SD 1.5 checkpoint
-- **Tags:** pastel, chalk, soft, blend, warm
-
-### marker_render
-- **Weight:** 0.5–0.9
-- **Base:** SD 1.5
-- **Description:** Alcohol marker rendering style with visible streaks, vivid saturated colors, and marker bleed-through. Mimics Copics and Prismacolors.
-- **Use with:** Any SD 1.5 checkpoint
-- **Tags:** marker, alcohol, render, vivid, streak
-
-### cel_shading
-- **Weight:** 0.5–1.0
-- **Base:** SD 1.5
-- **Description:** Clean anime cel shading with sharp shadow edges, flat color areas, and minimal gradient. Classic 2D animation look.
-- **Use with:** Anime SD 1.5 checkpoints
-- **Tags:** anime, cel, shading, flat, animation
-
-### gouache_painting
-- **Weight:** 0.5–0.9
-- **Base:** SD 1.5
-- **Description:** Gouache paint texture with opaque matte finish, bold color blocks, and visible brush marks.介于水彩和油画之间的媒介感。
-- **Use with:** Any SD 1.5 checkpoint
-- **Tags:** gouache, painting, opaque, matte, brush
-
-### crayon_style
-- **Weight:** 0.6–1.0
-- **Base:** SD 1.5
-- **Description:** Crayon and children's art style with waxy texture, imperfect lines, and bright primary colors. Naive and playful aesthetic.
-- **Use with:** Any SD 1.5 checkpoint
-- **Tags:** crayon, children, waxy, naive, playful
-
-### pixel_art_16bit
-- **Weight:** 0.6–1.0
-- **Base:** SD 1.5
-- **Description:** Retro 16-bit pixel art style reminiscent of SNES and Sega Genesis era games. Detailed sprites with limited color palettes.
-- **Use with:** Any SD 1.5 checkpoint
-- **Tags:** pixel, retro, 16-bit, sprite, game, SNES
-
-### pixel_art_8bit
-- **Weight:** 0.7–1.0
-- **Base:** SD 1.5
-- **Description:** Classic 8-bit pixel art style inspired by NES and Game Boy graphics. Minimal pixels with strong color restrictions.
-- **Use with:** Any SD 1.5 checkpoint
-- **Tags:** pixel, retro, 8-bit, NES, game, minimal
-
-### stained_glass
-- **Weight:** 0.5–0.9
-- **Base:** SD 1.5
-- **Description:** Stained glass window effect with bold black outlines, translucent colored glass segments, and light shining through.
-- **Use with:** Any SD 1.5 checkpoint
-- **Tags:** stained, glass, window, translucent, gothic, outline
-
-### paper_cut
-- **Weight:** 0.5–0.9
-- **Base:** SD 1.5
-- **Description:** Paper cutout craft style with layered paper silhouettes, cast shadows between layers, and flat colored paper textures.
-- **Use with:** Any SD 1.5 checkpoint
-- **Tags:** paper, cutout, craft, layered, shadow, silhouette
-
-### origami_style
-- **Weight:** 0.5–0.9
-- **Base:** SD 1.5
-- **Description:** Origami paper folding style with visible creases, geometric folded planes, and matte paper surface. Crisp geometric aesthetic.
-- **Use with:** Any SD 1.5 checkpoint
-- **Tags:** origami, paper, fold, geometric, crease
-
-### embroidery
-- **Weight:** 0.5–0.9
-- **Base:** SD 1.5
-- **Description:** Embroidered textile effect with visible stitch patterns, thread texture, and fabric grain. Simulates hand-stitched needlework.
-- **Use with:** Any SD 1.5 checkpoint
-- **Tags:** embroidery, stitch, thread, textile, fabric
-
-### cross_stitch
-- **Weight:** 0.6–1.0
-- **Base:** SD 1.5
-- **Description:** Cross-stitch pattern style with characteristic X-shaped stitches on evenweave fabric. Pixel-like but with thread texture.
-- **Use with:** Any SD 1.5 checkpoint
-- **Tags:** cross-stitch, pattern, thread, fabric, craft
-
-### risograph
-- **Weight:** 0.5–0.9
-- **Base:** SD 1.5
-- **Description:** Risograph print effect with soy ink texture, slight misregistration between color layers, and limited CMYK-ish color palette.
-- **Use with:** Any SD 1.5 checkpoint
-- **Tags:** risograph, print, soy, ink, misregistration
-
-### screen_print
-- **Weight:** 0.5–0.9
-- **Base:** SD 1.5
-- **Description:** Screen printing / silkscreen effect with bold flat color areas, halftone dots, and characteristic ink overlap lines.
-- **Use with:** Any SD 1.5 checkpoint
-- **Tags:** screen, print, silkscreen, halftone, bold, flat
-
-### lithograph
-- **Weight:** 0.5–0.9
-- **Base:** SD 1.5
-- **Description:** Lithographic print effect with grainy stone texture, subtle color separation, and the characteristic matte print quality.
-- **Use with:** Any SD 1.5 checkpoint
-- **Tags:** lithograph, print, stone, grain, matte
-
-## Lighting & Effects
-
-### dramatic_lighting
-- **Weight:** 0.5–0.9
-- **Base:** SD 1.5
-- **Description:** Strong chiaroscuro lighting with deep shadows and bright highlights. Creates high-contrast theatrical mood.
-- **Use with:** Any SD 1.5 checkpoint
-- **Tags:** dramatic, chiaroscuro, shadow, contrast, theatrical
-
-### soft_lighting
-- **Weight:** 0.4–0.8
-- **Base:** SD 1.5
-- **Description:** Soft diffused lighting that wraps gently around subjects. Reduces harsh shadows for a flattering, airy feel.
-- **Use with:** Any SD 1.5 checkpoint, especially portrait-focused ones
-- **Tags:** soft, diffused, gentle, flattering, airy
-
-### neon_glow
-- **Weight:** 0.5–0.9
-- **Base:** SD 1.5
-- **Description:** Neon light effects with vibrant glowing tubes, color reflections on surfaces, and cyberpunk-like atmosphere.
-- **Use with:** Any SD 1.5 checkpoint
-- **Tags:** neon, glow, cyberpunk, vibrant, reflection
-
-### volumetric_lighting
-- **Weight:** 0.4–0.8
-- **Base:** Universal
-- **Description:** God rays and volumetric light shafts piercing through scenes. Adds depth with visible light beams through fog or dust.
-- **Use with:** Any SD 1.5 or SDXL checkpoint
-- **Tags:** volumetric, god rays, light, shaft, depth, fog
-
-### fog_atmosphere
-- **Weight:** 0.4–0.8
-- **Base:** SD 1.5
-- **Description:** Misty and foggy atmospheric effect that adds depth through aerial perspective. Softens distant objects naturally.
-- **Use with:** Any SD 1.5 checkpoint
-- **Tags:** fog, mist, atmosphere, aerial, depth, mood
-
-### lens_flare
-- **Weight:** 0.3–0.7
-- **Base:** SD 1.5
-- **Description:** Camera lens flare effect with anamorphic streaks, ghosting artifacts, and bright light source reflections.
-- **Use with:** Any SD 1.5 checkpoint
-- **Tags:** lens, flare, anamorphic, camera, light
-
-### bokeh_depth
-- **Weight:** 0.4–0.8
-- **Base:** SD 1.5
-- **Description:** Strong bokeh blur effect with creamy out-of-focus areas and circular highlight disks. Creates shallow depth-of-field photography look.
-- **Use with:** Photorealistic SD 1.5 checkpoints
-- **Tags:** bokeh, blur, depth, shallow, DOF, photography
-
-### chromatic_aberration
-- **Weight:** 0.3–0.6
-- **Base:** SD 1.5
-- **Description:** Chromatic aberration effect with color fringing at edges, simulating cheap or extreme camera lenses. Subtle at low weights.
-- **Use with:** Any SD 1.5 checkpoint
-- **Tags:** chromatic, aberration, fringe, lens, distortion
-
-### film_grain
-- **Weight:** 0.3–0.7
-- **Base:** Universal
-- **Description:** Analog film grain texture that adds organic noise reminiscent of 35mm film stock. Varies by weight from subtle to heavy grain.
-- **Use with:** Any SD 1.5 or SDXL checkpoint
-- **Tags:** film, grain, analog, noise, 35mm, vintage
-
-### double_exposure
-- **Weight:** 0.5–0.9
-- **Base:** SD 1.5
-- **Description:** Double exposure photographic effect blending two overlapping images into one frame. Creates surreal and artistic compositions.
-- **Use with:** Any SD 1.5 checkpoint
-- **Tags:** double, exposure, blend, surreal, photography, artistic
-
-## Environment & Scene
-
-### detailed_background
-- **Weight:** 0.5–0.9
-- **Base:** SD 1.5
-- **Description:** Enhances background complexity with additional architectural elements, foliage, objects, and environmental texture.
-- **Use with:** Any SD 1.5 checkpoint
-- **Tags:** background, detail, complex, architecture, environment
-
-### nature_enhance
-- **Weight:** 0.5–0.9
-- **Base:** SD 1.5
-- **Description:** Boosts nature scene details with lush foliage, detailed bark, varied leaf colors, and rich vegetation textures.
-- **Use with:** Landscape-capable SD 1.5 checkpoints
-- **Tags:** nature, foliage, vegetation, lush, green, landscape
-
-### urban_decay
-- **Weight:** 0.5–0.9
-- **Base:** SD 1.5
-- **Description:** Abandoned and ruined building aesthetic with peeling paint, broken windows, overgrown vegetation, and weathered surfaces.
-- **Use with:** Any SD 1.5 checkpoint
-- **Tags:** urban, decay, abandoned, ruin, weathered, gritty
-
-### underwater_scene
-- **Weight:** 0.5–0.9
-- **Base:** SD 1.5
-- **Description:** Underwater environment with caustic light patterns, floating particles, blue-green color shift, and aquatic atmosphere.
-- **Use with:** Any SD 1.5 checkpoint
-- **Tags:** underwater, caustic, aquatic, blue, marine
-
-### space_nebula
-- **Weight:** 0.5–0.9
-- **Base:** SD 1.5
-- **Description:** Cosmic space backgrounds with nebula clouds, star fields, galaxy formations, and vibrant interstellar colors.
-- **Use with:** Any SD 1.5 checkpoint
-- **Tags:** space, nebula, cosmic, galaxy, stars, interstellar
-
-### forest_magic
-- **Weight:** 0.5–0.9
-- **Base:** SD 1.5
-- **Description:** Enchanted forest atmosphere with bioluminescent plants, fairy lights, mystical fog, and magical glowing particles.
-- **Use with:** Fantasy-oriented SD 1.5 checkpoints
-- **Tags:** forest, magic, enchanted, bioluminescent, fairy, mystical
-
-### desert_sand
-- **Weight:** 0.5–0.9
-- **Base:** SD 1.5
-- **Description:** Desert environment with sand dunes, sandstorm particles, arid atmosphere, and warm golden tones.
-- **Use with:** Any SD 1.5 checkpoint
-- **Tags:** desert, sand, dune, sandstorm, arid, golden
-
-### snow_winter
-- **Weight:** 0.5–0.9
-- **Base:** SD 1.5
-- **Description:** Winter snowfall scene with falling snowflakes, snow-covered surfaces, cold blue tones, and frost effects.
-- **Use with:** Any SD 1.5 checkpoint
-- **Tags:** snow, winter, snowflake, frost, cold, blue
-
-### rain_atmosphere
-- **Weight:** 0.5–0.9
-- **Base:** SD 1.5
-- **Description:** Rainy mood with visible rain streaks, wet reflective surfaces, puddles, and overcast grey atmosphere.
-- **Use with:** Any SD 1.5 checkpoint
-- **Tags:** rain, wet, puddle, reflective, moody, overcast
-
-### sunset_golden
-- **Weight:** 0.4–0.8
-- **Base:** Universal
-- **Description:** Golden hour and sunset lighting with warm orange-pink hues, long soft shadows, and rich atmospheric color.
-- **Use with:** Any SD 1.5 or SDXL checkpoint
-- **Tags:** sunset, golden, hour, warm, orange, pink, lighting
+---
 
 ## Photography
 
-### photo_realism
-- **Weight:** 0.5–0.9
-- **Base:** SD 1.5
-- **Description:** General photorealistic enhancement pushing output toward photographic quality. Improves skin texture, lighting, and camera-like composition.
-- **Use with:** Semi-realistic to realistic SD 1.5 checkpoints
-- **Tags:** photo, realistic, photography, enhancement, quality
-
-### macro_detail
-- **Weight:** 0.5–0.9
-- **Base:** SD 1.5
-- **Description:** Macro photography effect with extreme close-up detail, shallow depth of field, and magnified surface textures.
-- **Use with:** Photorealistic SD 1.5 checkpoints
-- **Tags:** macro, close-up, detail, texture, magnified
-
-### tilt_shift
-- **Weight:** 0.5–0.9
-- **Base:** SD 1.5
-- **Description:** Tilt-shift miniature effect making scenes look like small scale models. Selective blur with a sharp central band.
-- **Use with:** Landscape and architectural SD 1.5 checkpoints
-- **Tags:** tilt-shift, miniature, model, selective, blur
-
-### long_exposure
-- **Weight:** 0.5–0.9
-- **Base:** SD 1.5
-- **Description:** Long exposure photography effect with motion blur trails, smoothed water, light streaks, and time-smear artifacts.
-- **Use with:** Any SD 1.5 checkpoint
-- **Tags:** long, exposure, motion, blur, trail, light
-
-### drone_aerial
-- **Weight:** 0.5–0.9
-- **Base:** SD 1.5
-- **Description:** Aerial and drone viewpoint looking down at landscapes, buildings, and terrain from elevated perspectives.
-- **Use with:** Landscape-capable SD 1.5 checkpoints
-- **Tags:** drone, aerial, top-down, bird-eye, landscape
-
-### vintage_photo
-- **Weight:** 0.5–0.9
-- **Base:** SD 1.5
-- **Description:** Old vintage photograph look with sepia or faded tones, edge vignetting, paper aging, and slight blur.
-- **Use with:** Any SD 1.5 checkpoint
-- **Tags:** vintage, old, photo, sepia, faded, aged
-
-### polaroid_style
-- **Weight:** 0.5–0.9
-- **Base:** SD 1.5
-- **Description:** Polaroid instant photo aesthetic with white bordered frame, slightly washed-out colors, and characteristic exposure quirks.
-- **Use with:** Any SD 1.5 checkpoint
-- **Tags:** polaroid, instant, photo, frame, washed
-
-### hdr_photo
-- **Weight:** 0.4–0.8
-- **Base:** SD 1.5
+### HDR_Photography
+- **Weight:** 0.4-0.8
+- **Base:** SDXL
 - **Description:** High dynamic range photography look with expanded tonal range, recovered shadows, preserved highlights, and vivid local contrast.
-- **Use with:** Photorealistic SD 1.5 checkpoints
-- **Tags:** HDR, dynamic, range, contrast, vivid, tone
+- **Use with:** Photorealistic SDXL checkpoints
+- **Tags:** HDR, dynamic, range, contrast, vivid
 
-### black_white
-- **Weight:** 0.6–1.0
+### photo-realism-flux-v1
+- **Weight:** 0.5-0.9
+- **Base:** FLUX
+- **Description:** Photorealism enhancement specifically tuned for FLUX models. Pushes output toward photographic quality.
+- **Use with:** flux_dev
+- **Tags:** photo, realism, flux, photography
+
+### SDXL_FILM_PHOTOGRAPHY_STYLE_V1
+- **Weight:** 0.4-0.8
+- **Base:** SDXL
+- **Description:** Film photography aesthetic with analog grain, natural color science, and characteristic film exposure qualities.
+- **Use with:** SDXL checkpoints
+- **Tags:** film, photography, analog, grain, cinematic
+
+### Artist_photo_flux
+- **Weight:** 0.4-0.8
+- **Base:** FLUX
+- **Description:** Artistic photography style for FLUX with professional composition and studio-quality lighting.
+- **Use with:** flux_dev
+- **Tags:** artistic, photography, flux, studio, composition
+
+### Anamorphic film style v2.5
+- **Weight:** 0.4-0.8
+- **Base:** SDXL
+- **Description:** Cinematic anamorphic lens look with characteristic bokeh, lens flares, and widescreen film quality.
+- **Use with:** SDXL photorealistic checkpoints
+- **Tags:** anamorphic, film, cinematic, lens, bokeh
+
+### Anamorphic bokeh v2
+- **Weight:** 0.4-0.8
+- **Base:** SDXL
+- **Description:** Anamorphic bokeh effect with oval-shaped out-of-focus highlights and cinematic depth of field.
+- **Use with:** SDXL photorealistic checkpoints
+- **Tags:** bokeh, anamorphic, depth, cinematic
+
+### aidmaBokeh-FLUX-V0.1
+- **Weight:** 0.3-0.7
+- **Base:** FLUX
+- **Description:** Bokeh depth-of-field effect for FLUX models with creamy background blur and sharp subject focus.
+- **Use with:** flux_dev
+- **Tags:** bokeh, blur, depth, flux, focus
+
+### dynamic_shot_42_rim_light
+- **Weight:** 0.4-0.8
+- **Base:** SDXL
+- **Description:** Dynamic rim lighting creating dramatic backlit silhouettes with glowing edge highlights.
+- **Use with:** SDXL checkpoints
+- **Tags:** rim, light, backlit, dramatic, silhouette
+
+---
+
+## Portrait & Face Details
+
+### closeupface-v1
+- **Weight:** 0.5-0.9
 - **Base:** Universal
-- **Description:** Monochrome black and white photography conversion with proper luminance mapping, not just desaturation.
-- **Use with:** Any SD 1.5 or SDXL checkpoint
+- **Description:** Enhances close-up face rendering with improved facial features, skin detail, and expression accuracy.
+- **Use with:** Any checkpoint, especially realistic ones
+- **Tags:** face, closeup, portrait, detail, expression
+
+### hairdetailer
+- **Weight:** 0.5-0.9
+- **Base:** Universal
+- **Description:** Adds intricate individual hair strands, flyaways, and realistic hair texture for all hair types and lengths.
+- **Use with:** Any checkpoint
+- **Tags:** hair, strand, detail, texture, flyaway
+
+### real_hair
+- **Weight:** 0.4-0.8
+- **Base:** SDXL
+- **Description:** Photorealistic hair rendering with natural volume, individual strand detail, and accurate light interaction.
+- **Use with:** Photorealistic SDXL checkpoints
+- **Tags:** hair, realistic, strand, volume, lighting
+
+### realistic hands
+- **Weight:** 0.4-0.8
+- **Base:** Universal
+- **Description:** Produces photorealistic hands with proper proportions, knuckle detail, and natural skin texture. Works for close-up hand shots.
+- **Use with:** Photorealistic checkpoints
+- **Tags:** hand, realistic, anatomy, fingers, correction
+
+### Super_Eye_Detailer_By_Stable_Yogi_SDPD0
+- **Weight:** 0.5-0.9
+- **Base:** SDXL / Pony
+- **Description:** Enhances iris patterns, reflections, eyelash detail, and sclera clarity for striking close-up eye shots.
+- **Use with:** SDXL and Pony XL checkpoints
+- **Tags:** eye, iris, detail, reflection, close-up
+
+---
+
+## Style & Color
+
+### celshading
+- **Weight:** 0.5-1.0
+- **Base:** Universal
+- **Description:** Clean anime cel shading with sharp shadow edges, flat color areas, and minimal gradient. Classic 2D animation look.
+- **Use with:** Anime checkpoints
+- **Tags:** anime, cel, shading, flat, animation
+
+### zimagebase_flat_color_v2.1
+- **Weight:** 0.5-1.0
+- **Base:** SDXL
+- **Description:** Flat color illustration style removing gradients for clean vector-like aesthetic. Ideal for flat design and illustration.
+- **Use with:** SDXL checkpoints
+- **Tags:** flat, color, vector, illustration, clean
+
+### coloricher
+- **Weight:** 0.3-0.7
+- **Base:** SDXL
+- **Description:** Color richness enhancement making colors more vivid and saturated without shifting hues.
+- **Use with:** SDXL checkpoints
+- **Tags:** color, vivid, saturated, rich, enhance
+
+### Black__White
+- **Weight:** 0.6-1.0
+- **Base:** Universal
+- **Description:** Monochrome black and white conversion with proper luminance mapping, not just desaturation.
+- **Use with:** Any checkpoint
 - **Tags:** monochrome, black, white, B&W, grayscale
 
-### infrared_photo
-- **Weight:** 0.5–0.9
+### ClassipeintXL2.1
+- **Weight:** 0.4-0.8
+- **Base:** SDXL
+- **Description:** Classical painting style with rich color blending and painterly texture inspired by fine art traditions.
+- **Use with:** SDXL checkpoints
+- **Tags:** classical, painting, fine art, painterly
+
+### comicStrips
+- **Weight:** 0.5-0.9
+- **Base:** Universal
+- **Description:** Comic strip style with bold outlines, halftone patterns, and panel-ready composition.
+- **Use with:** Any checkpoint
+- **Tags:** comic, strip, halftone, bold, outline
+
+### CyberPunkAI
+- **Weight:** 0.4-0.8
+- **Base:** SDXL
+- **Description:** Cyberpunk aesthetic with neon lighting, futuristic tech, and urban dystopian atmosphere.
+- **Use with:** SDXL checkpoints
+- **Tags:** cyberpunk, neon, futuristic, urban, tech
+
+---
+
+## Traditional Art
+
+### watercolor
+- **Weight:** 0.5-0.9
+- **Base:** Universal
+- **Description:** Watercolor painting effect with visible paper texture, color bleeding, and soft wet edges.
+- **Use with:** Any checkpoint
+- **Tags:** watercolor, painting, paper, bleed, wet
+
+### Watercolor(1)
+- **Weight:** 0.5-0.9
 - **Base:** SD 1.5
-- **Description:** Infrared photography simulation with foliage turning white/pink, dark skies, and characteristic false-color IR palette.
-- **Use with:** Photorealistic SD 1.5 checkpoints
+- **Description:** Watercolor style variant with soft brush strokes and traditional watercolor media simulation.
+- **Use with:** SD 1.5 checkpoints
+- **Tags:** watercolor, painting, soft, traditional
+
+### watercolor_v1_sdxl
+- **Weight:** 0.5-0.9
+- **Base:** SDXL
+- **Description:** Watercolor painting effect specifically tuned for SDXL with rich pigment bleeding and paper grain.
+- **Use with:** SDXL checkpoints
+- **Tags:** watercolor, SDXL, painting, paper
+
+### Watercolor_V7_E10
+- **Weight:** 0.5-0.9
+- **Base:** Universal
+- **Description:** Advanced watercolor style with improved pigment simulation, wet-on-wet effects, and natural paper interaction.
+- **Use with:** Any checkpoint
+- **Tags:** watercolor, advanced, pigment, wet
+
+### watercolor_20230906151716-000018
+- **Weight:** 0.5-0.9
+- **Base:** Universal
+- **Description:** Watercolor variant with distinct brush stroke character and color blending behavior.
+- **Use with:** Any checkpoint
+- **Tags:** watercolor, painting, brush, blend
+
+### watercolorV1
+- **Weight:** 0.5-0.9
+- **Base:** SD 1.5
+- **Description:** Base watercolor LoRA with classic watercolor media look and soft edge transitions.
+- **Use with:** SD 1.5 checkpoints
+- **Tags:** watercolor, classic, painting, soft
+
+### pencil_sketch_illustrious
+- **Weight:** 0.6-1.0
+- **Base:** Illustrious XL
+- **Description:** Graphite pencil sketch style tuned for Illustrious with hatching, shading, and visible pencil marks.
+- **Use with:** Illustrious-based models
+- **Tags:** pencil, sketch, illustrious, graphite, hatching
+
+### Pencil_Sketch_Style
+- **Weight:** 0.6-1.0
+- **Base:** Universal
+- **Description:** Graphite pencil drawing style with hatching, shading, and visible pencil marks. Produces monochrome sketch-like output.
+- **Use with:** Any checkpoint
+- **Tags:** pencil, sketch, graphite, monochrome
+
+### Charcoal3.0
+- **Weight:** 0.5-0.9
+- **Base:** Universal
+- **Description:** Charcoal drawing effect with smudged lines, rich dark values, and textured paper grain. High contrast and expressive.
+- **Use with:** Any checkpoint
+- **Tags:** charcoal, drawing, smudge, dark, texture
+
+### Charcoal_Drawing
+- **Weight:** 0.5-0.9
+- **Base:** Universal
+- **Description:** Charcoal media simulation with expressive marks, deep blacks, and characteristic smudging quality.
+- **Use with:** Any checkpoint
+- **Tags:** charcoal, drawing, expressive, smudge
+
+### ink_splats_flux
+- **Weight:** 0.4-0.8
+- **Base:** FLUX
+- **Description:** Ink splatter and splat effects for FLUX with dynamic ink droplets, runs, and accidental ink textures.
+- **Use with:** flux_dev
+- **Tags:** ink, splat, splatter, flux, dynamic
+
+### Sketch_offcolor
+- **Weight:** 0.5-0.9
+- **Base:** Universal
+- **Description:** Off-color sketch style with tinted paper and colored pencil marks creating warm-toned sketch aesthetic.
+- **Use with:** Any checkpoint
+- **Tags:** sketch, off-color, tinted, warm, pencil
+
+### appelsiensam_charcoal_v1
+- **Weight:** 0.5-0.9
+- **Base:** Universal
+- **Description:** Charcoal drawing variant with distinct artistic hand and expressive mark-making quality.
+- **Use with:** Any checkpoint
+- **Tags:** charcoal, artistic, expressive, drawing
+
+### papercut
+- **Weight:** 0.5-0.9
+- **Base:** Universal
+- **Description:** Paper cutout craft style with layered silhouettes, cast shadows between layers, and flat colored paper textures.
+- **Use with:** Any checkpoint
+- **Tags:** paper, cutout, craft, layered, silhouette
+
+### midjourneyPapercut_v1
+- **Weight:** 0.5-0.9
+- **Base:** Universal
+- **Description:** Papercut style inspired by Midjourney aesthetic with clean cuts and layered paper composition.
+- **Use with:** Any checkpoint
+- **Tags:** papercut, midjourney, paper, layered, clean
+
+### Risograph_Style_FLUX_by_Ethanar-000001
+- **Weight:** 0.4-0.8
+- **Base:** FLUX
+- **Description:** Risograph print effect with soy ink texture, slight misregistration between color layers, and limited color palette.
+- **Use with:** flux_dev
+- **Tags:** risograph, print, flux, ink, misregistration
+
+### StainedGlassAI-000006
+- **Weight:** 0.5-0.9
+- **Base:** Universal
+- **Description:** Stained glass window effect with bold black outlines, translucent colored glass segments, and light shining through.
+- **Use with:** Any checkpoint
+- **Tags:** stained, glass, window, translucent, gothic
+
+### StaindedGlassZ
+- **Weight:** 0.5-0.9
+- **Base:** Universal
+- **Description:** Stained glass variant with bold lead lines and vibrant translucent color fills.
+- **Use with:** Any checkpoint
+- **Tags:** stained, glass, lead, translucent, vibrant
+
+### Crayon drawing
+- **Weight:** 0.6-1.0
+- **Base:** Universal
+- **Description:** Crayon art style with waxy texture, imperfect lines, and bright primary colors. Naive and playful aesthetic.
+- **Use with:** Any checkpoint
+- **Tags:** crayon, children, waxy, naive, playful
+
+---
+
+## Pixel Art
+
+### pixel-art-xl-v1.1
+- **Weight:** 0.7-1.0
+- **Base:** SDXL
+- **Description:** Retro pixel art style for SDXL with clean pixel-level control and limited color palettes.
+- **Use with:** SDXL checkpoints
+- **Tags:** pixel, retro, SDXL, sprite, game
+
+### pixel-Illustrius
+- **Weight:** 0.7-1.0
+- **Base:** Illustrious XL
+- **Description:** Pixel art style tuned for Illustrious base with crisp pixels and game-ready sprite output.
+- **Use with:** Illustrious-based models
+- **Tags:** pixel, illustrious, retro, sprite, game
+
+### pixel_f2
+- **Weight:** 0.7-1.0
+- **Base:** Universal
+- **Description:** Pixel art variant with clean pixel rendering suitable for game asset creation.
+- **Use with:** Any checkpoint
+- **Tags:** pixel, retro, game, sprite, asset
+
+---
+
+## Nature & Environment
+
+### Nature SDXL
+- **Weight:** 0.4-0.8
+- **Base:** SDXL
+- **Description:** Nature scene enhancement with lush foliage, detailed bark, varied leaf colors, and rich vegetation textures.
+- **Use with:** SDXL checkpoints
+- **Tags:** nature, foliage, vegetation, landscape, SDXL
+
+### Beautiful outdoor-Countryside
+- **Weight:** 0.4-0.8
+- **Base:** SDXL
+- **Description:** Countryside and rural landscape enhancement with rolling hills, fields, and pastoral atmosphere.
+- **Use with:** SDXL checkpoints
+- **Tags:** outdoor, countryside, rural, landscape, pastoral
+
+### SDXL_Fog_Sa_May_V2
+- **Weight:** 0.4-0.8
+- **Base:** SDXL
+- **Description:** Fog and mist atmospheric effect that adds depth through aerial perspective. Softens distant objects naturally.
+- **Use with:** SDXL checkpoints
+- **Tags:** fog, mist, atmosphere, SDXL, depth
+
+### SDXL_under_water_Sa_May_V1
+- **Weight:** 0.4-0.8
+- **Base:** SDXL
+- **Description:** Underwater environment with caustic light patterns, floating particles, and blue-green color shift.
+- **Use with:** SDXL checkpoints
+- **Tags:** underwater, caustic, aquatic, blue, SDXL
+
+### underwater-photos
+- **Weight:** 0.4-0.8
+- **Base:** Universal
+- **Description:** Underwater photography style with realistic water effects, light refraction, and aquatic atmosphere.
+- **Use with:** Any checkpoint
+- **Tags:** underwater, photo, aquatic, water, refraction
+
+### Cloudy_Style
+- **Weight:** 0.3-0.7
+- **Base:** Universal
+- **Description:** Overcast cloudy atmosphere with soft diffused lighting and muted color palette.
+- **Use with:** Any checkpoint
+- **Tags:** cloud, overcast, diffused, soft, moody
+
+---
+
+## Photography Styles
+
+### Vintage_photo-000018
+- **Weight:** 0.4-0.8
+- **Base:** Universal
+- **Description:** Old vintage photograph look with sepia or faded tones, edge vignetting, paper aging, and slight blur.
+- **Use with:** Any checkpoint
+- **Tags:** vintage, old, photo, sepia, faded
+
+### NuclearPolaroid1
+- **Weight:** 0.4-0.8
+- **Base:** Universal
+- **Description:** Polaroid instant photo aesthetic with white bordered frame, slightly washed-out colors, and characteristic exposure.
+- **Use with:** Any checkpoint
+- **Tags:** polaroid, instant, photo, frame, washed
+
+### Infrared_photography_SD15_V2
+- **Weight:** 0.4-0.8
+- **Base:** SD 1.5
+- **Description:** Infrared photography simulation with foliage turning white/pink, dark skies, and false-color IR palette.
+- **Use with:** SD 1.5 checkpoints
 - **Tags:** infrared, IR, false-color, foliage, surreal
 
-## Quality & Fix
-
-### quality_adder
-- **Weight:** 0.5–0.9
-- **Base:** SD 1.5
-- **Description:** General quality boost that enhances detail, sharpness, and overall refinement. Good all-purpose quality improvement LoRA.
-- **Use with:** Any SD 1.5 checkpoint
-- **Tags:** quality, enhancement, sharpness, detail, refinement
-
-### lowres_fix
-- **Weight:** 0.5–0.9
-- **Base:** SD 1.5
-- **Description:** Fixes low resolution artifacts, compression marks, and blocky patterns. Useful for cleaning up low-quality base outputs.
-- **Use with:** Any SD 1.5 checkpoint
-- **Tags:** lowres, fix, artifact, compression, clean
-
-### color_enhance
-- **Weight:** 0.4–0.8
+### InfraredPhotosStyle
+- **Weight:** 0.4-0.8
 - **Base:** Universal
-- **Description:** Makes colors more vivid and saturated without shifting hues. Improves color depth and richness across the entire palette.
-- **Use with:** Any SD 1.5 or SDXL checkpoint
-- **Tags:** color, enhance, vivid, saturated, rich
+- **Description:** Infrared photography style variant with characteristic color shifts and surreal plant rendering.
+- **Use with:** Any checkpoint
+- **Tags:** infrared, IR, photo, surreal, color-shift
 
-### contrast_fix
-- **Weight:** 0.4–0.8
-- **Base:** SD 1.5
-- **Description:** Improves overall contrast by deepening blacks and brightening highlights. Prevents washed-out or flat-looking outputs.
-- **Use with:** Any SD 1.5 checkpoint
-- **Tags:** contrast, fix, black, highlight, depth
+### tilt-shift-v1_1
+- **Weight:** 0.6-1.0
+- **Base:** Universal
+- **Description:** Tilt-shift miniature effect making scenes look like small scale models. Selective blur with sharp central band.
+- **Use with:** Landscape and architectural checkpoints
+- **Tags:** tilt-shift, miniature, model, selective, blur
 
-### sharp_details
-- **Weight:** 0.5–0.9
-- **Base:** SD 1.5
-- **Description:** Sharpens fine details across the image including textures, edges, and small elements. Combats soft or blurry generation.
-- **Use with:** Any SD 1.5 checkpoint
-- **Tags:** sharp, detail, edge, texture, crisp
+### vintagePrintZit21r1K32D
+- **Weight:** 0.4-0.8
+- **Base:** Universal
+- **Description:** Vintage print style with distressed paper texture, faded ink, and antique printing artifacts.
+- **Use with:** Any checkpoint
+- **Tags:** vintage, print, distressed, antique, faded
+
+---
+
+## Lighting
+
+### Dramatic Lighting Slider
+- **Weight:** 0.3-0.8
+- **Base:** Universal
+- **Description:** Strong chiaroscuro lighting with deep shadows and bright highlights. Creates high-contrast theatrical mood.
+- **Use with:** Any checkpoint
+- **Tags:** dramatic, chiaroscuro, shadow, contrast, theatrical
+
+---
+
+## Fantasy & Sci-Fi
+
+### MW_Elven_p2_illxl_hybrid
+- **Weight:** 0.5-0.9
+- **Base:** Illustrious XL
+- **Description:** Elven and fantasy character style with pointed ears, ethereal features, and fantasy costume elements.
+- **Use with:** Illustrious-based models
+- **Tags:** elven, fantasy, ears, ethereal, costume
+
+### DarkestDnDZBase_000004000
+- **Weight:** 0.5-0.9
+- **Base:** Universal
+- **Description:** Dark Dungeons & Dragons aesthetic with medieval fantasy, dark dungeons, and RPG character styling.
+- **Use with:** Any checkpoint, especially fantasy-oriented ones
+- **Tags:** D&D, dark, fantasy, medieval, RPG
+
+---
+
+## Specialty & Fashion
+
+### CQL
+- **Weight:** 0.4-0.8
+- **Base:** Universal
+- **Description:** Artistic style enhancement with distinctive color quality and rendering approach.
+- **Use with:** Any checkpoint
+- **Tags:** style, color, quality, artistic
+
+### bichu-v0612
+- **Weight:** 0.5-0.9
+- **Base:** Universal
+- **Description:** Specialty style LoRA with distinctive artistic character.
+- **Use with:** Any checkpoint
+- **Tags:** specialty, artistic, style
+
+### CAXL_001_4
+- **Weight:** 0.4-0.8
+- **Base:** SDXL
+- **Description:** SDXL specialty style with unique color treatment and compositional approach.
+- **Use with:** SDXL checkpoints
+- **Tags:** SDXL, style, color, composition
+
+### CBS_novuschroma11 style
+- **Weight:** 0.4-0.8
+- **Base:** Universal
+- **Description:** Novus Chroma artistic style with rich chromatic handling and vibrant color expression.
+- **Use with:** Any checkpoint
+- **Tags:** chroma, color, vibrant, artistic
+
+### novuschroma71 style
+- **Weight:** 0.4-0.8
+- **Base:** Universal
+- **Description:** Novus Chroma variant with distinct color grading and artistic rendering style.
+- **Use with:** Any checkpoint
+- **Tags:** chroma, color, grading, artistic
+
+### flux.1_lora_flyway_ink-dynamic
+- **Weight:** 0.4-0.8
+- **Base:** FLUX
+- **Description:** Dynamic ink style for FLUX with fluid ink lines, splatter, and expressive mark-making.
+- **Use with:** flux_dev
+- **Tags:** flux, ink, dynamic, fluid, expressive
+
+### ral-exposure-flux
+- **Weight:** 0.3-0.7
+- **Base:** FLUX
+- **Description:** Exposure control LoRA for FLUX models, adjusting brightness and tonal range.
+- **Use with:** flux_dev
+- **Tags:** flux, exposure, brightness, tonal
+
+### ral-mytfrst-sdxl
+- **Weight:** 0.4-0.8
+- **Base:** SDXL
+- **Description:** SDXL artistic style with distinctive rendering approach and color treatment.
+- **Use with:** SDXL checkpoints
+- **Tags:** SDXL, artistic, style, color
+
+### Pastel_Style_PonyXL
+- **Weight:** 0.5-0.9
+- **Base:** Pony XL
+- **Description:** Soft pastel chalk effect with gentle blending and muted warm palette for Pony XL.
+- **Use with:** Pony XL checkpoints
+- **Tags:** pastel, soft, pony, blend, warm
+
+### edgCrystalButterflyv1
+- **Weight:** 0.4-0.8
+- **Base:** Universal
+- **Description:** Crystal butterfly motif with iridescent wings, prismatic light, and magical aesthetic.
+- **Use with:** Any checkpoint
+- **Tags:** crystal, butterfly, iridescent, magical
+
+### edgFlowerGownv1
+- **Weight:** 0.4-0.8
+- **Base:** Universal
+- **Description:** Floral gown dress with petal-like fabric, flower embroidery, and botanical fashion design.
+- **Use with:** Any checkpoint
+- **Tags:** flower, gown, dress, fashion, botanical
+
+### edgShamrockHoodiev1
+- **Weight:** 0.4-0.8
+- **Base:** Universal
+- **Description:** Shamrock-themed hoodie clothing design with lucky clover motifs and casual wear styling.
+- **Use with:** Any checkpoint
+- **Tags:** shamrock, hoodie, clothing, casual, clover
+
+### CrunchyBanana_Shiny_Neckholder_Dress_001
+- **Weight:** 0.4-0.8
+- **Base:** Universal
+- **Description:** Shiny neckholder dress with reflective satin-like fabric and elegant neckline design.
+- **Use with:** Any checkpoint
+- **Tags:** dress, neckholder, shiny, satin, fashion
+
+### hgwfe-dress-000012
+- **Weight:** 0.4-0.8
+- **Base:** Universal
+- **Description:** Fashion dress design with detailed fabric rendering and clothing silhouette.
+- **Use with:** Any checkpoint
+- **Tags:** dress, fashion, fabric, clothing
+
+### s4t1nblous3
+- **Weight:** 0.4-0.8
+- **Base:** Universal
+- **Description:** Satin blouse clothing design with glossy fabric texture and elegant styling.
+- **Use with:** Any checkpoint
+- **Tags:** satin, blouse, clothing, glossy, fashion
+
+### s4t1ndr3ssFlux
+- **Weight:** 0.4-0.8
+- **Base:** FLUX
+- **Description:** Satin dress design for FLUX models with flowing fabric and light-reflecting material.
+- **Use with:** flux_dev
+- **Tags:** satin, dress, flux, fabric, fashion
+
+### sat1nsh1rt
+- **Weight:** 0.4-0.8
+- **Base:** Universal
+- **Description:** Satin shirt clothing item with smooth shiny fabric texture and button-up styling.
+- **Use with:** Any checkpoint
+- **Tags:** satin, shirt, clothing, smooth, fashion
+
+### Satin_Maid__FLUX
+- **Weight:** 0.4-0.8
+- **Base:** FLUX
+- **Description:** Satin maid outfit for FLUX with glossy uniform fabric and detailed costume rendering.
+- **Use with:** flux_dev
+- **Tags:** satin, maid, flux, costume, uniform
+
+### Satin_Schoolgirl-000001
+- **Weight:** 0.4-0.8
+- **Base:** Universal
+- **Description:** Satin schoolgirl outfit with glossy fabric school uniform design.
+- **Use with:** Any checkpoint
+- **Tags:** satin, schoolgirl, uniform, costume, fabric
+
+### Satin_Schoolgirl_Flux-000004
+- **Weight:** 0.4-0.8
+- **Base:** FLUX
+- **Description:** Satin schoolgirl outfit for FLUX models with detailed fabric rendering.
+- **Use with:** flux_dev
+- **Tags:** satin, schoolgirl, flux, uniform, fabric
+
+### SatinBlouseILL
+- **Weight:** 0.4-0.8
+- **Base:** Illustrious XL
+- **Description:** Satin blouse clothing design for Illustrious base with glossy fabric rendering.
+- **Use with:** Illustrious-based models
+- **Tags:** satin, blouse, illustrious, clothing, glossy
+
+### LePalaisVintageElegantGreyHighWaistSkirtBlouseILL
+- **Weight:** 0.4-0.8
+- **Base:** Illustrious XL
+- **Description:** Vintage elegant grey high-waist skirt and blouse ensemble for Illustrious models.
+- **Use with:** Illustrious-based models
+- **Tags:** vintage, elegant, skirt, blouse, illustrious, fashion
+
+### OffShoulderRuffleHemSatinDressILL
+- **Weight:** 0.4-0.8
+- **Base:** Illustrious XL
+- **Description:** Off-shoulder satin dress with ruffle hem detail for Illustrious models.
+- **Use with:** Illustrious-based models
+- **Tags:** off-shoulder, ruffle, satin, dress, illustrious
+
+### Shiny_Satin_Ribboned_Puffy_Dress
+- **Weight:** 0.4-0.8
+- **Base:** Universal
+- **Description:** Puffy satin dress with ribbon details and shiny fabric with voluminous skirt.
+- **Use with:** Any checkpoint
+- **Tags:** satin, puffy, dress, ribbon, shiny, voluminous
+
+### MidJourneyNSFWZ
+- **Weight:** 0.3-0.7
+- **Base:** Universal
+- **Description:** Midjourney-inspired aesthetic style with distinctive MJ composition and rendering quality.
+- **Use with:** Any checkpoint
+- **Tags:** midjourney, style, aesthetic, composition
+
+### waterV2
+- **Weight:** 0.4-0.8
+- **Base:** Universal
+- **Description:** Water and liquid effect enhancement with realistic water surfaces, reflections, and fluid dynamics.
+- **Use with:** Any checkpoint
+- **Tags:** water, liquid, reflection, surface, fluid
+
+### zy_AmateurStyle_v2
+- **Weight:** 0.4-0.8
+- **Base:** Universal
+- **Description:** Amateur photography style with candid composition, imperfect framing, and casual snapshot aesthetic.
+- **Use with:** Any checkpoint
+- **Tags:** amateur, candid, snapshot, casual, photography

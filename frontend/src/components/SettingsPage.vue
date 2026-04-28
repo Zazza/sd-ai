@@ -30,7 +30,7 @@ const connectionSaved = ref(false)
 const connectionError = ref('')
 
 const sdModels = ref([])
-const sdSamplers = ref([])
+const sdLoRAs = ref([])
 const sdLoading = ref(false)
 const sdError = ref('')
 
@@ -226,10 +226,10 @@ async function loadSD() {
   sdLoading.value = true
   sdError.value = ''
   try {
-    const [m, s] = await Promise.allSettled([api.getModels(), api.getSamplers()])
+    const [m, l] = await Promise.allSettled([api.getModels(), api.getLoRAs()])
     if (m.status === 'fulfilled') sdModels.value = m.value
     else sdError.value = 'Cannot load models — is Stable Diffusion running?'
-    if (s.status === 'fulfilled') sdSamplers.value = s.value
+    if (l.status === 'fulfilled') sdLoRAs.value = l.value
   } finally {
     sdLoading.value = false
   }
@@ -452,12 +452,14 @@ onMounted(loadSettings)
         </div>
 
         <div class="card">
-          <h3 style="color: var(--text-bright); margin-bottom: 16px;">Samplers</h3>
+          <h3 style="color: var(--text-bright); margin-bottom: 16px;">Available LoRA</h3>
           <div v-if="sdLoading" style="text-align: center; padding: 20px;"><span class="spinner"></span></div>
+          <div v-else-if="sdLoRAs.length === 0" style="color: var(--text-dim);">No LoRA models found</div>
           <div v-else style="display: flex; flex-wrap: wrap; gap: 6px;">
-            <span v-for="s in sdSamplers" :key="s.name"
-              style="padding: 4px 10px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 4px; font-size: 12px; color: var(--text);">
-              {{ s.name }}
+            <span v-for="l in sdLoRAs" :key="l.name"
+              style="padding: 4px 10px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 4px; font-size: 12px; color: var(--text);"
+              :title="l.path">
+              {{ l.name }}
             </span>
           </div>
         </div>

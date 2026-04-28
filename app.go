@@ -1833,6 +1833,7 @@ type PresetData struct {
 	VAE                    string   `json:"vae"`
 	Tags                   string   `json:"tags"`
 	Loras                  string   `json:"loras"`
+	SourceFile             string   `json:"source_file,omitempty"`
 }
 
 type ImportPreview struct {
@@ -1920,44 +1921,52 @@ func (a *App) ExportPresets(ids []int64) (string, error) {
 }
 
 func (a *App) OpenImportFile() (*ImportPreview, error) {
-	path, err := runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{
+	paths, err := runtime.OpenMultipleFilesDialog(a.ctx, runtime.OpenDialogOptions{
 		Filters: []runtime.FileFilter{
 			{DisplayName: "JSON Files", Pattern: "*.json"},
 		},
 	})
-	if err != nil || path == "" {
+	if err != nil || len(paths) == 0 {
 		return nil, err
 	}
 
-	info, err := os.Stat(path)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read file")
-	}
-	if info.Size() > 10*1024*1024 {
-		return nil, fmt.Errorf("file too large (max 10 MB)")
+	var allPresets []PresetData
+	for _, path := range paths {
+		info, err := os.Stat(path)
+		if err != nil {
+			continue
+		}
+		if info.Size() > 10*1024*1024 {
+			continue
+		}
+
+		jsonBytes, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+
+		var data PresetExportFile
+		if err := json.Unmarshal(jsonBytes, &data); err != nil {
+			continue
+		}
+		if data.Version < 1 || data.Version > 2 {
+			continue
+		}
+
+		fileName := filepath.Base(path)
+		for i := range data.Presets {
+			data.Presets[i].SourceFile = fileName
+		}
+		allPresets = append(allPresets, data.Presets...)
 	}
 
-	jsonBytes, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read file")
-	}
-
-	var data PresetExportFile
-	if err := json.Unmarshal(jsonBytes, &data); err != nil {
-		return nil, fmt.Errorf("invalid file format: %w", err)
-	}
-
-	if data.Version < 1 || data.Version > 2 {
-		return nil, fmt.Errorf("unsupported file version: %d", data.Version)
-	}
-
-	if len(data.Presets) == 0 {
-		return nil, fmt.Errorf("no presets found in file")
+	if len(allPresets) == 0 {
+		return nil, fmt.Errorf("no presets found in selected files")
 	}
 
 	return &ImportPreview{
-		Presets: data.Presets,
-		Total:   len(data.Presets),
+		Presets: allPresets,
+		Total:   len(allPresets),
 	}, nil
 }
 

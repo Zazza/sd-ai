@@ -184,6 +184,7 @@ export namespace main {
 	    vae: string;
 	    tags: string;
 	    loras: string;
+	    source_file?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new PresetData(source);
@@ -215,6 +216,7 @@ export namespace main {
 	        this.vae = source["vae"];
 	        this.tags = source["tags"];
 	        this.loras = source["loras"];
+	        this.source_file = source["source_file"];
 	    }
 	}
 	export class ImportPreview {

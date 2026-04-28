@@ -1,9 +1,9 @@
 {
   "version": 2,
-  "exported_at": "2026-04-26T00:00:00Z",
+  "exported_at": "2026-04-28T00:00:00Z",
   "presets": [
     {
-      "name": "Product White Background (productShotXL)",
+      "name": "White Background (juggernautXL_ragnarokBy)",
       "preset_type": "style",
       "type_name": "product",
       "prompt": "masterpiece, best quality, product photography, white background, clean studio shot, soft shadow, e-commerce listing, professional catalog photo, even lighting, product showcase, commercial photography",
@@ -11,10 +11,10 @@
       "sampler": "DPM++ 2M Karras",
       "schedule_type": "",
       "steps": 28,
-      "cfg_scale": 7,
+      "cfg_scale": 7.0,
       "width": 1024,
       "height": 1024,
-      "model_name": "productShotXL_v10",
+      "model_name": "juggernautXL_ragnarokBy",
       "seed": null,
       "denoising_strength": null,
       "clip_skip": 1,
@@ -26,10 +26,10 @@
       "hires_upscaler": "",
       "vae": "",
       "tags": "product, white, ecommerce, catalog",
-      "loras": "[{\"name\":\"sharp_details\",\"weight\":0.7}]"
+      "loras": "[{\"name\":\"ErnieSh4rpD3tails\",\"weight\":0.7},{\"name\":\"add-detail-xl\",\"weight\":0.5}]"
     },
     {
-      "name": "Lifestyle Product (productShotXL)",
+      "name": "Lifestyle Product (photon_v1)",
       "preset_type": "style",
       "type_name": "product",
       "prompt": "masterpiece, best quality, lifestyle product photography, natural setting, aesthetic flat lay, marble surface, plants, minimal props, warm tones, instagram style, curated scene, premium feel",
@@ -37,10 +37,10 @@
       "sampler": "DPM++ 2M Karras",
       "schedule_type": "",
       "steps": 28,
-      "cfg_scale": 7,
+      "cfg_scale": 7.0,
       "width": 1024,
       "height": 1024,
-      "model_name": "productShotXL_v10",
+      "model_name": "photon_v1",
       "seed": null,
       "denoising_strength": null,
       "clip_skip": 1,
@@ -52,21 +52,21 @@
       "hires_upscaler": "",
       "vae": "",
       "tags": "product, lifestyle, scene, ambient",
-      "loras": "[{\"name\":\"soft_lighting\",\"weight\":0.5},{\"name\":\"color_enhance\",\"weight\":0.4}]"
+      "loras": "[{\"name\":\"HDR_Photography\",\"weight\":0.5},{\"name\":\"Artist_photo_flux\",\"weight\":0.4}]"
     },
     {
-      "name": "Cosmetic Beauty Shot (productShotXL)",
+      "name": "Cosmetic Beauty Shot (realvisxlV50_v50LightningBakedvae)",
       "preset_type": "style",
       "type_name": "product",
       "prompt": "masterpiece, best quality, cosmetic product photography, beauty products, luxury packaging, gradient background, water droplets, fresh flowers, glossy finish, perfume bottle, premium branding",
       "negative_prompt": "(worst quality, low quality:1.4), blurry, damaged, dirty, scratched, dented, fingerprint, dust, uneven lighting, harsh shadow, yellow tint, color cast",
-      "sampler": "DPM++ 2M Karras",
+      "sampler": "DPM++ SDE Karras",
       "schedule_type": "",
-      "steps": 28,
-      "cfg_scale": 7,
+      "steps": 8,
+      "cfg_scale": 1.5,
       "width": 1024,
       "height": 1024,
-      "model_name": "productShotXL_v10",
+      "model_name": "realvisxlV50_v50LightningBakedvae",
       "seed": null,
       "denoising_strength": null,
       "clip_skip": 1,
@@ -78,7 +78,33 @@
       "hires_upscaler": "",
       "vae": "",
       "tags": "product, cosmetic, beauty, luxury",
-      "loras": "[{\"name\":\"macro_detail\",\"weight\":0.7},{\"name\":\"sharp_details\",\"weight\":0.6}]"
+      "loras": "[{\"name\":\"500SharpCivitai_Lascalae\",\"weight\":0.7},{\"name\":\"add-detail-xl\",\"weight\":0.5}]"
+    },
+    {
+      "name": "Tech Gadget (leosamsHelloworldXL_helloworldXL70)",
+      "preset_type": "style",
+      "type_name": "product",
+      "prompt": "masterpiece, best quality, tech gadget product photography, sleek device, dark background, studio lighting, reflections, modern electronics, professional shot, detailed texture, premium product",
+      "negative_prompt": "(worst quality, low quality:1.4), blurry, damaged, dirty, scratched, dented, fingerprint, dust, uneven lighting, harsh shadow, yellow tint, color cast",
+      "sampler": "DPM++ 2M Karras",
+      "schedule_type": "",
+      "steps": 28,
+      "cfg_scale": 7.0,
+      "width": 1024,
+      "height": 1024,
+      "model_name": "leosamsHelloworldXL_helloworldXL70",
+      "seed": null,
+      "denoising_strength": null,
+      "clip_skip": 1,
+      "batch_size": null,
+      "batch_count": null,
+      "hires_fix": null,
+      "hires_upscale": null,
+      "hires_denoising_strength": null,
+      "hires_upscaler": "",
+      "vae": "",
+      "tags": "product, tech, gadget, electronics",
+      "loras": "[{\"name\":\"ErnieSh4rpD3tails\",\"weight\":0.6},{\"name\":\"500SharpCivitai_Lascalae\",\"weight\":0.5}]"
     }
   ]
 }

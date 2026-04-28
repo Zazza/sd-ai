@@ -1,9 +1,9 @@
 {
   "version": 2,
-  "exported_at": "2026-04-26T00:00:00Z",
+  "exported_at": "2026-04-28T00:00:00Z",
   "presets": [
     {
-      "name": "Gourmet Plate (foodPhotoXL)",
+      "name": "Gourmet Plate (juggernautXL_ragnarokBy)",
       "preset_type": "style",
       "type_name": "food",
       "prompt": "masterpiece, best quality, gourmet food photography, plated dish, restaurant quality, steam rising, garnish, shallow depth of field, professional food styling, warm lighting, cookbook photo, appetizing",
@@ -11,10 +11,10 @@
       "sampler": "DPM++ 2M Karras",
       "schedule_type": "",
       "steps": 28,
-      "cfg_scale": 7,
+      "cfg_scale": 7.0,
       "width": 1024,
       "height": 1024,
-      "model_name": "foodPhotoXL_v10",
+      "model_name": "juggernautXL_ragnarokBy",
       "seed": null,
       "denoising_strength": null,
       "clip_skip": 1,
@@ -26,10 +26,10 @@
       "hires_upscaler": "",
       "vae": "",
       "tags": "food, gourmet, plate, restaurant",
-      "loras": "[{\"name\":\"sharp_details\",\"weight\":0.6},{\"name\":\"color_enhance\",\"weight\":0.5}]"
+      "loras": "[{\"name\":\"ErnieSh4rpD3tails\",\"weight\":0.6},{\"name\":\"HDR_Photography\",\"weight\":0.5}]"
     },
     {
-      "name": "Bakery Sweets (foodPhotoXL)",
+      "name": "Bakery Sweets (photon_v1)",
       "preset_type": "style",
       "type_name": "food",
       "prompt": "masterpiece, best quality, bakery sweets photography, pastries, cakes, rustic wooden table, flour dust, morning light, artisan bread, croissants, cozy bakery atmosphere, food magazine",
@@ -37,10 +37,10 @@
       "sampler": "DPM++ 2M Karras",
       "schedule_type": "",
       "steps": 25,
-      "cfg_scale": 7,
+      "cfg_scale": 7.0,
       "width": 1024,
       "height": 1024,
-      "model_name": "foodPhotoXL_v10",
+      "model_name": "photon_v1",
       "seed": null,
       "denoising_strength": null,
       "clip_skip": 1,
@@ -52,21 +52,21 @@
       "hires_upscaler": "",
       "vae": "",
       "tags": "food, bakery, sweets, pastry",
-      "loras": "[{\"name\":\"sharp_details\",\"weight\":0.5},{\"name\":\"soft_lighting\",\"weight\":0.4}]"
+      "loras": "[{\"name\":\"coloricher\",\"weight\":0.5},{\"name\":\"add-detail-xl\",\"weight\":0.5}]"
     },
     {
-      "name": "Coffee Art (foodPhotoXL)",
+      "name": "Coffee Art (realvisxlV50_v50LightningBakedvae)",
       "preset_type": "style",
       "type_name": "food",
       "prompt": "masterpiece, best quality, latte art photography, cappuccino, coffee cup, latte art rosetta, coffee beans scattered, warm cafe lighting, bokeh, artisan coffee, cafe atmosphere, professional barista",
       "negative_prompt": "(worst quality, low quality:1.4), blurry, messy, dirty, unappetizing, raw meat, spoiled, plastic looking, artificial colors, text, watermark, cartoon, anime",
-      "sampler": "DPM++ 2M Karras",
+      "sampler": "DPM++ SDE Karras",
       "schedule_type": "",
-      "steps": 25,
-      "cfg_scale": 7,
+      "steps": 8,
+      "cfg_scale": 1.5,
       "width": 1024,
       "height": 1024,
-      "model_name": "foodPhotoXL_v10",
+      "model_name": "realvisxlV50_v50LightningBakedvae",
       "seed": null,
       "denoising_strength": null,
       "clip_skip": 1,
@@ -78,7 +78,33 @@
       "hires_upscaler": "",
       "vae": "",
       "tags": "food, coffee, latte, art",
-      "loras": "[{\"name\":\"macro_detail\",\"weight\":0.6}]"
+      "loras": "[{\"name\":\"Artist_photo_flux\",\"weight\":0.6},{\"name\":\"ErnieSh4rpD3tails\",\"weight\":0.5}]"
+    },
+    {
+      "name": "Fresh Ingredients (neverendingDreamNED_v122BakedVae)",
+      "preset_type": "style",
+      "type_name": "food",
+      "prompt": "masterpiece, best quality, fresh ingredients photography, colorful vegetables, herbs, rustic cutting board, natural light, farm to table, organic produce, food styling, vibrant colors, overhead shot",
+      "negative_prompt": "(worst quality, low quality:1.4), blurry, messy, dirty, unappetizing, raw meat, spoiled, plastic looking, artificial colors, text, watermark, cartoon, anime",
+      "sampler": "DPM++ 2M Karras",
+      "schedule_type": "",
+      "steps": 28,
+      "cfg_scale": 7.0,
+      "width": 1024,
+      "height": 1024,
+      "model_name": "neverendingDreamNED_v122BakedVae",
+      "seed": null,
+      "denoising_strength": null,
+      "clip_skip": 1,
+      "batch_size": null,
+      "batch_count": null,
+      "hires_fix": null,
+      "hires_upscale": null,
+      "hires_denoising_strength": null,
+      "hires_upscaler": "",
+      "vae": "",
+      "tags": "food, ingredients, fresh, organic",
+      "loras": "[{\"name\":\"HDR_Photography\",\"weight\":0.6},{\"name\":\"add-detail-xl\",\"weight\":0.4}]"
     }
   ]
 }
