@@ -89,6 +89,8 @@ export function SelectFolder():Promise<string>;
 
 export function SetKidsMode(arg1:boolean,arg2:string):Promise<void>;
 
+export function TestGenerate(arg1:main.TestGenerateParams):Promise<Array<main.TestGenerateResultItem>>;
+
 export function UpdatePreset(arg1:preset.Preset):Promise<preset.Preset>;
 
 export function UpdatePresetType(arg1:preset.PresetType):Promise<preset.PresetType>;

@@ -6,6 +6,7 @@ import GeneratePage from './components/GeneratePage.vue'
 import AnalyzePage from './components/AnalyzePage.vue'
 import SettingsPage from './components/SettingsPage.vue'
 import BatchPage from './components/BatchPage.vue'
+import TestPage from './components/TestPage.vue'
 
 const page = ref('generate')
 const batchProps = ref({})
@@ -16,6 +17,7 @@ const currentPage = computed(() => {
     case 'generate': return GeneratePage
     case 'analyze': return AnalyzePage
     case 'batch': return BatchPage
+    case 'test': return TestPage
     case 'settings': return SettingsPage
     default: return GeneratePage
   }
@@ -61,6 +63,9 @@ const close = () => Quit()
         <a class="sidebar-link" :class="{ active: page === 'batch' }" @click="page = 'batch'">
           &#9638; Batch
         </a>
+        <a class="sidebar-link" :class="{ active: page === 'test' }" @click="page = 'test'">
+          &#9888; Test
+        </a>
         <a class="sidebar-link" :class="{ active: page === 'analyze' }" @click="page = 'analyze'">
           &#9673; Analyze
         </a>
@@ -73,10 +78,11 @@ const close = () => Quit()
       </nav>
     </aside>
     <main class="main">
-      <KeepAlive v-if="page !== 'batch'">
+      <KeepAlive v-if="page !== 'batch' && page !== 'test'">
         <component :is="currentPage" />
       </KeepAlive>
-      <BatchPage v-else v-bind="batchProps" :key="JSON.stringify(batchProps)" />
+      <BatchPage v-else-if="page === 'batch'" v-bind="batchProps" :key="JSON.stringify(batchProps)" />
+      <TestPage v-else-if="page === 'test'" />
     </main>
     </div>
   </div>

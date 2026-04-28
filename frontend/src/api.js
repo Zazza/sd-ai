@@ -12,6 +12,7 @@ import {
   GetAllTags, GetSDLoRAs, ValidateImportModels,
   RecommendPreset, GetDefaultPromptInstruction, GetDefaultAnalyzePrompts,
   BatchGenerate, SelectFolder, GetPresetForBatch,
+  TestGenerate,
 } from './wailsjs/go/main/App.js'
 
 export const api = {
@@ -65,4 +66,5 @@ export const api = {
   batchGenerate: (params) => BatchGenerate(params),
   selectFolder: () => SelectFolder(),
   getPresetForBatch: (presetId, description) => GetPresetForBatch(presetId, description),
+  testGenerate: (params) => TestGenerate(params),
 }

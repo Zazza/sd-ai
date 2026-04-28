@@ -922,6 +922,255 @@ func (a *App) BatchGenerate(params BatchGenerateParams) error {
 	return nil
 }
 
+type TestGenerateParams struct {
+	Mode            string   `json:"mode"`
+	SelectedIDs     []int64  `json:"selected_ids"`
+	SelectedModels  []string `json:"selected_models"`
+	Prompt          string   `json:"prompt"`
+	NegativePrompt  string   `json:"negative_prompt"`
+	Sampler         string   `json:"sampler"`
+	ScheduleType    string   `json:"schedule_type"`
+	Steps           int      `json:"steps"`
+	CfgScale        float64  `json:"cfg_scale"`
+	Width           int      `json:"width"`
+	Height          int      `json:"height"`
+	Seed            *int64   `json:"seed"`
+}
+
+type TestGenerateResultItem struct {
+	Name           string `json:"name"`
+	Image          string `json:"image"`
+	Seed           int64  `json:"seed"`
+	Error          string `json:"error,omitempty"`
+	Sampler        string `json:"sampler"`
+	ScheduleType   string `json:"schedule_type"`
+	CfgScale       float64 `json:"cfg_scale"`
+	ModelName      string `json:"model_name"`
+}
+
+func (a *App) TestGenerate(params TestGenerateParams) ([]TestGenerateResultItem, error) {
+	if params.Mode != "presets" && params.Mode != "models" {
+		return nil, fmt.Errorf("mode must be 'presets' or 'models'")
+	}
+	totalItems := len(params.SelectedIDs)
+	if params.Mode == "models" {
+		totalItems = len(params.SelectedModels)
+	}
+	if totalItems == 0 {
+		return nil, fmt.Errorf("select at least one item")
+	}
+	if totalItems > 50 {
+		return nil, fmt.Errorf("maximum 50 items at once")
+	}
+	if params.Prompt == "" {
+		return nil, fmt.Errorf("prompt is required")
+	}
+	if params.Width > 2048 || params.Height > 2048 {
+		return nil, fmt.Errorf("maximum dimension is 2048")
+	}
+	if params.Steps > 150 {
+		return nil, fmt.Errorf("maximum steps is 150")
+	}
+
+	defaultPreset := &preset.Preset{
+		Sampler:  "Euler a",
+		Steps:    20,
+		CfgScale: 7.0,
+		Width:    512,
+		Height:   512,
+	}
+
+	results := make([]TestGenerateResultItem, 0, totalItems)
+
+	for idx := 0; idx < totalItems; idx++ {
+		runtime.EventsEmit(a.ctx, "test:progress", map[string]any{
+			"current": idx + 1,
+			"total":   totalItems,
+			"status":  "generating",
+		})
+
+		item := TestGenerateResultItem{}
+		p := &preset.Preset{}
+		*p = *defaultPreset
+
+		if params.Mode == "presets" {
+			id := params.SelectedIDs[idx]
+			loaded, err := a.presets.Get(id)
+			if err != nil {
+				item.Error = fmt.Sprintf("preset not found: %v", err)
+				item.Name = fmt.Sprintf("Preset #%d", id)
+				results = append(results, item)
+				continue
+			}
+			p = loaded
+			item.Name = p.Name
+			if p.ModelName != "" {
+				_ = a.sd.SetModel(p.ModelName)
+			}
+			if p.VAE != "" {
+				_ = a.sd.SetVAE(p.VAE)
+			}
+		} else {
+			modelTitle := params.SelectedModels[idx]
+			_ = a.sd.SetModel(modelTitle)
+			item.Name = modelTitle
+		}
+
+		if p.Sampler == "" {
+			p.Sampler = defaultPreset.Sampler
+		}
+		if p.Steps == 0 {
+			p.Steps = defaultPreset.Steps
+		}
+		if p.CfgScale == 0 {
+			p.CfgScale = defaultPreset.CfgScale
+		}
+		if p.Width == 0 {
+			p.Width = defaultPreset.Width
+		}
+		if p.Height == 0 {
+			p.Height = defaultPreset.Height
+		}
+
+		prompt := params.Prompt
+		if a.isKidsMode() {
+			prompt = kids.FilterInput(prompt)
+		}
+		if p.Loras != "" && params.Mode == "presets" {
+			var loras []preset.LoRAEntry
+			if err := json.Unmarshal([]byte(p.Loras), &loras); err == nil {
+				for _, l := range loras {
+					prompt += fmt.Sprintf(" <lora:%s:%g>", l.Name, l.Weight)
+				}
+			}
+		}
+
+		negPrompt := params.NegativePrompt
+		if params.Mode == "presets" && p.NegativePrompt != "" {
+			if negPrompt != "" {
+				negPrompt = p.NegativePrompt + ", " + negPrompt
+			} else {
+				negPrompt = p.NegativePrompt
+			}
+		}
+		if a.isKidsMode() {
+			if negPrompt != "" {
+				negPrompt += ", "
+			}
+			negPrompt += config.KidsModeNegativePrompt
+		}
+
+		sampler := p.Sampler
+		scheduleType := p.ScheduleType
+		steps := p.Steps
+		cfgScale := p.CfgScale
+		width := p.Width
+		height := p.Height
+		seed := p.Seed
+
+		if params.Sampler != "" {
+			sampler = params.Sampler
+		}
+		if params.ScheduleType != "" {
+			scheduleType = params.ScheduleType
+		}
+		if params.Steps > 0 {
+			steps = params.Steps
+		}
+		if params.CfgScale > 0 {
+			cfgScale = params.CfgScale
+		}
+		if params.Width > 0 {
+			width = params.Width
+		}
+		if params.Height > 0 {
+			height = params.Height
+		}
+		if params.Seed != nil {
+			seed = params.Seed
+		}
+
+		samplerName := sampler
+		if scheduleType != "" {
+			st := strings.ToUpper(scheduleType[:1]) + scheduleType[1:]
+			samplerName = sampler + " " + st
+		}
+
+		clipSkip := 1
+		if p.ClipSkip != nil {
+			clipSkip = *p.ClipSkip
+		}
+		batchSize := 1
+		batchCount := 1
+
+		result, err := a.sd.Txt2Img(sd.Txt2ImgRequest{
+			Prompt:          prompt,
+			NegativePrompt:  negPrompt,
+			SamplerName:     samplerName,
+			Scheduler:       scheduleType,
+			Steps:           steps,
+			CfgScale:        cfgScale,
+			Width:           width,
+			Height:          height,
+			Seed:            seed,
+			ClipSkip:        &clipSkip,
+			BatchSize:       &batchSize,
+			BatchCount:      &batchCount,
+			DoNotSaveImages: true,
+			DoNotSaveGrid:   true,
+		})
+		if err != nil {
+			item.Error = err.Error()
+			item.Sampler = sampler
+			item.ScheduleType = scheduleType
+			item.CfgScale = cfgScale
+			if p.ModelName != "" {
+				item.ModelName = p.ModelName
+			}
+			results = append(results, item)
+			continue
+		}
+		if len(result.Images) == 0 {
+			item.Error = "no image returned"
+			results = append(results, item)
+			continue
+		}
+
+		var infoSeed int64
+		var infoModel string
+		if len(result.Info) > 0 {
+			var info struct {
+				Seed    int64  `json:"seed"`
+				SDModel string `json:"sd_model_name"`
+			}
+			if json.Unmarshal(result.Info, &info) == nil {
+				infoSeed = info.Seed
+				infoModel = info.SDModel
+			}
+		}
+
+		item.Image = result.Images[0]
+		item.Seed = infoSeed
+		item.Sampler = sampler
+		item.ScheduleType = scheduleType
+		item.CfgScale = cfgScale
+		item.ModelName = infoModel
+		if item.ModelName == "" && p.ModelName != "" {
+			item.ModelName = p.ModelName
+		}
+
+		results = append(results, item)
+
+		runtime.EventsEmit(a.ctx, "test:progress", map[string]any{
+			"current": idx + 1,
+			"total":   totalItems,
+			"status":  "done",
+		})
+	}
+
+	return results, nil
+}
+
 func (a *App) SelectFolder() (string, error) {
 	path, err := runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{
 		Title: "Select Output Folder",

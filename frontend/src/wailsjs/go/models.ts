@@ -278,6 +278,66 @@ export namespace main {
 		    return a;
 		}
 	}
+	export class TestGenerateParams {
+	    mode: string;
+	    selected_ids: number[];
+	    selected_models: string[];
+	    prompt: string;
+	    negative_prompt: string;
+	    sampler: string;
+	    schedule_type: string;
+	    steps: number;
+	    cfg_scale: number;
+	    width: number;
+	    height: number;
+	    seed?: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new TestGenerateParams(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.mode = source["mode"];
+	        this.selected_ids = source["selected_ids"];
+	        this.selected_models = source["selected_models"];
+	        this.prompt = source["prompt"];
+	        this.negative_prompt = source["negative_prompt"];
+	        this.sampler = source["sampler"];
+	        this.schedule_type = source["schedule_type"];
+	        this.steps = source["steps"];
+	        this.cfg_scale = source["cfg_scale"];
+	        this.width = source["width"];
+	        this.height = source["height"];
+	        this.seed = source["seed"];
+	    }
+	}
+	export class TestGenerateResultItem {
+	    name: string;
+	    image: string;
+	    seed: number;
+	    error?: string;
+	    sampler: string;
+	    schedule_type: string;
+	    cfg_scale: number;
+	    model_name: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new TestGenerateResultItem(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.image = source["image"];
+	        this.seed = source["seed"];
+	        this.error = source["error"];
+	        this.sampler = source["sampler"];
+	        this.schedule_type = source["schedule_type"];
+	        this.cfg_scale = source["cfg_scale"];
+	        this.model_name = source["model_name"];
+	    }
+	}
 	export class UpscaleImageParams {
 	    image_base64: string;
 	    gen_info: string;

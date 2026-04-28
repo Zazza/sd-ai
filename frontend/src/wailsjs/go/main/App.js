@@ -170,6 +170,10 @@ export function SetKidsMode(arg1, arg2) {
   return window['go']['main']['App']['SetKidsMode'](arg1, arg2);
 }
 
+export function TestGenerate(arg1) {
+  return window['go']['main']['App']['TestGenerate'](arg1);
+}
+
 export function UpdatePreset(arg1) {
   return window['go']['main']['App']['UpdatePreset'](arg1);
 }
