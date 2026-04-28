@@ -2511,6 +2511,574 @@ func (a *App) GenerateCompoundImage(params GenerateCompoundImageParams) (*Genera
 	return img, nil
 }
 
+type AnalyzeImageForGenResult struct {
+	Tags string `json:"tags"`
+}
+
+func (a *App) AnalyzeImageForGeneration(imageBase64 string) (*AnalyzeImageForGenResult, error) {
+	if imageBase64 == "" {
+		return nil, fmt.Errorf("image is required")
+	}
+	if len(imageBase64) > 22*1024*1024 {
+		return nil, fmt.Errorf("image too large (max 16 MB)")
+	}
+
+	tags, err := a.AnalyzeImage(imageBase64)
+	if err != nil {
+		return nil, fmt.Errorf("image analysis failed: %w", err)
+	}
+
+	if a.isKidsMode() {
+		tags = kids.FilterOutput(tags)
+	}
+
+	return &AnalyzeImageForGenResult{Tags: tags}, nil
+}
+
+type GenerateFromImageParams struct {
+	ImageBase64         string  `json:"image_base64"`
+	Mode                string  `json:"mode"`
+	GenMode             string  `json:"gen_mode"`
+	PresetID            int64   `json:"preset_id"`
+	CompoundPresetID    int64   `json:"compound_preset_id"`
+	DenoisingStrength   float64 `json:"denoising_strength"`
+	Tags                string  `json:"tags"`
+	ExtraNegativePrompt string  `json:"extra_negative_prompt"`
+}
+
+func (a *App) GenerateFromImage(params GenerateFromImageParams) (*GenerateImageResult, error) {
+	if params.ImageBase64 == "" {
+		return nil, fmt.Errorf("image is required")
+	}
+	if len(params.ImageBase64) > 22*1024*1024 {
+		return nil, fmt.Errorf("image too large (max 16 MB)")
+	}
+	if params.GenMode != "preset" && params.GenMode != "compound" {
+		return nil, fmt.Errorf("gen_mode must be preset or compound")
+	}
+	if params.GenMode == "preset" && params.PresetID <= 0 {
+		return nil, fmt.Errorf("preset is required")
+	}
+	if params.GenMode == "compound" && params.CompoundPresetID <= 0 {
+		return nil, fmt.Errorf("compound preset is required")
+	}
+	if params.Mode != "txt2img" && params.Mode != "img2img" {
+		return nil, fmt.Errorf("mode must be txt2img or img2img")
+	}
+	if params.DenoisingStrength <= 0 {
+		params.DenoisingStrength = 0.5
+	}
+	if params.DenoisingStrength > 1.0 {
+		params.DenoisingStrength = 1.0
+	}
+
+	tags := params.Tags
+	if tags == "" {
+		analysisResult, err := a.AnalyzeImageForGeneration(params.ImageBase64)
+		if err != nil {
+			return nil, err
+		}
+		tags = analysisResult.Tags
+	}
+
+	if a.isKidsMode() {
+		tags = kids.FilterOutput(tags)
+	}
+
+	if params.GenMode == "compound" {
+		return a.generateFromImageCompound(params, tags)
+	}
+
+	p, err := a.presets.Get(params.PresetID)
+	if err != nil {
+		return nil, fmt.Errorf("preset not found: %w", err)
+	}
+
+	sdPromptInstruction := config.DefaultSDPromptInstruction
+	if v, err := a.presets.GetSetting("sd_prompt_instruction"); err == nil && v != "" {
+		sdPromptInstruction = v
+	}
+
+	systemPrompt := sdPromptInstruction
+	if a.isKidsMode() {
+		systemPrompt += config.KidsModePrompt
+	}
+
+	maxTokens := 256
+	if v, err := a.presets.GetSetting("llm_max_tokens"); err == nil && v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			maxTokens = n
+		}
+	}
+
+	generateModel := a.config.SDPromptModel
+	if v, err := a.presets.GetSetting("llm_generate_model"); err == nil && v != "" {
+		generateModel = v
+	}
+
+	a.applyLLMConfig("generate")
+
+	systemPrompt += fmt.Sprintf(`
+
+RESPONSE LENGTH: your response is limited to ~%d tokens. You MUST fit within this limit.`, maxTokens)
+
+	userParts := []string{
+		"BASE POSITIVE PROMPT: " + p.Prompt,
+		"BASE NEGATIVE PROMPT: " + p.NegativePrompt,
+		"USER DESCRIPTION (extracted from image): " + tags,
+	}
+	if params.ExtraNegativePrompt != "" {
+		userParts = append(userParts, "USER NEGATIVE: "+params.ExtraNegativePrompt)
+	}
+	userMessage := strings.Join(userParts, "\n\n")
+
+	raw, err := a.llm.GenerateSDPrompt(systemPrompt, userMessage, p.PresetType, generateModel, maxTokens)
+	if err != nil {
+		return nil, err
+	}
+
+	var promptResult GenerateSDPromptResult
+	jsonRaw := extractJSON(raw)
+	if err := json.Unmarshal([]byte(jsonRaw), &promptResult); err != nil {
+		promptResult = GenerateSDPromptResult{
+			Prompt:         truncateRepetitive(raw, 1000),
+			NegativePrompt: p.NegativePrompt,
+		}
+	}
+
+	if containsCyrillic(promptResult.Prompt) {
+		promptResult.Prompt = extractTagsFromRaw(raw)
+	}
+	if containsCyrillic(promptResult.NegativePrompt) {
+		promptResult.NegativePrompt = extractNegativeFromRaw(raw)
+	}
+
+	extractEmbeddedNegative(&promptResult)
+	promptResult.Prompt = stripJunk(promptResult.Prompt)
+	promptResult.Prompt = truncateRepetitive(promptResult.Prompt, 1000)
+	promptResult.NegativePrompt = stripJunk(promptResult.NegativePrompt)
+	promptResult.NegativePrompt = truncateRepetitive(promptResult.NegativePrompt, 500)
+
+	if a.isKidsMode() {
+		promptResult.Prompt = kids.FilterOutput(promptResult.Prompt)
+		promptResult.NegativePrompt = kids.FilterOutput(promptResult.NegativePrompt)
+	}
+
+	prompt := promptResult.Prompt
+	if p.Loras != "" {
+		var loras []preset.LoRAEntry
+		if json.Unmarshal([]byte(p.Loras), &loras) == nil {
+			for _, l := range loras {
+				prompt += fmt.Sprintf(" <lora:%s:%g>", l.Name, l.Weight)
+			}
+		}
+	}
+
+	negativePrompt := promptResult.NegativePrompt
+	if params.ExtraNegativePrompt != "" {
+		negativePrompt += ", " + params.ExtraNegativePrompt
+	}
+	if a.isKidsMode() {
+		negativePrompt += ", " + config.KidsModeNegativePrompt
+	}
+
+	if p.ModelName != "" {
+		_ = a.sd.SetModel(p.ModelName)
+	}
+	if p.VAE != "" {
+		_ = a.sd.SetVAE(p.VAE)
+	}
+
+	samplerName := p.Sampler
+	if p.ScheduleType != "" {
+		st := strings.ToUpper(p.ScheduleType[:1]) + p.ScheduleType[1:]
+		samplerName = p.Sampler + " " + st
+	}
+
+	clipSkip := 1
+	if p.ClipSkip != nil {
+		clipSkip = *p.ClipSkip
+	}
+	batchSize := 1
+	batchCount := 1
+
+	if params.Mode == "img2img" {
+		denoising := params.DenoisingStrength
+		if denoising <= 0 {
+			denoising = 0.5
+		}
+		result, err := a.sd.Img2Img(sd.Img2ImgRequest{
+			InitImages:        []string{params.ImageBase64},
+			Prompt:            prompt,
+			NegativePrompt:    negativePrompt,
+			SamplerName:       samplerName,
+			Scheduler:         p.ScheduleType,
+			Steps:             p.Steps,
+			CfgScale:          p.CfgScale,
+			Width:             p.Width,
+			Height:            p.Height,
+			Seed:              p.Seed,
+			DenoisingStrength: &denoising,
+			ClipSkip:          &clipSkip,
+			BatchSize:         &batchSize,
+			BatchCount:        &batchCount,
+			DoNotSaveImages:   true,
+			DoNotSaveGrid:     true,
+		})
+		if err != nil {
+			return nil, err
+		}
+		if len(result.Images) == 0 {
+			return nil, fmt.Errorf("no image generated (img2img)")
+		}
+		img := &GenerateImageResult{
+			Image:                   result.Images[0],
+			Info:                    result.Info,
+			EffectivePrompt:         prompt,
+			EffectiveNegativePrompt: negativePrompt,
+		}
+		a.saveLastImage(result.Images[0], result.Info, false)
+		return img, nil
+	}
+
+	width := p.Width
+	height := p.Height
+	hiresFix := p.HiresFix
+
+	isPreview := false
+	if v, _ := a.presets.GetSetting("preview_mode"); v == "true" {
+		isPreview = true
+		maxW, maxH := 512, 512
+		if pw, _ := a.presets.GetSetting("preview_width"); pw != "" {
+			if n, err := strconv.Atoi(pw); err == nil && n > 0 {
+				maxW = n
+			}
+		}
+		if ph, _ := a.presets.GetSetting("preview_height"); ph != "" {
+			if n, err := strconv.Atoi(ph); err == nil && n > 0 {
+				maxH = n
+			}
+		}
+		targetRatio := float64(p.Width) / float64(p.Height)
+		maxRatio := float64(maxW) / float64(maxH)
+		if maxRatio > targetRatio {
+			height = maxH
+			width = int(float64(maxH) * targetRatio)
+		} else {
+			width = maxW
+			height = int(float64(maxW) / targetRatio)
+		}
+		width = (width / 8) * 8
+		height = (height / 8) * 8
+		if width < 64 {
+			width = 64
+		}
+		if height < 64 {
+			height = 64
+		}
+		hiresFix = nil
+	}
+
+	denoisingStrength := p.DenoisingStrength
+	if denoisingStrength == nil && p.HiresFix != nil && *p.HiresFix {
+		ds := 0.5
+		if p.HiresDenoisingStrength != nil {
+			ds = *p.HiresDenoisingStrength
+		}
+		denoisingStrength = &ds
+	}
+
+	result, err := a.sd.Txt2Img(sd.Txt2ImgRequest{
+		Prompt:                 prompt,
+		NegativePrompt:         negativePrompt,
+		SamplerName:            samplerName,
+		Scheduler:              p.ScheduleType,
+		Steps:                  p.Steps,
+		CfgScale:               p.CfgScale,
+		Width:                  width,
+		Height:                 height,
+		Seed:                   p.Seed,
+		DenoisingStrength:      denoisingStrength,
+		ClipSkip:               &clipSkip,
+		BatchSize:              &batchSize,
+		BatchCount:             &batchCount,
+		HiresFix:               hiresFix,
+		HiresUpscale:           p.HiresUpscale,
+		HiresDenoisingStrength: p.HiresDenoisingStrength,
+		HiresUpscaler:          p.HiresUpscaler,
+		DoNotSaveImages:        true,
+		DoNotSaveGrid:          true,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if len(result.Images) == 0 {
+		return nil, fmt.Errorf("no image generated (txt2img)")
+	}
+
+	img := &GenerateImageResult{
+		Image:                   result.Images[0],
+		Parameters:              result.Parameters,
+		Info:                    result.Info,
+		IsPreview:               isPreview,
+		EffectivePrompt:         prompt,
+		EffectiveNegativePrompt: negativePrompt,
+	}
+	a.saveLastImage(result.Images[0], result.Info, isPreview)
+	return img, nil
+}
+
+func (a *App) generateFromImageCompound(params GenerateFromImageParams, tags string) (*GenerateImageResult, error) {
+	cp, err := a.presets.GetCompoundPreset(params.CompoundPresetID)
+	if err != nil {
+		return nil, fmt.Errorf("compound preset not found: %w", err)
+	}
+	if len(cp.Steps) == 0 {
+		return nil, fmt.Errorf("compound preset has no steps")
+	}
+
+	firstPreset, err := a.presets.Get(cp.Steps[0].PresetID)
+	if err != nil {
+		return nil, fmt.Errorf("step 1: preset not found: %w", err)
+	}
+
+	sdPromptInstruction := config.DefaultSDPromptInstruction
+	if v, err := a.presets.GetSetting("sd_prompt_instruction"); err == nil && v != "" {
+		sdPromptInstruction = v
+	}
+
+	systemPrompt := sdPromptInstruction
+	if a.isKidsMode() {
+		systemPrompt += config.KidsModePrompt
+	}
+
+	maxTokens := 256
+	if v, err := a.presets.GetSetting("llm_max_tokens"); err == nil && v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			maxTokens = n
+		}
+	}
+
+	generateModel := a.config.SDPromptModel
+	if v, err := a.presets.GetSetting("llm_generate_model"); err == nil && v != "" {
+		generateModel = v
+	}
+
+	a.applyLLMConfig("generate")
+
+	systemPrompt += fmt.Sprintf(`
+
+RESPONSE LENGTH: your response is limited to ~%d tokens. You MUST fit within this limit.`, maxTokens)
+
+	userParts := []string{
+		"BASE POSITIVE PROMPT: " + firstPreset.Prompt,
+		"BASE NEGATIVE PROMPT: " + firstPreset.NegativePrompt,
+		"USER DESCRIPTION (extracted from image): " + tags,
+	}
+	if params.ExtraNegativePrompt != "" {
+		userParts = append(userParts, "USER NEGATIVE: "+params.ExtraNegativePrompt)
+	}
+	userMessage := strings.Join(userParts, "\n\n")
+
+	raw, err := a.llm.GenerateSDPrompt(systemPrompt, userMessage, firstPreset.PresetType, generateModel, maxTokens)
+	if err != nil {
+		return nil, err
+	}
+
+	var promptResult GenerateSDPromptResult
+	jsonRaw := extractJSON(raw)
+	if err := json.Unmarshal([]byte(jsonRaw), &promptResult); err != nil {
+		promptResult = GenerateSDPromptResult{
+			Prompt:         truncateRepetitive(raw, 1000),
+			NegativePrompt: firstPreset.NegativePrompt,
+		}
+	}
+
+	if containsCyrillic(promptResult.Prompt) {
+		promptResult.Prompt = extractTagsFromRaw(raw)
+	}
+	extractEmbeddedNegative(&promptResult)
+	promptResult.Prompt = stripJunk(promptResult.Prompt)
+	promptResult.Prompt = truncateRepetitive(promptResult.Prompt, 1000)
+	promptResult.NegativePrompt = stripJunk(promptResult.NegativePrompt)
+	promptResult.NegativePrompt = truncateRepetitive(promptResult.NegativePrompt, 500)
+
+	if a.isKidsMode() {
+		promptResult.Prompt = kids.FilterOutput(promptResult.Prompt)
+		promptResult.NegativePrompt = kids.FilterOutput(promptResult.NegativePrompt)
+	}
+
+	var lastImage string
+	var lastInfo json.RawMessage
+
+	for stepIdx, step := range cp.Steps {
+		p, err := a.presets.Get(step.PresetID)
+		if err != nil {
+			return nil, fmt.Errorf("step %d: preset not found: %w", stepIdx+1, err)
+		}
+
+		runtime.EventsEmit(a.ctx, "fromimage:progress", map[string]any{
+			"current": stepIdx + 1,
+			"total":   len(cp.Steps),
+			"status":  "generating",
+		})
+
+		prompt := p.Prompt
+		if stepIdx == 0 {
+			prompt = promptResult.Prompt
+		}
+		if p.Loras != "" {
+			var loras []preset.LoRAEntry
+			if json.Unmarshal([]byte(p.Loras), &loras) == nil {
+				for _, l := range loras {
+					prompt += fmt.Sprintf(" <lora:%s:%g>", l.Name, l.Weight)
+				}
+			}
+		}
+
+		negativePrompt := promptResult.NegativePrompt
+		if params.ExtraNegativePrompt != "" {
+			negativePrompt += ", " + params.ExtraNegativePrompt
+		}
+		if a.isKidsMode() {
+			negativePrompt += ", " + config.KidsModeNegativePrompt
+		}
+
+		if p.ModelName != "" {
+			_ = a.sd.SetModel(p.ModelName)
+		}
+		if p.VAE != "" {
+			_ = a.sd.SetVAE(p.VAE)
+		}
+
+		samplerName := p.Sampler
+		if p.ScheduleType != "" {
+			st := strings.ToUpper(p.ScheduleType[:1]) + p.ScheduleType[1:]
+			samplerName = p.Sampler + " " + st
+		}
+
+		width := step.Width
+		if width == 0 {
+			width = p.Width
+		}
+		height := step.Height
+		if height == 0 {
+			height = p.Height
+		}
+
+		clipSkip := 1
+		if p.ClipSkip != nil {
+			clipSkip = *p.ClipSkip
+		}
+		batchSize := 1
+		batchCount := 1
+
+		if stepIdx == 0 && params.Mode == "img2img" {
+			denoising := params.DenoisingStrength
+			if denoising <= 0 {
+				denoising = 0.5
+			}
+			result, err := a.sd.Img2Img(sd.Img2ImgRequest{
+				InitImages:        []string{params.ImageBase64},
+				Prompt:            prompt,
+				NegativePrompt:    negativePrompt,
+				SamplerName:       samplerName,
+				Scheduler:         p.ScheduleType,
+				Steps:             p.Steps,
+				CfgScale:          p.CfgScale,
+				Width:             width,
+				Height:            height,
+				Seed:              p.Seed,
+				DenoisingStrength: &denoising,
+				ClipSkip:          &clipSkip,
+				BatchSize:         &batchSize,
+				BatchCount:        &batchCount,
+				DoNotSaveImages:   true,
+				DoNotSaveGrid:     true,
+			})
+			if err != nil {
+				return nil, fmt.Errorf("step %d (img2img): %w", stepIdx+1, err)
+			}
+			if len(result.Images) == 0 {
+				return nil, fmt.Errorf("step %d: no image returned", stepIdx+1)
+			}
+			lastImage = result.Images[0]
+			lastInfo = result.Info
+		} else if stepIdx == 0 {
+			result, err := a.sd.Txt2Img(sd.Txt2ImgRequest{
+				Prompt:          prompt,
+				NegativePrompt:  negativePrompt,
+				SamplerName:     samplerName,
+				Scheduler:       p.ScheduleType,
+				Steps:           p.Steps,
+				CfgScale:        p.CfgScale,
+				Width:           width,
+				Height:          height,
+				Seed:            p.Seed,
+				ClipSkip:        &clipSkip,
+				BatchSize:       &batchSize,
+				BatchCount:      &batchCount,
+				DoNotSaveImages: true,
+				DoNotSaveGrid:   true,
+			})
+			if err != nil {
+				return nil, fmt.Errorf("step %d (txt2img): %w", stepIdx+1, err)
+			}
+			if len(result.Images) == 0 {
+				return nil, fmt.Errorf("step %d: no image returned", stepIdx+1)
+			}
+			lastImage = result.Images[0]
+			lastInfo = result.Info
+		} else {
+			denoising := step.DenoisingStrength
+			if denoising <= 0 {
+				denoising = 0.5
+			}
+			result, err := a.sd.Img2Img(sd.Img2ImgRequest{
+				InitImages:        []string{lastImage},
+				Prompt:            prompt,
+				NegativePrompt:    negativePrompt,
+				SamplerName:       samplerName,
+				Scheduler:         p.ScheduleType,
+				Steps:             p.Steps,
+				CfgScale:          p.CfgScale,
+				Width:             width,
+				Height:            height,
+				Seed:              p.Seed,
+				DenoisingStrength: &denoising,
+				ClipSkip:          &clipSkip,
+				BatchSize:         &batchSize,
+				BatchCount:        &batchCount,
+				DoNotSaveImages:   true,
+				DoNotSaveGrid:     true,
+			})
+			if err != nil {
+				return nil, fmt.Errorf("step %d (img2img): %w", stepIdx+1, err)
+			}
+			if len(result.Images) == 0 {
+				return nil, fmt.Errorf("step %d: no image returned", stepIdx+1)
+			}
+			lastImage = result.Images[0]
+			lastInfo = result.Info
+		}
+	}
+
+	runtime.EventsEmit(a.ctx, "fromimage:progress", map[string]any{
+		"current": len(cp.Steps),
+		"total":   len(cp.Steps),
+		"status":  "done",
+	})
+
+	img := &GenerateImageResult{
+		Image:                   lastImage,
+		Info:                    lastInfo,
+		EffectivePrompt:         promptResult.Prompt,
+		EffectiveNegativePrompt: promptResult.NegativePrompt,
+	}
+	a.saveLastImage(lastImage, lastInfo, false)
+	return img, nil
+}
+
 type BatchCompoundGenerateParams struct {
 	CompoundPresetID   int64  `json:"compound_preset_id"`
 	ExtraPrompt        string `json:"extra_prompt"`

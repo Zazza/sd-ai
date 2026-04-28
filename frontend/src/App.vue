@@ -8,6 +8,7 @@ import SettingsPage from './components/SettingsPage.vue'
 import BatchPage from './components/BatchPage.vue'
 import TestPage from './components/TestPage.vue'
 import CompoundPresetsPage from './components/CompoundPresetsPage.vue'
+import GenerateFromImagePage from './components/GenerateFromImagePage.vue'
 
 const page = ref('generate')
 const batchProps = ref({})
@@ -20,6 +21,7 @@ const currentPage = computed(() => {
     case 'batch': return BatchPage
     case 'test': return TestPage
     case 'pipelines': return CompoundPresetsPage
+    case 'from-image': return GenerateFromImagePage
     case 'settings': return SettingsPage
     default: return GeneratePage
   }
@@ -67,6 +69,9 @@ const close = () => Quit()
         <a class="sidebar-link" :class="{ active: page === 'generate' }" @click="page = 'generate'">
           &#9733; Generate
         </a>
+        <a class="sidebar-link" :class="{ active: page === 'from-image' }" @click="page = 'from-image'">
+          &#9678; From Image
+        </a>
         <a class="sidebar-link" :class="{ active: page === 'batch' }" @click="page = 'batch'">
           &#9638; Batch
         </a>
@@ -88,12 +93,13 @@ const close = () => Quit()
       </nav>
     </aside>
     <main class="main">
-      <KeepAlive v-if="page !== 'batch' && page !== 'test' && page !== 'pipelines'">
+      <KeepAlive v-if="page !== 'batch' && page !== 'test' && page !== 'pipelines' && page !== 'from-image'">
         <component :is="currentPage" />
       </KeepAlive>
       <BatchPage v-else-if="page === 'batch'" v-bind="batchProps" :key="JSON.stringify(batchProps)" />
       <TestPage v-else-if="page === 'test'" />
       <CompoundPresetsPage v-else-if="page === 'pipelines'" />
+      <GenerateFromImagePage v-else-if="page === 'from-image'" />
     </main>
     </div>
   </div>

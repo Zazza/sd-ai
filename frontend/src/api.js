@@ -15,6 +15,7 @@ import {
   TestGenerate,
   ListCompoundPresets, GetCompoundPreset, CreateCompoundPreset, UpdateCompoundPreset, DeleteCompoundPreset,
   GenerateCompoundImage, BatchCompoundGenerate, TestCompoundGenerate,
+  AnalyzeImageForGeneration, GenerateFromImage,
 } from './wailsjs/go/main/App.js'
 
 export const api = {
@@ -77,4 +78,6 @@ export const api = {
   generateCompoundImage: (params) => GenerateCompoundImage(params),
   batchCompoundGenerate: (params) => BatchCompoundGenerate(params),
   testCompoundGenerate: (params) => TestCompoundGenerate(params),
+  analyzeImageForGen: (imageBase64) => AnalyzeImageForGeneration(imageBase64),
+  generateFromImage: (params) => GenerateFromImage(params),
 }

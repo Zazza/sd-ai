@@ -6,6 +6,10 @@ export function AnalyzeImage(arg1) {
   return window['go']['main']['App']['AnalyzeImage'](arg1);
 }
 
+export function AnalyzeImageForGeneration(arg1) {
+  return window['go']['main']['App']['AnalyzeImageForGeneration'](arg1);
+}
+
 export function BatchCompoundGenerate(arg1) {
   return window['go']['main']['App']['BatchCompoundGenerate'](arg1);
 }
@@ -68,6 +72,10 @@ export function GenerateCompoundImage(arg1) {
 
 export function GenerateImage(arg1) {
   return window['go']['main']['App']['GenerateImage'](arg1);
+}
+
+export function GenerateFromImage(arg1) {
+  return window['go']['main']['App']['GenerateFromImage'](arg1);
 }
 
 export function GenerateSDPrompt(arg1) {
