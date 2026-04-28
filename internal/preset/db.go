@@ -46,6 +46,10 @@ func Open(dbPath string) (*DB, error) {
 		return nil, fmt.Errorf("migrate v5: %w", err)
 	}
 
+	if err := migrateV6(db); err != nil {
+		return nil, fmt.Errorf("migrate v6: %w", err)
+	}
+
 	return &DB{db: db}, nil
 }
 
@@ -540,4 +544,172 @@ func (d *DB) GetAllTags() ([]string, error) {
 		tags = append(tags, t)
 	}
 	return tags, rows.Err()
+}
+
+func migrateV6(db *sql.DB) error {
+	_, err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS compound_presets (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			name TEXT NOT NULL,
+			description TEXT NOT NULL DEFAULT '',
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		);
+		CREATE TABLE IF NOT EXISTS compound_preset_steps (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			compound_preset_id INTEGER NOT NULL,
+			step_order INTEGER NOT NULL,
+			preset_id INTEGER NOT NULL,
+			width INTEGER NOT NULL DEFAULT 512,
+			height INTEGER NOT NULL DEFAULT 512,
+			denoising_strength REAL NOT NULL DEFAULT 0.5,
+			FOREIGN KEY (compound_preset_id) REFERENCES compound_presets(id) ON DELETE CASCADE,
+			FOREIGN KEY (preset_id) REFERENCES presets(id)
+		)
+	`)
+	return err
+}
+
+func (d *DB) ListCompoundPresets() ([]CompoundPreset, error) {
+	rows, err := d.db.Query(`SELECT id, name, description, created_at, updated_at FROM compound_presets ORDER BY created_at DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var items []CompoundPreset
+	for rows.Next() {
+		var cp CompoundPreset
+		if err := rows.Scan(&cp.ID, &cp.Name, &cp.Description, &cp.CreatedAt, &cp.UpdatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, cp)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	for i := range items {
+		steps, err := d.getCompoundSteps(items[i].ID)
+		if err != nil {
+			return nil, err
+		}
+		items[i].Steps = steps
+	}
+	return items, nil
+}
+
+func (d *DB) GetCompoundPreset(id int64) (*CompoundPreset, error) {
+	var cp CompoundPreset
+	err := d.db.QueryRow(`SELECT id, name, description, created_at, updated_at FROM compound_presets WHERE id = ?`, id).
+		Scan(&cp.ID, &cp.Name, &cp.Description, &cp.CreatedAt, &cp.UpdatedAt)
+	if err != nil {
+		return nil, err
+	}
+
+	steps, err := d.getCompoundSteps(id)
+	if err != nil {
+		return nil, err
+	}
+	cp.Steps = steps
+	return &cp, nil
+}
+
+func (d *DB) getCompoundSteps(compoundPresetID int64) ([]CompoundPresetStep, error) {
+	rows, err := d.db.Query(
+		`SELECT id, compound_preset_id, step_order, preset_id, width, height, denoising_strength FROM compound_preset_steps WHERE compound_preset_id = ? ORDER BY step_order`,
+		compoundPresetID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var steps []CompoundPresetStep
+	for rows.Next() {
+		var s CompoundPresetStep
+		if err := rows.Scan(&s.ID, &s.CompoundPresetID, &s.StepOrder, &s.PresetID, &s.Width, &s.Height, &s.DenoisingStrength); err != nil {
+			return nil, err
+		}
+		steps = append(steps, s)
+	}
+	return steps, rows.Err()
+}
+
+func (d *DB) CreateCompoundPreset(cp *CompoundPreset) error {
+	tx, err := d.db.Begin()
+	if err != nil {
+		return err
+	}
+
+	result, err := tx.Exec(`INSERT INTO compound_presets (name, description) VALUES (?, ?)`, cp.Name, cp.Description)
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+	cp.ID, _ = result.LastInsertId()
+
+	for i, step := range cp.Steps {
+		_, err := tx.Exec(
+			`INSERT INTO compound_preset_steps (compound_preset_id, step_order, preset_id, width, height, denoising_strength) VALUES (?, ?, ?, ?, ?, ?)`,
+			cp.ID, i+1, step.PresetID, step.Width, step.Height, step.DenoisingStrength,
+		)
+		if err != nil {
+			tx.Rollback()
+			return err
+		}
+	}
+
+	return tx.Commit()
+}
+
+func (d *DB) UpdateCompoundPreset(cp *CompoundPreset) error {
+	tx, err := d.db.Begin()
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec(`UPDATE compound_presets SET name=?, description=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`,
+		cp.Name, cp.Description, cp.ID)
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	_, err = tx.Exec(`DELETE FROM compound_preset_steps WHERE compound_preset_id = ?`, cp.ID)
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	for i, step := range cp.Steps {
+		_, err := tx.Exec(
+			`INSERT INTO compound_preset_steps (compound_preset_id, step_order, preset_id, width, height, denoising_strength) VALUES (?, ?, ?, ?, ?, ?)`,
+			cp.ID, i+1, step.PresetID, step.Width, step.Height, step.DenoisingStrength,
+		)
+		if err != nil {
+			tx.Rollback()
+			return err
+		}
+	}
+
+	return tx.Commit()
+}
+
+func (d *DB) DeleteCompoundPreset(id int64) error {
+	tx, err := d.db.Begin()
+	if err != nil {
+		return err
+	}
+	_, err = tx.Exec(`DELETE FROM compound_preset_steps WHERE compound_preset_id = ?`, id)
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+	_, err = tx.Exec(`DELETE FROM compound_presets WHERE id = ?`, id)
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+	return tx.Commit()
 }

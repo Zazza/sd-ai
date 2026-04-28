@@ -6,10 +6,12 @@ import { api } from '../api.js'
 const mode = ref('presets')
 const presets = ref([])
 const models = ref([])
+const compoundPresets = ref([])
 const samplers = ref([])
 const schedulers = ref([])
 const selectedPresetIds = ref([])
 const selectedModelNames = ref([])
+const selectedCompoundIds = ref([])
 const prompt = ref('')
 const negativePrompt = ref('')
 const showAdvanced = ref(false)
@@ -26,6 +28,7 @@ const results = ref([])
 
 const selectedItems = computed(() => {
   if (mode.value === 'presets') return selectedPresetIds.value
+  if (mode.value === 'compounds') return selectedCompoundIds.value
   return selectedModelNames.value
 })
 
@@ -41,9 +44,17 @@ function toggleModel(name) {
   else selectedModelNames.value.push(name)
 }
 
+function toggleCompound(id) {
+  const idx = selectedCompoundIds.value.indexOf(id)
+  if (idx >= 0) selectedCompoundIds.value.splice(idx, 1)
+  else selectedCompoundIds.value.push(id)
+}
+
 function selectAll() {
   if (mode.value === 'presets') {
     selectedPresetIds.value = presets.value.map(p => p.id)
+  } else if (mode.value === 'compounds') {
+    selectedCompoundIds.value = compoundPresets.value.map(c => c.id)
   } else {
     selectedModelNames.value = models.value.map(m => m.title)
   }
@@ -52,6 +63,8 @@ function selectAll() {
 function deselectAll() {
   if (mode.value === 'presets') {
     selectedPresetIds.value = []
+  } else if (mode.value === 'compounds') {
+    selectedCompoundIds.value = []
   } else {
     selectedModelNames.value = []
   }
@@ -59,16 +72,18 @@ function deselectAll() {
 
 async function loadData() {
   try {
-    const [p, m, s, sch] = await Promise.all([
+    const [p, m, s, sch, c] = await Promise.all([
       api.listPresets(),
       api.getModels(),
       api.getSamplers(),
       api.getSchedulers(),
+      api.listCompoundPresets(),
     ])
     presets.value = p || []
     models.value = m || []
     samplers.value = s || []
     schedulers.value = sch || []
+    compoundPresets.value = c || []
   } catch (e) {
     console.error(e)
   }
@@ -90,20 +105,28 @@ async function generate() {
   results.value = []
 
   try {
-    const params = {
-      mode: mode.value,
-      selected_ids: mode.value === 'presets' ? selectedPresetIds.value : [],
-      selected_models: mode.value === 'models' ? selectedModelNames.value : [],
-      prompt: prompt.value,
-      negative_prompt: negativePrompt.value,
-      sampler: showAdvanced.value ? sampler.value : '',
-      schedule_type: showAdvanced.value ? scheduleType.value : '',
-      steps: showAdvanced.value ? steps.value : 0,
-      cfg_scale: showAdvanced.value ? cfgScale.value : 0,
-      width: showAdvanced.value ? width.value : 0,
-      height: showAdvanced.value ? height.value : 0,
+    let res
+    if (mode.value === 'compounds') {
+      res = await api.testCompoundGenerate({
+        selected_ids: selectedCompoundIds.value,
+        prompt: prompt.value,
+        negative_prompt: negativePrompt.value,
+      })
+    } else {
+      res = await api.testGenerate({
+        mode: mode.value,
+        selected_ids: mode.value === 'presets' ? selectedPresetIds.value : [],
+        selected_models: mode.value === 'models' ? selectedModelNames.value : [],
+        prompt: prompt.value,
+        negative_prompt: negativePrompt.value,
+        sampler: showAdvanced.value ? sampler.value : '',
+        schedule_type: showAdvanced.value ? scheduleType.value : '',
+        steps: showAdvanced.value ? steps.value : 0,
+        cfg_scale: showAdvanced.value ? cfgScale.value : 0,
+        width: showAdvanced.value ? width.value : 0,
+        height: showAdvanced.value ? height.value : 0,
+      })
     }
-    const res = await api.testGenerate(params)
     results.value = res || []
   } catch (e) {
     error.value = String(e)
@@ -147,11 +170,12 @@ onUnmounted(() => {
       <div style="display: flex; gap: 8px; margin-bottom: 16px;">
         <button class="btn" :class="mode === 'presets' ? 'btn-primary' : 'btn-secondary'" @click="mode = 'presets'; results = []">Presets</button>
         <button class="btn" :class="mode === 'models' ? 'btn-primary' : 'btn-secondary'" @click="mode = 'models'; results = []">Models</button>
+        <button class="btn" :class="mode === 'compounds' ? 'btn-primary' : 'btn-secondary'" @click="mode = 'compounds'; results = []">Pipelines</button>
       </div>
 
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
         <label class="form-label" style="margin: 0;">
-          {{ mode === 'presets' ? 'Select Presets' : 'Select Models' }}
+          {{ mode === 'presets' ? 'Select Presets' : mode === 'compounds' ? 'Select Pipelines' : 'Select Models' }}
           ({{ selectedItems.length }} selected)
         </label>
         <div style="display: flex; gap: 6px;">
@@ -168,6 +192,14 @@ onUnmounted(() => {
             <span v-if="p.model_name" style="color: var(--text-dim); font-size: 11px; margin-left: auto;">{{ p.model_name }}</span>
           </div>
           <div v-if="!presets.length" style="color: var(--text-dim); padding: 12px; text-align: center;">No presets found</div>
+        </template>
+        <template v-else-if="mode === 'compounds'">
+          <div v-for="c in compoundPresets" :key="c.id" class="test-select-item" :class="{ active: selectedCompoundIds.includes(c.id) }" @click="!generating && toggleCompound(c.id)">
+            <input type="checkbox" :checked="selectedCompoundIds.includes(c.id)" @click.prevent />
+            <span>{{ c.name }}</span>
+            <span style="color: var(--text-dim); font-size: 11px; margin-left: auto;">{{ c.steps.length }} steps</span>
+          </div>
+          <div v-if="!compoundPresets.length" style="color: var(--text-dim); padding: 12px; text-align: center;">No pipelines found. Create one in Pipelines page.</div>
         </template>
         <template v-else>
           <div v-for="m in models" :key="m.title" class="test-select-item" :class="{ active: selectedModelNames.includes(m.title) }" @click="!generating && toggleModel(m.title)">
@@ -188,13 +220,13 @@ onUnmounted(() => {
         <textarea class="form-textarea" v-model="negativePrompt" rows="2" placeholder="Negative prompt..." :disabled="generating"></textarea>
       </div>
 
-      <div style="margin-bottom: 12px;">
+      <div v-if="mode !== 'compounds'" style="margin-bottom: 12px;">
         <button class="btn btn-secondary btn-sm" @click="showAdvanced = !showAdvanced">
           {{ showAdvanced ? '&#9660; Hide Parameters' : '&#9654; Show Parameters' }}
         </button>
       </div>
 
-      <div v-if="showAdvanced" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px;">
+      <div v-if="showAdvanced && mode !== 'compounds'" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px;">
         <div class="form-group">
           <label class="form-label">Sampler</label>
           <select class="form-select" v-model="sampler" :disabled="generating">
@@ -247,7 +279,7 @@ onUnmounted(() => {
     </div>
 
     <div v-if="results.length" style="margin-top: 16px; max-width: 800px;">
-      <div style="color: var(--text-dim); font-size: 12px; margin-bottom: 8px;">
+      <div v-if="mode !== 'compounds'" style="color: var(--text-dim); font-size: 12px; margin-bottom: 8px;">
         {{ width }}&times;{{ height }}, {{ steps }} steps, CFG {{ cfgScale }}
       </div>
       <div class="test-results-grid">

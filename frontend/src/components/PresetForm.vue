@@ -12,10 +12,20 @@ const samplers = ref([])
 const schedulers = ref([])
 const upscalers = ref([])
 const vaes = ref([])
+const loras = ref([])
+const presetTypes = ref([])
+
+const presetLoras = ref([])
+
+try {
+  const raw = props.preset?.loras
+  if (raw) presetLoras.value = JSON.parse(raw)
+} catch {}
 
 const form = reactive({
   name: props.preset?.name || '',
   preset_type: props.preset?.preset_type || '',
+  type_id: props.preset?.type_id ?? null,
   prompt: props.preset?.prompt || '',
   negative_prompt: props.preset?.negative_prompt || '',
   sampler: props.preset?.sampler || 'Euler a',
@@ -35,6 +45,7 @@ const form = reactive({
   hires_denoising_strength: props.preset?.hires_denoising_strength ?? 0.5,
   hires_upscaler: props.preset?.hires_upscaler ?? '',
   vae: props.preset?.vae ?? '',
+  tags: props.preset?.tags || '',
 })
 
 const saving = ref(false)
@@ -59,12 +70,30 @@ async function loadVAEs() {
   try { vaes.value = await api.getVAEs() } catch {}
 }
 
+async function loadLoRAs() {
+  try { loras.value = await api.getLoRAs() } catch {}
+}
+
+async function loadPresetTypes() {
+  try { presetTypes.value = await api.listPresetTypes() } catch {}
+}
+
+function addLoRA() {
+  presetLoras.value.push({ name: '', weight: 1.0 })
+}
+
+function removeLoRA(idx) {
+  presetLoras.value.splice(idx, 1)
+}
+
 async function save() {
   saving.value = true
   try {
+    const lorasData = presetLoras.value.filter(l => l.name)
     await emit('save', {
       name: form.name,
       preset_type: form.preset_type,
+      type_id: form.type_id,
       prompt: form.prompt,
       negative_prompt: form.negative_prompt,
       sampler: form.sampler,
@@ -84,6 +113,8 @@ async function save() {
       hires_denoising_strength: form.hires_denoising_strength != null ? Number(form.hires_denoising_strength) : null,
       hires_upscaler: form.hires_upscaler || '',
       vae: form.vae || '',
+      tags: form.tags || '',
+      loras: lorasData.length > 0 ? JSON.stringify(lorasData) : '',
     })
   } finally {
     saving.value = false
@@ -96,6 +127,8 @@ onMounted(() => {
   loadSchedulers()
   loadUpscalers()
   loadVAEs()
+  loadLoRAs()
+  loadPresetTypes()
 })
 </script>
 
@@ -116,6 +149,35 @@ onMounted(() => {
         <div class="form-group">
           <label class="form-label">Type</label>
           <input class="form-input" v-model="form.preset_type" placeholder="weapon, character, scene..." />
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Preset Type</label>
+          <select class="form-select" v-model="form.type_id">
+            <option :value="null">None</option>
+            <option v-for="t in presetTypes" :key="t.id" :value="t.id">{{ t.name }}</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Tags (comma-separated)</label>
+          <input class="form-input" v-model="form.tags" placeholder="anime, realistic, landscape..." />
+        </div>
+
+        <div class="form-group">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <label class="form-label" style="margin: 0;">LoRA</label>
+            <button type="button" class="btn btn-sm btn-secondary" @click="addLoRA">+ Add LoRA</button>
+          </div>
+          <div v-for="(lora, idx) in presetLoras" :key="idx" style="display: flex; gap: 8px; align-items: center; margin-bottom: 6px;">
+            <select class="form-select" v-model="lora.name" style="flex: 2;">
+              <option value="" disabled>Select LoRA...</option>
+              <option v-for="l in loras" :key="l.name" :value="l.name">{{ l.name }}</option>
+            </select>
+            <input class="form-input" type="number" v-model.number="lora.weight" step="0.1" min="0" max="2" style="flex: 0 0 80px;" />
+            <button type="button" class="btn btn-sm btn-secondary" style="padding: 4px 10px;" @click="removeLoRA(idx)">&times;</button>
+          </div>
+          <div v-if="!presetLoras.length" style="color: var(--text-dim, #aaa); font-size: 13px;">No LoRAs added</div>
         </div>
 
         <div class="form-group">

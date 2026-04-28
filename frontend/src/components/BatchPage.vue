@@ -1,11 +1,14 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
 import { EventsOn, EventsOff } from '../wailsjs/runtime/runtime'
-import { BatchGenerate, SelectFolder } from '../wailsjs/go/main/App.js'
+import { BatchGenerate, BatchCompoundGenerate, SelectFolder } from '../wailsjs/go/main/App.js'
 import { api } from '../api.js'
 
 const presets = ref([])
+const compoundPresets = ref([])
 const selectedPresetId = ref(null)
+const selectedCompoundPresetId = ref(null)
+const batchMode = ref('preset')
 const prompt = ref('')
 const negativePrompt = ref('')
 const count = ref(4)
@@ -19,11 +22,14 @@ const props = defineProps({
   prefillPrompt: { type: String, default: '' },
   prefillNegative: { type: String, default: '' },
   prefillPresetId: { type: Number, default: null },
+  prefillCompoundPresetId: { type: Number, default: null },
 })
 
 async function loadPresets() {
   try {
-    presets.value = await api.listPresets() || []
+    const [p, c] = await Promise.all([api.listPresets(), api.listCompoundPresets()])
+    presets.value = p || []
+    compoundPresets.value = c || []
   } catch (e) {
     console.error(e)
   }
@@ -60,13 +66,23 @@ async function startGeneration() {
   generatedFiles.value = []
 
   try {
-    await BatchGenerate({
-      preset_id: selectedPresetId.value || 0,
-      prompt: prompt.value,
-      negative_prompt: negativePrompt.value,
-      count: count.value,
-      output_folder: outputFolder.value,
-    })
+    if (batchMode.value === 'compound') {
+      await BatchCompoundGenerate({
+        compound_preset_id: selectedCompoundPresetId.value,
+        extra_prompt: prompt.value,
+        extra_negative_prompt: negativePrompt.value,
+        count: count.value,
+        output_folder: outputFolder.value,
+      })
+    } else {
+      await BatchGenerate({
+        preset_id: selectedPresetId.value || 0,
+        prompt: prompt.value,
+        negative_prompt: negativePrompt.value,
+        count: count.value,
+        output_folder: outputFolder.value,
+      })
+    }
   } catch (e) {
     error.value = String(e)
   } finally {
@@ -94,6 +110,10 @@ onMounted(async () => {
   if (props.prefillPresetId) {
     selectedPresetId.value = props.prefillPresetId
   }
+  if (props.prefillCompoundPresetId) {
+    selectedCompoundPresetId.value = props.prefillCompoundPresetId
+    batchMode.value = 'compound'
+  }
 
   try {
     const s = await api.getSettings()
@@ -116,11 +136,24 @@ onUnmounted(() => {
     <div v-if="error" class="status status-error">{{ error }}</div>
 
     <div class="card" style="max-width: 700px;">
-      <div class="form-group">
+      <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+        <button class="btn btn-sm" :class="batchMode === 'preset' ? 'btn-primary' : 'btn-secondary'" @click="batchMode = 'preset'">Preset</button>
+        <button class="btn btn-sm" :class="batchMode === 'compound' ? 'btn-primary' : 'btn-secondary'" @click="batchMode = 'compound'">Pipeline</button>
+      </div>
+
+      <div v-if="batchMode === 'preset'" class="form-group">
         <label class="form-label">Preset (optional)</label>
         <select class="form-select" v-model="selectedPresetId" :disabled="generating">
           <option :value="null">No preset — use defaults</option>
           <option v-for="p in presets" :key="p.id" :value="p.id">{{ p.name }}</option>
+        </select>
+      </div>
+
+      <div v-if="batchMode === 'compound'" class="form-group">
+        <label class="form-label">Pipeline</label>
+        <select class="form-select" v-model="selectedCompoundPresetId" :disabled="generating">
+          <option :value="null" disabled>Select pipeline...</option>
+          <option v-for="c in compoundPresets" :key="c.id" :value="c.id">{{ c.name }} ({{ c.steps.length }} steps)</option>
         </select>
       </div>
 
@@ -148,7 +181,7 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <button class="btn btn-primary" style="width: 100%; justify-content: center; padding: 12px; margin-top: 12px;" @click="startGeneration" :disabled="generating || !prompt.trim() || !outputFolder.trim()">
+      <button class="btn btn-primary" style="width: 100%; justify-content: center; padding: 12px; margin-top: 12px;" @click="startGeneration" :disabled="generating || !prompt.trim() || !outputFolder.trim() || (batchMode === 'compound' && !selectedCompoundPresetId)">
         <span v-if="generating" style="display: inline-flex; align-items: center; gap: 6px;">
           <span class="spinner" style="width: 14px; height: 14px; border-width: 2px;"></span>
           Generating {{ progress ? `${progress.current}/${progress.total}` : '...' }}

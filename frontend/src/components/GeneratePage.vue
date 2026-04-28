@@ -5,8 +5,11 @@ import { api } from '../api.js'
 
 const presets = ref([])
 const presetTypes = ref([])
+const compoundPresets = ref([])
 const selectedTypeId = ref(null)
 const selectedPresetId = ref(null)
+const selectedCompoundPresetId = ref(null)
+const genMode = ref('preset')
 const description = ref('')
 const negative = ref('')
 const extraPrompt = ref('')
@@ -82,9 +85,10 @@ async function checkServices() {
 
 async function loadPresets() {
   try {
-    const [p, t] = await Promise.all([api.listPresets(), api.listPresetTypes()])
+    const [p, t, c] = await Promise.all([api.listPresets(), api.listPresetTypes(), api.listCompoundPresets()])
     presets.value = p || []
     presetTypes.value = t || []
+    compoundPresets.value = c || []
   } catch (e) {
     console.error(e)
   }
@@ -98,6 +102,8 @@ function saveGenState() {
     gen_negative: negative.value || '',
     gen_extra_prompt: extraPrompt.value || '',
     gen_extra_negative: extraNegativePrompt.value || '',
+    gen_mode: genMode.value,
+    gen_compound_preset_id: String(selectedCompoundPresetId.value || ''),
   }).catch(() => {})
 }
 
@@ -125,7 +131,11 @@ async function recommendPreset() {
 }
 
 async function sendToSD() {
-  if (!selectedPresetId.value) {
+  if (genMode.value === 'compound' && !selectedCompoundPresetId.value) {
+    error.value = 'Select a pipeline first'
+    return
+  }
+  if (genMode.value === 'preset' && !selectedPresetId.value) {
     error.value = 'Select a preset first'
     return
   }
@@ -139,7 +149,16 @@ async function sendToSD() {
   effectivePrompt.value = ''
   effectiveNegative.value = ''
   try {
-    const result = await api.generateImage(selectedPresetId.value, extraPrompt.value, extraNegativePrompt.value)
+    let result
+    if (genMode.value === 'compound') {
+      result = await api.generateCompoundImage({
+        compound_preset_id: selectedCompoundPresetId.value,
+        extra_prompt: extraPrompt.value,
+        extra_negative_prompt: extraNegativePrompt.value,
+      })
+    } else {
+      result = await api.generateImage(selectedPresetId.value, extraPrompt.value, extraNegativePrompt.value)
+    }
     if (!result || !result.image) {
       error.value = 'No image returned. Check preset settings (model, sampler, scheduler).'
     } else {
@@ -160,13 +179,17 @@ async function sendToSD() {
 }
 
 async function generateImage() {
-  if (!selectedPresetId.value) {
+  if (genMode.value === 'compound' && !selectedCompoundPresetId.value) {
+    error.value = 'Select a pipeline first'
+    return
+  }
+  if (genMode.value === 'preset' && !selectedPresetId.value) {
     error.value = 'Select a preset first'
     return
   }
   saveGenState()
 
-  if (description.value.trim() && promptDirty) {
+  if (genMode.value === 'preset' && description.value.trim() && promptDirty) {
     generatingImage.value = true
     generationStage.value = 'prompt'
     error.value = ''
@@ -203,7 +226,16 @@ async function generateImage() {
   effectivePrompt.value = ''
   effectiveNegative.value = ''
   try {
-    const result = await api.generateImage(selectedPresetId.value, extraPrompt.value, extraNegativePrompt.value)
+    let result
+    if (genMode.value === 'compound') {
+      result = await api.generateCompoundImage({
+        compound_preset_id: selectedCompoundPresetId.value,
+        extra_prompt: extraPrompt.value,
+        extra_negative_prompt: extraNegativePrompt.value,
+      })
+    } else {
+      result = await api.generateImage(selectedPresetId.value, extraPrompt.value, extraNegativePrompt.value)
+    }
     if (!result || !result.image) {
       error.value = 'No image returned. Check preset settings (model, sampler, scheduler).'
     } else {
@@ -340,6 +372,15 @@ async function openBatchGeneration() {
   let batchPrompt = extraPrompt.value
   let batchNegative = extraNegativePrompt.value
 
+  if (genMode.value === 'compound') {
+    EventsEmit('navigate:batch', {
+      prefillPrompt: batchPrompt || '',
+      prefillNegative: batchNegative || '',
+      prefillCompoundPresetId: selectedCompoundPresetId.value || null,
+    })
+    return
+  }
+
   if (!batchPrompt && description.value.trim() && selectedPresetId.value) {
     try {
       const promptResult = await api.generateSdPrompt({
@@ -378,6 +419,8 @@ onMounted(async () => {
     if (s.gen_negative) negative.value = s.gen_negative
     if (s.gen_extra_prompt) extraPrompt.value = s.gen_extra_prompt
     if (s.gen_extra_negative) extraNegativePrompt.value = s.gen_extra_negative
+    if (s.gen_mode) genMode.value = s.gen_mode
+    if (s.gen_compound_preset_id) selectedCompoundPresetId.value = Number(s.gen_compound_preset_id)
   } catch {}
   try {
     const last = await api.getLastImage()
@@ -420,7 +463,12 @@ onUnmounted(() => {
     <div class="generate-layout">
       <div class="generate-section">
         <div class="card">
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+            <button class="btn btn-sm" :class="genMode === 'preset' ? 'btn-primary' : 'btn-secondary'" @click="genMode = 'preset'">Preset</button>
+            <button class="btn btn-sm" :class="genMode === 'compound' ? 'btn-primary' : 'btn-secondary'" @click="genMode = 'compound'">Pipeline</button>
+          </div>
+
+          <div v-if="genMode === 'preset'" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
             <div class="form-group">
               <label class="form-label">Type</label>
               <select class="form-select" v-model="selectedTypeId" :disabled="generatingImage">
@@ -437,6 +485,14 @@ onUnmounted(() => {
                 </option>
               </select>
             </div>
+          </div>
+
+          <div v-if="genMode === 'compound'" class="form-group">
+            <label class="form-label">Pipeline</label>
+            <select class="form-select" v-model="selectedCompoundPresetId" :disabled="generatingImage">
+              <option :value="null" disabled>Select pipeline...</option>
+              <option v-for="c in compoundPresets" :key="c.id" :value="c.id">{{ c.name }} ({{ c.steps.length }} steps)</option>
+            </select>
           </div>
 
           <div class="form-group" style="margin-top: 12px;">
@@ -476,14 +532,14 @@ onUnmounted(() => {
             <textarea class="form-textarea" v-model="negative" rows="2" placeholder="What should NOT be in the image..." :disabled="generatingImage"></textarea>
           </div>
 
-          <button class="btn btn-primary" style="width: 100%; justify-content: center; padding: 12px;" @click="generateImage" :disabled="generatingImage || !selectedPresetId">
+          <button class="btn btn-primary" style="width: 100%; justify-content: center; padding: 12px;" @click="generateImage" :disabled="generatingImage || (genMode === 'preset' ? !selectedPresetId : !selectedCompoundPresetId)">
             <span v-if="generatingImage" style="display: inline-flex; align-items: center; gap: 6px;">
               <span class="spinner" style="width: 14px; height: 14px; border-width: 2px;"></span>
               {{ generationStage === 'prompt' ? 'Generating prompt...' : 'Generating image...' }}
             </span>
             <span v-else>Generate Image</span>
           </button>
-          <button class="btn btn-secondary" style="width: 100%; justify-content: center; padding: 8px; margin-top: 6px;" @click="openBatchGeneration" :disabled="generatingImage || !selectedPresetId">
+          <button class="btn btn-secondary" style="width: 100%; justify-content: center; padding: 8px; margin-top: 6px;" @click="openBatchGeneration" :disabled="generatingImage || (genMode === 'preset' ? !selectedPresetId : !selectedCompoundPresetId)">
             Batch Generation
           </button>
 
@@ -498,7 +554,7 @@ onUnmounted(() => {
                 <label class="form-label">Negative Prompt</label>
                 <textarea class="form-textarea" v-model="extraNegativePrompt" rows="2" placeholder="SD negative prompt..." :disabled="generatingImage"></textarea>
               </div>
-              <button class="btn btn-secondary" style="width: 100%; justify-content: center;" @click="sendToSD" :disabled="generatingImage || !selectedPresetId || !extraPrompt">
+              <button class="btn btn-secondary" style="width: 100%; justify-content: center;" @click="sendToSD" :disabled="generatingImage || (genMode === 'preset' ? !selectedPresetId : !selectedCompoundPresetId) || !extraPrompt">
                 Send to SD
               </button>
             </div>

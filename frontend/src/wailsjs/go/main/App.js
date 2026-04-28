@@ -6,12 +6,20 @@ export function AnalyzeImage(arg1) {
   return window['go']['main']['App']['AnalyzeImage'](arg1);
 }
 
+export function BatchCompoundGenerate(arg1) {
+  return window['go']['main']['App']['BatchCompoundGenerate'](arg1);
+}
+
 export function BatchGenerate(arg1) {
   return window['go']['main']['App']['BatchGenerate'](arg1);
 }
 
 export function CheckServices() {
   return window['go']['main']['App']['CheckServices']();
+}
+
+export function CreateCompoundPreset(arg1) {
+  return window['go']['main']['App']['CreateCompoundPreset'](arg1);
 }
 
 export function CreateDescription(arg1) {
@@ -28,6 +36,10 @@ export function CreatePresetType(arg1) {
 
 export function CreatePrompt(arg1) {
   return window['go']['main']['App']['CreatePrompt'](arg1);
+}
+
+export function DeleteCompoundPreset(arg1) {
+  return window['go']['main']['App']['DeleteCompoundPreset'](arg1);
 }
 
 export function DeleteDescription(arg1) {
@@ -50,6 +62,10 @@ export function ExportPresets(arg1) {
   return window['go']['main']['App']['ExportPresets'](arg1);
 }
 
+export function GenerateCompoundImage(arg1) {
+  return window['go']['main']['App']['GenerateCompoundImage'](arg1);
+}
+
 export function GenerateImage(arg1) {
   return window['go']['main']['App']['GenerateImage'](arg1);
 }
@@ -60,6 +76,10 @@ export function GenerateSDPrompt(arg1) {
 
 export function GetAllTags() {
   return window['go']['main']['App']['GetAllTags']();
+}
+
+export function GetCompoundPreset(arg1) {
+  return window['go']['main']['App']['GetCompoundPreset'](arg1);
 }
 
 export function GetDefaultAnalyzePrompts() {
@@ -126,6 +146,10 @@ export function IsKidsModeActive() {
   return window['go']['main']['App']['IsKidsModeActive']();
 }
 
+export function ListCompoundPresets() {
+  return window['go']['main']['App']['ListCompoundPresets']();
+}
+
 export function ListDescriptions() {
   return window['go']['main']['App']['ListDescriptions']();
 }
@@ -170,8 +194,16 @@ export function SetKidsMode(arg1, arg2) {
   return window['go']['main']['App']['SetKidsMode'](arg1, arg2);
 }
 
+export function TestCompoundGenerate(arg1) {
+  return window['go']['main']['App']['TestCompoundGenerate'](arg1);
+}
+
 export function TestGenerate(arg1) {
   return window['go']['main']['App']['TestGenerate'](arg1);
+}
+
+export function UpdateCompoundPreset(arg1) {
+  return window['go']['main']['App']['UpdateCompoundPreset'](arg1);
 }
 
 export function UpdatePreset(arg1) {

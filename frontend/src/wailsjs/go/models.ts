@@ -35,6 +35,26 @@ export namespace main {
 	        this.chain_prompts = source["chain_prompts"];
 	    }
 	}
+	export class BatchCompoundGenerateParams {
+	    compound_preset_id: number;
+	    extra_prompt: string;
+	    extra_negative_prompt: string;
+	    count: number;
+	    output_folder: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new BatchCompoundGenerateParams(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.compound_preset_id = source["compound_preset_id"];
+	        this.extra_prompt = source["extra_prompt"];
+	        this.extra_negative_prompt = source["extra_negative_prompt"];
+	        this.count = source["count"];
+	        this.output_folder = source["output_folder"];
+	    }
+	}
 	export class BatchGenerateParams {
 	    preset_id: number;
 	    prompt: string;
@@ -53,6 +73,22 @@ export namespace main {
 	        this.negative_prompt = source["negative_prompt"];
 	        this.count = source["count"];
 	        this.output_folder = source["output_folder"];
+	    }
+	}
+	export class GenerateCompoundImageParams {
+	    compound_preset_id: number;
+	    extra_prompt: string;
+	    extra_negative_prompt: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new GenerateCompoundImageParams(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.compound_preset_id = source["compound_preset_id"];
+	        this.extra_prompt = source["extra_prompt"];
+	        this.extra_negative_prompt = source["extra_negative_prompt"];
 	    }
 	}
 	export class GenerateImageParams {
@@ -278,6 +314,22 @@ export namespace main {
 		    return a;
 		}
 	}
+	export class TestCompoundGenerateParams {
+	    selected_ids: number[];
+	    prompt: string;
+	    negative_prompt: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new TestCompoundGenerateParams(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.selected_ids = source["selected_ids"];
+	        this.prompt = source["prompt"];
+	        this.negative_prompt = source["negative_prompt"];
+	    }
+	}
 	export class TestGenerateParams {
 	    mode: string;
 	    selected_ids: number[];
@@ -455,6 +507,92 @@ export namespace preset {
 	        this.updated_at = source["updated_at"];
 	    }
 	}
+	export class CompoundPresetStep {
+	    id: number;
+	    compound_preset_id: number;
+	    step_order: number;
+	    preset_id: number;
+	    width: number;
+	    height: number;
+	    denoising_strength: number;
+	    preset?: Preset;
+	
+	    static createFrom(source: any = {}) {
+	        return new CompoundPresetStep(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.compound_preset_id = source["compound_preset_id"];
+	        this.step_order = source["step_order"];
+	        this.preset_id = source["preset_id"];
+	        this.width = source["width"];
+	        this.height = source["height"];
+	        this.denoising_strength = source["denoising_strength"];
+	        this.preset = this.convertValues(source["preset"], Preset);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class CompoundPreset {
+	    id: number;
+	    name: string;
+	    description: string;
+	    steps: CompoundPresetStep[];
+	    created_at: string;
+	    updated_at: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new CompoundPreset(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.description = source["description"];
+	        this.steps = this.convertValues(source["steps"], CompoundPresetStep);
+	        this.created_at = source["created_at"];
+	        this.updated_at = source["updated_at"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
+	
 	export class PresetType {
 	    id: number;
 	    name: string;

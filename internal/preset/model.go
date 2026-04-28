@@ -54,3 +54,23 @@ type SavedPrompt struct {
 	Text      string `json:"text"`
 	CreatedAt string `json:"created_at"`
 }
+
+type CompoundPreset struct {
+	ID          int64                `json:"id"`
+	Name        string               `json:"name"`
+	Description string               `json:"description"`
+	Steps       []CompoundPresetStep `json:"steps"`
+	CreatedAt   string               `json:"created_at"`
+	UpdatedAt   string               `json:"updated_at"`
+}
+
+type CompoundPresetStep struct {
+	ID                int64   `json:"id"`
+	CompoundPresetID  int64   `json:"compound_preset_id"`
+	StepOrder         int     `json:"step_order"`
+	PresetID          int64   `json:"preset_id"`
+	Width             int     `json:"width"`
+	Height            int     `json:"height"`
+	DenoisingStrength float64 `json:"denoising_strength"`
+	Preset            *Preset `json:"preset,omitempty"`
+}

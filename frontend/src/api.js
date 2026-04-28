@@ -13,6 +13,8 @@ import {
   RecommendPreset, GetDefaultPromptInstruction, GetDefaultAnalyzePrompts,
   BatchGenerate, SelectFolder, GetPresetForBatch,
   TestGenerate,
+  ListCompoundPresets, GetCompoundPreset, CreateCompoundPreset, UpdateCompoundPreset, DeleteCompoundPreset,
+  GenerateCompoundImage, BatchCompoundGenerate, TestCompoundGenerate,
 } from './wailsjs/go/main/App.js'
 
 export const api = {
@@ -67,4 +69,12 @@ export const api = {
   selectFolder: () => SelectFolder(),
   getPresetForBatch: (presetId, description) => GetPresetForBatch(presetId, description),
   testGenerate: (params) => TestGenerate(params),
+  listCompoundPresets: () => ListCompoundPresets(),
+  getCompoundPreset: (id) => GetCompoundPreset(id),
+  createCompoundPreset: (data) => CreateCompoundPreset(data),
+  updateCompoundPreset: (data) => UpdateCompoundPreset(data),
+  deleteCompoundPreset: (id) => DeleteCompoundPreset(id),
+  generateCompoundImage: (params) => GenerateCompoundImage(params),
+  batchCompoundGenerate: (params) => BatchCompoundGenerate(params),
+  testCompoundGenerate: (params) => TestCompoundGenerate(params),
 }

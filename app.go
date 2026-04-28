@@ -2279,3 +2279,607 @@ func (a *App) ImportPresets(items []PresetData) ([]preset.Preset, error) {
 	}
 	return created, nil
 }
+
+func (a *App) ListCompoundPresets() ([]preset.CompoundPreset, error) {
+	items, err := a.presets.ListCompoundPresets()
+	if err != nil {
+		return nil, err
+	}
+	for i := range items {
+		for j := range items[i].Steps {
+			p, err := a.presets.Get(items[i].Steps[j].PresetID)
+			if err == nil {
+				items[i].Steps[j].Preset = p
+			}
+		}
+	}
+	return items, nil
+}
+
+func (a *App) GetCompoundPreset(id int64) (*preset.CompoundPreset, error) {
+	cp, err := a.presets.GetCompoundPreset(id)
+	if err != nil {
+		return nil, err
+	}
+	for i := range cp.Steps {
+		p, err := a.presets.Get(cp.Steps[i].PresetID)
+		if err == nil {
+			cp.Steps[i].Preset = p
+		}
+	}
+	return cp, nil
+}
+
+func (a *App) CreateCompoundPreset(cp preset.CompoundPreset) (*preset.CompoundPreset, error) {
+	if cp.Name == "" {
+		return nil, fmt.Errorf("name is required")
+	}
+	if len(cp.Steps) == 0 {
+		return nil, fmt.Errorf("at least one step is required")
+	}
+	if err := a.presets.CreateCompoundPreset(&cp); err != nil {
+		return nil, err
+	}
+	return a.GetCompoundPreset(cp.ID)
+}
+
+func (a *App) UpdateCompoundPreset(cp preset.CompoundPreset) (*preset.CompoundPreset, error) {
+	if cp.ID <= 0 {
+		return nil, fmt.Errorf("id is required")
+	}
+	if cp.Name == "" {
+		return nil, fmt.Errorf("name is required")
+	}
+	if len(cp.Steps) == 0 {
+		return nil, fmt.Errorf("at least one step is required")
+	}
+	if err := a.presets.UpdateCompoundPreset(&cp); err != nil {
+		return nil, err
+	}
+	return a.GetCompoundPreset(cp.ID)
+}
+
+func (a *App) DeleteCompoundPreset(id int64) error {
+	return a.presets.DeleteCompoundPreset(id)
+}
+
+type GenerateCompoundImageParams struct {
+	CompoundPresetID    int64  `json:"compound_preset_id"`
+	ExtraPrompt         string `json:"extra_prompt"`
+	ExtraNegativePrompt string `json:"extra_negative_prompt"`
+}
+
+func (a *App) GenerateCompoundImage(params GenerateCompoundImageParams) (*GenerateImageResult, error) {
+	cp, err := a.presets.GetCompoundPreset(params.CompoundPresetID)
+	if err != nil {
+		return nil, fmt.Errorf("compound preset not found: %w", err)
+	}
+	if len(cp.Steps) == 0 {
+		return nil, fmt.Errorf("compound preset has no steps")
+	}
+
+	var lastImage string
+	var lastInfo json.RawMessage
+
+	for stepIdx, step := range cp.Steps {
+		p, err := a.presets.Get(step.PresetID)
+		if err != nil {
+			return nil, fmt.Errorf("step %d: preset not found: %w", stepIdx+1, err)
+		}
+
+		runtime.EventsEmit(a.ctx, "compound:progress", map[string]any{
+			"current": stepIdx + 1,
+			"total":   len(cp.Steps),
+			"status":  "generating",
+			"step":    stepIdx + 1,
+		})
+
+		prompt := p.Prompt
+		if params.ExtraPrompt != "" {
+			prompt = params.ExtraPrompt
+		}
+		if p.Loras != "" {
+			var loras []preset.LoRAEntry
+			if json.Unmarshal([]byte(p.Loras), &loras) == nil {
+				for _, l := range loras {
+					prompt += fmt.Sprintf(" <lora:%s:%g>", l.Name, l.Weight)
+				}
+			}
+		}
+
+		negativePrompt := p.NegativePrompt
+		if params.ExtraNegativePrompt != "" {
+			negativePrompt = params.ExtraNegativePrompt
+		}
+		if a.isKidsMode() {
+			negativePrompt += ", " + config.KidsModeNegativePrompt
+		}
+
+		if p.ModelName != "" {
+			_ = a.sd.SetModel(p.ModelName)
+		}
+		if p.VAE != "" {
+			_ = a.sd.SetVAE(p.VAE)
+		}
+
+		samplerName := p.Sampler
+		if p.ScheduleType != "" {
+			st := strings.ToUpper(p.ScheduleType[:1]) + p.ScheduleType[1:]
+			samplerName = p.Sampler + " " + st
+		}
+
+		width := step.Width
+		if width == 0 {
+			width = p.Width
+		}
+		height := step.Height
+		if height == 0 {
+			height = p.Height
+		}
+
+		clipSkip := 1
+		if p.ClipSkip != nil {
+			clipSkip = *p.ClipSkip
+		}
+
+		if stepIdx == 0 {
+			batchSize := 1
+			batchCount := 1
+			result, err := a.sd.Txt2Img(sd.Txt2ImgRequest{
+				Prompt:          prompt,
+				NegativePrompt:  negativePrompt,
+				SamplerName:     samplerName,
+				Scheduler:       p.ScheduleType,
+				Steps:           p.Steps,
+				CfgScale:        p.CfgScale,
+				Width:           width,
+				Height:          height,
+				Seed:            p.Seed,
+				ClipSkip:        &clipSkip,
+				BatchSize:       &batchSize,
+				BatchCount:      &batchCount,
+				DoNotSaveImages: true,
+				DoNotSaveGrid:   true,
+			})
+			if err != nil {
+				return nil, fmt.Errorf("step %d (txt2img): %w", stepIdx+1, err)
+			}
+			if len(result.Images) == 0 {
+				return nil, fmt.Errorf("step %d: no image returned", stepIdx+1)
+			}
+			lastImage = result.Images[0]
+			lastInfo = result.Info
+		} else {
+			denoising := step.DenoisingStrength
+			if denoising <= 0 {
+				denoising = 0.5
+			}
+			batchSize := 1
+			batchCount := 1
+			result, err := a.sd.Img2Img(sd.Img2ImgRequest{
+				InitImages:        []string{lastImage},
+				Prompt:            prompt,
+				NegativePrompt:    negativePrompt,
+				SamplerName:       samplerName,
+				Scheduler:         p.ScheduleType,
+				Steps:             p.Steps,
+				CfgScale:          p.CfgScale,
+				Width:             width,
+				Height:            height,
+				Seed:              p.Seed,
+				DenoisingStrength: &denoising,
+				ClipSkip:          &clipSkip,
+				BatchSize:         &batchSize,
+				BatchCount:        &batchCount,
+				DoNotSaveImages:   true,
+				DoNotSaveGrid:     true,
+			})
+			if err != nil {
+				return nil, fmt.Errorf("step %d (img2img): %w", stepIdx+1, err)
+			}
+			if len(result.Images) == 0 {
+				return nil, fmt.Errorf("step %d: no image returned", stepIdx+1)
+			}
+			lastImage = result.Images[0]
+			lastInfo = result.Info
+		}
+	}
+
+	runtime.EventsEmit(a.ctx, "compound:progress", map[string]any{
+		"current": len(cp.Steps),
+		"total":   len(cp.Steps),
+		"status":  "done",
+	})
+
+	img := &GenerateImageResult{
+		Image:                   lastImage,
+		Info:                    lastInfo,
+		IsPreview:               false,
+		EffectivePrompt:         "",
+		EffectiveNegativePrompt: "",
+	}
+	a.saveLastImage(lastImage, lastInfo, false)
+	return img, nil
+}
+
+type BatchCompoundGenerateParams struct {
+	CompoundPresetID   int64  `json:"compound_preset_id"`
+	ExtraPrompt        string `json:"extra_prompt"`
+	ExtraNegativePrompt string `json:"extra_negative_prompt"`
+	Count              int    `json:"count"`
+	OutputFolder       string `json:"output_folder"`
+}
+
+func (a *App) BatchCompoundGenerate(params BatchCompoundGenerateParams) error {
+	if params.Count <= 0 || params.Count > 100 {
+		return fmt.Errorf("count must be between 1 and 100")
+	}
+	if params.OutputFolder == "" {
+		return fmt.Errorf("output folder is required")
+	}
+
+	a.batchMu.Lock()
+	if a.batchRunning {
+		a.batchMu.Unlock()
+		return fmt.Errorf("batch generation is already running")
+	}
+	a.batchRunning = true
+	a.batchMu.Unlock()
+	defer func() {
+		a.batchMu.Lock()
+		a.batchRunning = false
+		a.batchMu.Unlock()
+	}()
+
+	if err := os.MkdirAll(params.OutputFolder, 0755); err != nil {
+		return fmt.Errorf("create output folder: %w", err)
+	}
+
+	cp, err := a.presets.GetCompoundPreset(params.CompoundPresetID)
+	if err != nil {
+		return fmt.Errorf("compound preset not found: %w", err)
+	}
+	if len(cp.Steps) == 0 {
+		return fmt.Errorf("compound preset has no steps")
+	}
+
+	for batchIdx := 0; batchIdx < params.Count; batchIdx++ {
+		runtime.EventsEmit(a.ctx, "batch:progress", map[string]any{
+			"current": batchIdx + 1,
+			"total":   params.Count,
+			"status":  "generating",
+		})
+
+		var lastImage string
+
+		for stepIdx, step := range cp.Steps {
+			p, err := a.presets.Get(step.PresetID)
+			if err != nil {
+				return fmt.Errorf("step %d: preset not found: %w", stepIdx+1, err)
+			}
+
+			prompt := p.Prompt
+			if params.ExtraPrompt != "" {
+				prompt = params.ExtraPrompt
+			}
+			if p.Loras != "" {
+				var loras []preset.LoRAEntry
+				if json.Unmarshal([]byte(p.Loras), &loras) == nil {
+					for _, l := range loras {
+						prompt += fmt.Sprintf(" <lora:%s:%g>", l.Name, l.Weight)
+					}
+				}
+			}
+
+			negativePrompt := p.NegativePrompt
+			if params.ExtraNegativePrompt != "" {
+				negativePrompt = params.ExtraNegativePrompt
+			}
+			if a.isKidsMode() {
+				prompt = kids.FilterInput(prompt)
+				negativePrompt = kids.FilterInput(negativePrompt)
+				negativePrompt += ", " + config.KidsModeNegativePrompt
+			}
+
+			if p.ModelName != "" {
+				_ = a.sd.SetModel(p.ModelName)
+			}
+			if p.VAE != "" {
+				_ = a.sd.SetVAE(p.VAE)
+			}
+
+			samplerName := p.Sampler
+			if p.ScheduleType != "" {
+				st := strings.ToUpper(p.ScheduleType[:1]) + p.ScheduleType[1:]
+				samplerName = p.Sampler + " " + st
+			}
+
+			width := step.Width
+			if width == 0 {
+				width = p.Width
+			}
+			height := step.Height
+			if height == 0 {
+				height = p.Height
+			}
+
+			clipSkip := 1
+			if p.ClipSkip != nil {
+				clipSkip = *p.ClipSkip
+			}
+
+			if stepIdx == 0 {
+				batchSize := 1
+				batchCount := 1
+				result, err := a.sd.Txt2Img(sd.Txt2ImgRequest{
+					Prompt:          prompt,
+					NegativePrompt:  negativePrompt,
+					SamplerName:     samplerName,
+					Scheduler:       p.ScheduleType,
+					Steps:           p.Steps,
+					CfgScale:        p.CfgScale,
+					Width:           width,
+					Height:          height,
+					Seed:            p.Seed,
+					ClipSkip:        &clipSkip,
+					BatchSize:       &batchSize,
+					BatchCount:      &batchCount,
+					DoNotSaveImages: true,
+					DoNotSaveGrid:   true,
+				})
+				if err != nil {
+					return fmt.Errorf("batch %d, step %d (txt2img): %w", batchIdx+1, stepIdx+1, err)
+				}
+				if len(result.Images) == 0 {
+					return fmt.Errorf("batch %d, step %d: no image returned", batchIdx+1, stepIdx+1)
+				}
+				lastImage = result.Images[0]
+			} else {
+				denoising := step.DenoisingStrength
+				if denoising <= 0 {
+					denoising = 0.5
+				}
+				batchSize := 1
+				batchCount := 1
+				result, err := a.sd.Img2Img(sd.Img2ImgRequest{
+					InitImages:        []string{lastImage},
+					Prompt:            prompt,
+					NegativePrompt:    negativePrompt,
+					SamplerName:       samplerName,
+					Scheduler:         p.ScheduleType,
+					Steps:             p.Steps,
+					CfgScale:          p.CfgScale,
+					Width:             width,
+					Height:            height,
+					Seed:              p.Seed,
+					DenoisingStrength: &denoising,
+					ClipSkip:          &clipSkip,
+					BatchSize:         &batchSize,
+					BatchCount:        &batchCount,
+					DoNotSaveImages:   true,
+					DoNotSaveGrid:     true,
+				})
+				if err != nil {
+					return fmt.Errorf("batch %d, step %d (img2img): %w", batchIdx+1, stepIdx+1, err)
+				}
+				if len(result.Images) == 0 {
+					return fmt.Errorf("batch %d, step %d: no image returned", batchIdx+1, stepIdx+1)
+				}
+				lastImage = result.Images[0]
+			}
+		}
+
+		imgData, err := base64.StdEncoding.DecodeString(lastImage)
+		if err != nil {
+			return fmt.Errorf("batch %d: decode image: %w", batchIdx+1, err)
+		}
+
+		filename := fmt.Sprintf("compound_%s_%d_%d.png", cp.Name, time.Now().Unix(), batchIdx+1)
+		filePath := filepath.Join(params.OutputFolder, filename)
+		if err := os.WriteFile(filePath, imgData, 0644); err != nil {
+			return fmt.Errorf("batch %d: save file: %w", batchIdx+1, err)
+		}
+
+		runtime.EventsEmit(a.ctx, "batch:progress", map[string]any{
+			"current":   batchIdx + 1,
+			"total":     params.Count,
+			"file_path": filePath,
+			"status":    "generating",
+		})
+	}
+
+	runtime.EventsEmit(a.ctx, "batch:progress", map[string]any{
+		"current": params.Count,
+		"total":   params.Count,
+		"status":  "done",
+	})
+	return nil
+}
+
+type TestCompoundGenerateParams struct {
+	SelectedIDs        []int64 `json:"selected_ids"`
+	Prompt             string  `json:"prompt"`
+	NegativePrompt     string  `json:"negative_prompt"`
+}
+
+func (a *App) TestCompoundGenerate(params TestCompoundGenerateParams) ([]TestGenerateResultItem, error) {
+	if len(params.SelectedIDs) == 0 {
+		return nil, fmt.Errorf("select at least one compound preset")
+	}
+	if len(params.SelectedIDs) > 20 {
+		return nil, fmt.Errorf("maximum 20 compound presets at once")
+	}
+	if params.Prompt == "" {
+		return nil, fmt.Errorf("prompt is required")
+	}
+
+	totalItems := len(params.SelectedIDs)
+	results := make([]TestGenerateResultItem, 0, totalItems)
+
+	for idx, compoundID := range params.SelectedIDs {
+		runtime.EventsEmit(a.ctx, "test:progress", map[string]any{
+			"current": idx + 1,
+			"total":   totalItems,
+			"status":  "generating",
+		})
+
+		item := TestGenerateResultItem{}
+
+		cp, err := a.presets.GetCompoundPreset(compoundID)
+		if err != nil {
+			item.Error = fmt.Sprintf("compound preset not found: %v", err)
+			item.Name = fmt.Sprintf("Compound #%d", compoundID)
+			results = append(results, item)
+			continue
+		}
+		item.Name = cp.Name
+
+		if len(cp.Steps) == 0 {
+			item.Error = "no steps in compound preset"
+			results = append(results, item)
+			continue
+		}
+
+		var lastImage string
+
+		for stepIdx, step := range cp.Steps {
+			p, err := a.presets.Get(step.PresetID)
+			if err != nil {
+				item.Error = fmt.Sprintf("step %d: preset not found", stepIdx+1)
+				break
+			}
+
+			prompt := params.Prompt
+			if a.isKidsMode() {
+				prompt = kids.FilterInput(prompt)
+			}
+			if p.Loras != "" {
+				var loras []preset.LoRAEntry
+				if json.Unmarshal([]byte(p.Loras), &loras) == nil {
+					for _, l := range loras {
+						prompt += fmt.Sprintf(" <lora:%s:%g>", l.Name, l.Weight)
+					}
+				}
+			}
+
+			negPrompt := params.NegativePrompt
+			if p.NegativePrompt != "" {
+				if negPrompt != "" {
+					negPrompt = p.NegativePrompt + ", " + negPrompt
+				} else {
+					negPrompt = p.NegativePrompt
+				}
+			}
+			if a.isKidsMode() {
+				negPrompt += ", " + config.KidsModeNegativePrompt
+			}
+
+			if p.ModelName != "" {
+				_ = a.sd.SetModel(p.ModelName)
+			}
+			if p.VAE != "" {
+				_ = a.sd.SetVAE(p.VAE)
+			}
+
+			samplerName := p.Sampler
+			if p.ScheduleType != "" {
+				st := strings.ToUpper(p.ScheduleType[:1]) + p.ScheduleType[1:]
+				samplerName = p.Sampler + " " + st
+			}
+
+			width := step.Width
+			if width == 0 {
+				width = p.Width
+			}
+			height := step.Height
+			if height == 0 {
+				height = p.Height
+			}
+
+			clipSkip := 1
+			if p.ClipSkip != nil {
+				clipSkip = *p.ClipSkip
+			}
+			batchSize := 1
+			batchCount := 1
+
+			if stepIdx == 0 {
+				result, err := a.sd.Txt2Img(sd.Txt2ImgRequest{
+					Prompt:          prompt,
+					NegativePrompt:  negPrompt,
+					SamplerName:     samplerName,
+					Scheduler:       p.ScheduleType,
+					Steps:           p.Steps,
+					CfgScale:        p.CfgScale,
+					Width:           width,
+					Height:          height,
+					Seed:            p.Seed,
+					ClipSkip:        &clipSkip,
+					BatchSize:       &batchSize,
+					BatchCount:      &batchCount,
+					DoNotSaveImages: true,
+					DoNotSaveGrid:   true,
+				})
+				if err != nil {
+					item.Error = fmt.Sprintf("step %d: %v", stepIdx+1, err)
+					break
+				}
+				if len(result.Images) == 0 {
+					item.Error = fmt.Sprintf("step %d: no image", stepIdx+1)
+					break
+				}
+				lastImage = result.Images[0]
+			} else {
+				denoising := step.DenoisingStrength
+				if denoising <= 0 {
+					denoising = 0.5
+				}
+				result, err := a.sd.Img2Img(sd.Img2ImgRequest{
+					InitImages:        []string{lastImage},
+					Prompt:            prompt,
+					NegativePrompt:    negPrompt,
+					SamplerName:       samplerName,
+					Scheduler:         p.ScheduleType,
+					Steps:             p.Steps,
+					CfgScale:          p.CfgScale,
+					Width:             width,
+					Height:            height,
+					Seed:              p.Seed,
+					DenoisingStrength: &denoising,
+					ClipSkip:          &clipSkip,
+					BatchSize:         &batchSize,
+					BatchCount:        &batchCount,
+					DoNotSaveImages:   true,
+					DoNotSaveGrid:     true,
+				})
+				if err != nil {
+					item.Error = fmt.Sprintf("step %d: %v", stepIdx+1, err)
+					break
+				}
+				if len(result.Images) == 0 {
+					item.Error = fmt.Sprintf("step %d: no image", stepIdx+1)
+					break
+				}
+				lastImage = result.Images[0]
+			}
+		}
+
+		if item.Error == "" {
+			item.Image = lastImage
+		}
+		item.Sampler = ""
+		item.ScheduleType = ""
+		item.CfgScale = 0
+		item.ModelName = ""
+
+		results = append(results, item)
+
+		runtime.EventsEmit(a.ctx, "test:progress", map[string]any{
+			"current": idx + 1,
+			"total":   totalItems,
+			"status":  "done",
+		})
+	}
+
+	return results, nil
+}

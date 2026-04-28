@@ -7,9 +7,13 @@ import {sd} from '../models';
 
 export function AnalyzeImage(arg1:string):Promise<string>;
 
+export function BatchCompoundGenerate(arg1:main.BatchCompoundGenerateParams):Promise<void>;
+
 export function BatchGenerate(arg1:main.BatchGenerateParams):Promise<void>;
 
 export function CheckServices():Promise<main.ServiceStatus>;
+
+export function CreateCompoundPreset(arg1:preset.CompoundPreset):Promise<preset.CompoundPreset>;
 
 export function CreateDescription(arg1:string):Promise<preset.SavedDescription>;
 
@@ -18,6 +22,8 @@ export function CreatePreset(arg1:preset.Preset):Promise<preset.Preset>;
 export function CreatePresetType(arg1:preset.PresetType):Promise<preset.PresetType>;
 
 export function CreatePrompt(arg1:string):Promise<preset.SavedPrompt>;
+
+export function DeleteCompoundPreset(arg1:number):Promise<void>;
 
 export function DeleteDescription(arg1:number):Promise<void>;
 
@@ -29,11 +35,15 @@ export function DeletePrompt(arg1:number):Promise<void>;
 
 export function ExportPresets(arg1:Array<number>):Promise<string>;
 
+export function GenerateCompoundImage(arg1:main.GenerateCompoundImageParams):Promise<main.GenerateImageResult>;
+
 export function GenerateImage(arg1:main.GenerateImageParams):Promise<main.GenerateImageResult>;
 
 export function GenerateSDPrompt(arg1:main.GenerateSDPromptParams):Promise<main.GenerateSDPromptResult>;
 
 export function GetAllTags():Promise<Array<string>>;
+
+export function GetCompoundPreset(arg1:number):Promise<preset.CompoundPreset>;
 
 export function GetDefaultAnalyzePrompts():Promise<main.AnalyzePrompts>;
 
@@ -67,6 +77,8 @@ export function ImportPresets(arg1:Array<main.PresetData>):Promise<Array<preset.
 
 export function IsKidsModeActive():Promise<boolean>;
 
+export function ListCompoundPresets():Promise<Array<preset.CompoundPreset>>;
+
 export function ListDescriptions():Promise<Array<preset.SavedDescription>>;
 
 export function ListPresetTypes():Promise<Array<preset.PresetType>>;
@@ -89,7 +101,11 @@ export function SelectFolder():Promise<string>;
 
 export function SetKidsMode(arg1:boolean,arg2:string):Promise<void>;
 
+export function TestCompoundGenerate(arg1:main.TestCompoundGenerateParams):Promise<Array<main.TestGenerateResultItem>>;
+
 export function TestGenerate(arg1:main.TestGenerateParams):Promise<Array<main.TestGenerateResultItem>>;
+
+export function UpdateCompoundPreset(arg1:preset.CompoundPreset):Promise<preset.CompoundPreset>;
 
 export function UpdatePreset(arg1:preset.Preset):Promise<preset.Preset>;
 
