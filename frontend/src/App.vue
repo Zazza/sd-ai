@@ -1,21 +1,37 @@
 <script setup>
-import { ref, computed } from 'vue'
-import { WindowMinimise, Quit } from './wailsjs/runtime/runtime'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { WindowMinimise, Quit, EventsOn, EventsOff } from './wailsjs/runtime/runtime'
 import PresetsPage from './components/PresetsPage.vue'
 import GeneratePage from './components/GeneratePage.vue'
 import AnalyzePage from './components/AnalyzePage.vue'
 import SettingsPage from './components/SettingsPage.vue'
+import BatchPage from './components/BatchPage.vue'
 
 const page = ref('generate')
+const batchProps = ref({})
 
 const currentPage = computed(() => {
   switch (page.value) {
     case 'presets': return PresetsPage
     case 'generate': return GeneratePage
     case 'analyze': return AnalyzePage
+    case 'batch': return BatchPage
     case 'settings': return SettingsPage
     default: return GeneratePage
   }
+})
+
+function onNavigateToBatch(data) {
+  batchProps.value = data || {}
+  page.value = 'batch'
+}
+
+onMounted(() => {
+  EventsOn('navigate:batch', onNavigateToBatch)
+})
+
+onUnmounted(() => {
+  EventsOff('navigate:batch')
 })
 
 const minimize = () => WindowMinimise()
@@ -42,6 +58,9 @@ const close = () => Quit()
         <a class="sidebar-link" :class="{ active: page === 'generate' }" @click="page = 'generate'">
           &#9733; Generate
         </a>
+        <a class="sidebar-link" :class="{ active: page === 'batch' }" @click="page = 'batch'">
+          &#9638; Batch
+        </a>
         <a class="sidebar-link" :class="{ active: page === 'analyze' }" @click="page = 'analyze'">
           &#9673; Analyze
         </a>
@@ -54,9 +73,10 @@ const close = () => Quit()
       </nav>
     </aside>
     <main class="main">
-      <KeepAlive>
+      <KeepAlive v-if="page !== 'batch'">
         <component :is="currentPage" />
       </KeepAlive>
+      <BatchPage v-else v-bind="batchProps" :key="JSON.stringify(batchProps)" />
     </main>
     </div>
   </div>

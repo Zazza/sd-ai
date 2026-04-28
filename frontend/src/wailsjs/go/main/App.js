@@ -6,6 +6,10 @@ export function AnalyzeImage(arg1) {
   return window['go']['main']['App']['AnalyzeImage'](arg1);
 }
 
+export function BatchGenerate(arg1) {
+  return window['go']['main']['App']['BatchGenerate'](arg1);
+}
+
 export function CheckServices() {
   return window['go']['main']['App']['CheckServices']();
 }
@@ -76,6 +80,10 @@ export function GetLastImage() {
 
 export function GetPreset(arg1) {
   return window['go']['main']['App']['GetPreset'](arg1);
+}
+
+export function GetPresetForBatch(arg1, arg2) {
+  return window['go']['main']['App']['GetPresetForBatch'](arg1, arg2);
 }
 
 export function GetPresetType(arg1) {
@@ -152,6 +160,10 @@ export function RecommendPreset(arg1) {
 
 export function SaveImage(arg1, arg2) {
   return window['go']['main']['App']['SaveImage'](arg1, arg2);
+}
+
+export function SelectFolder() {
+  return window['go']['main']['App']['SelectFolder']();
 }
 
 export function SetKidsMode(arg1, arg2) {

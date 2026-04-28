@@ -7,6 +7,8 @@ import {sd} from '../models';
 
 export function AnalyzeImage(arg1:string):Promise<string>;
 
+export function BatchGenerate(arg1:main.BatchGenerateParams):Promise<void>;
+
 export function CheckServices():Promise<main.ServiceStatus>;
 
 export function CreateDescription(arg1:string):Promise<preset.SavedDescription>;
@@ -42,6 +44,8 @@ export function GetLLMModels():Promise<Array<llm.LLMModel>>;
 export function GetLastImage():Promise<main.GenerateImageResult>;
 
 export function GetPreset(arg1:number):Promise<preset.Preset>;
+
+export function GetPresetForBatch(arg1:number,arg2:string):Promise<main.GenerateSDPromptResult>;
 
 export function GetPresetType(arg1:number):Promise<preset.PresetType>;
 
@@ -80,6 +84,8 @@ export function ReadImageFile():Promise<string>;
 export function RecommendPreset(arg1:string):Promise<main.RecommendPresetResult>;
 
 export function SaveImage(arg1:string,arg2:string):Promise<string>;
+
+export function SelectFolder():Promise<string>;
 
 export function SetKidsMode(arg1:boolean,arg2:string):Promise<void>;
 

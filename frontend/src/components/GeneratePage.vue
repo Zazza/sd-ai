@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { EventsEmit } from '../wailsjs/runtime/runtime'
 import { api } from '../api.js'
 
 const presets = ref([])
@@ -335,6 +336,34 @@ async function downloadImage() {
   }
 }
 
+async function openBatchGeneration() {
+  let batchPrompt = extraPrompt.value
+  let batchNegative = extraNegativePrompt.value
+
+  if (!batchPrompt && description.value.trim() && selectedPresetId.value) {
+    try {
+      const promptResult = await api.generateSdPrompt({
+        preset_id: selectedPresetId.value,
+        description: description.value,
+        negative: negative.value,
+      })
+      if (promptResult && promptResult.prompt) {
+        batchPrompt = promptResult.prompt
+        batchNegative = promptResult.negative_prompt || ''
+      }
+    } catch (e) {
+      error.value = 'Prompt generation failed: ' + String(e)
+      return
+    }
+  }
+
+  EventsEmit('navigate:batch', {
+    prefillPrompt: batchPrompt || '',
+    prefillNegative: batchNegative || '',
+    prefillPresetId: selectedPresetId.value || null,
+  })
+}
+
 onMounted(async () => {
   loadPresets()
   checkServices()
@@ -453,6 +482,9 @@ onUnmounted(() => {
               {{ generationStage === 'prompt' ? 'Generating prompt...' : 'Generating image...' }}
             </span>
             <span v-else>Generate Image</span>
+          </button>
+          <button class="btn btn-secondary" style="width: 100%; justify-content: center; padding: 8px; margin-top: 6px;" @click="openBatchGeneration" :disabled="generatingImage || !selectedPresetId">
+            Batch Generation
           </button>
 
           <details style="margin-top: 8px;" class="card">

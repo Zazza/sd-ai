@@ -35,6 +35,26 @@ export namespace main {
 	        this.chain_prompts = source["chain_prompts"];
 	    }
 	}
+	export class BatchGenerateParams {
+	    preset_id: number;
+	    prompt: string;
+	    negative_prompt: string;
+	    count: number;
+	    output_folder: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new BatchGenerateParams(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.preset_id = source["preset_id"];
+	        this.prompt = source["prompt"];
+	        this.negative_prompt = source["negative_prompt"];
+	        this.count = source["count"];
+	        this.output_folder = source["output_folder"];
+	    }
+	}
 	export class GenerateImageParams {
 	    preset_id: number;
 	    extra_prompt: string;

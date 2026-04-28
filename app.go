@@ -32,12 +32,14 @@ import (
 )
 
 type App struct {
-	ctx      context.Context
-	presets  *preset.DB
-	llm      *llm.Client
-	sd       *sd.Client
-	config   *config.Config
-	dataDir  string
+	ctx         context.Context
+	presets     *preset.DB
+	llm         *llm.Client
+	sd          *sd.Client
+	config      *config.Config
+	dataDir     string
+	batchMu     sync.Mutex
+	batchRunning bool
 }
 
 func NewApp(presets *preset.DB, llmClient *llm.Client, sdClient *sd.Client, cfg *config.Config) *App {
@@ -735,6 +737,218 @@ type UpscaleImageParams struct {
 	ImageBase64 string `json:"image_base64"`
 	GenInfo     string `json:"gen_info"`
 	PresetID    int64  `json:"preset_id"`
+}
+
+type BatchGenerateParams struct {
+	PresetID        int64  `json:"preset_id"`
+	Prompt          string `json:"prompt"`
+	NegativePrompt  string `json:"negative_prompt"`
+	Count           int    `json:"count"`
+	OutputFolder    string `json:"output_folder"`
+}
+
+type BatchProgress struct {
+	Current   int    `json:"current"`
+	Total     int    `json:"total"`
+	FilePath  string `json:"file_path"`
+	Status    string `json:"status"`
+}
+
+func (a *App) BatchGenerate(params BatchGenerateParams) error {
+	if params.Count <= 0 || params.Count > 100 {
+		return fmt.Errorf("count must be between 1 and 100")
+	}
+	if params.OutputFolder == "" {
+		return fmt.Errorf("output folder is required")
+	}
+	if params.Prompt == "" {
+		return fmt.Errorf("prompt is required")
+	}
+
+	a.batchMu.Lock()
+	if a.batchRunning {
+		a.batchMu.Unlock()
+		return fmt.Errorf("batch generation is already running")
+	}
+	a.batchRunning = true
+	a.batchMu.Unlock()
+	defer func() {
+		a.batchMu.Lock()
+		a.batchRunning = false
+		a.batchMu.Unlock()
+	}()
+
+	if err := os.MkdirAll(params.OutputFolder, 0755); err != nil {
+		return fmt.Errorf("create output folder: %w", err)
+	}
+
+	p := &preset.Preset{
+		Prompt:         "",
+		NegativePrompt: "",
+		Sampler:        "Euler a",
+		Steps:          20,
+		CfgScale:       7.0,
+		Width:          512,
+		Height:         512,
+	}
+	if params.PresetID > 0 {
+		var err error
+		p, err = a.presets.Get(params.PresetID)
+		if err != nil {
+			return fmt.Errorf("preset not found: %w", err)
+		}
+	}
+
+	prompt := params.Prompt
+	if a.isKidsMode() {
+		prompt = kids.FilterInput(prompt)
+	}
+	if p.Loras != "" {
+		var loras []preset.LoRAEntry
+		if err := json.Unmarshal([]byte(p.Loras), &loras); err == nil {
+			for _, l := range loras {
+				prompt += fmt.Sprintf(" <lora:%s:%g>", l.Name, l.Weight)
+			}
+		}
+	}
+
+	negativePrompt := params.NegativePrompt
+	if a.isKidsMode() {
+		negativePrompt = kids.FilterInput(negativePrompt)
+		negativePrompt += ", " + config.KidsModeNegativePrompt
+	}
+
+	if p.ModelName != "" {
+		_ = a.sd.SetModel(p.ModelName)
+	}
+	if p.VAE != "" {
+		_ = a.sd.SetVAE(p.VAE)
+	}
+
+	samplerName := p.Sampler
+	if len(p.ScheduleType) > 0 {
+		st := strings.ToUpper(p.ScheduleType[:1]) + p.ScheduleType[1:]
+		samplerName = p.Sampler + " " + st
+	}
+
+	clipSkip := 1
+	if p.ClipSkip != nil {
+		clipSkip = *p.ClipSkip
+	}
+	batchSize := 1
+	batchCount := 1
+
+	denoisingStrength := p.DenoisingStrength
+	var hiresFix *bool
+	if p.HiresFix != nil {
+		hiresFix = p.HiresFix
+	}
+
+	timestamp := time.Now().Format("20060102_150405")
+
+	for i := 0; i < params.Count; i++ {
+		runtime.EventsEmit(a.ctx, "batch:progress", BatchProgress{
+			Current: i + 1,
+			Total:   params.Count,
+			Status:  "generating",
+		})
+
+		result, err := a.sd.Txt2Img(sd.Txt2ImgRequest{
+			Prompt:                 prompt,
+			NegativePrompt:         negativePrompt,
+			SamplerName:            samplerName,
+			Scheduler:              p.ScheduleType,
+			Steps:                  p.Steps,
+			CfgScale:               p.CfgScale,
+			Width:                  p.Width,
+			Height:                 p.Height,
+			Seed:                   p.Seed,
+			DenoisingStrength:      denoisingStrength,
+			ClipSkip:               &clipSkip,
+			BatchSize:              &batchSize,
+			BatchCount:             &batchCount,
+			HiresFix:               hiresFix,
+			HiresUpscale:           p.HiresUpscale,
+			HiresDenoisingStrength: p.HiresDenoisingStrength,
+			HiresUpscaler:          p.HiresUpscaler,
+			DoNotSaveImages:        true,
+			DoNotSaveGrid:          true,
+		})
+		if err != nil {
+			runtime.EventsEmit(a.ctx, "batch:progress", BatchProgress{
+				Current: i + 1,
+				Total:   params.Count,
+				Status:  fmt.Sprintf("error: image %d failed", i+1),
+			})
+			return fmt.Errorf("image %d/%d failed: %w", i+1, params.Count, err)
+		}
+		if len(result.Images) == 0 {
+			runtime.EventsEmit(a.ctx, "batch:progress", BatchProgress{
+				Current: i + 1,
+				Total:   params.Count,
+				Status:  "error: no image returned",
+			})
+			return fmt.Errorf("image %d/%d: no image returned", i+1, params.Count)
+		}
+
+		if len(result.Images[0]) > 67*1024*1024 {
+			return fmt.Errorf("image %d too large (max 50 MB)", i+1)
+		}
+
+		imgData, err := base64.StdEncoding.DecodeString(result.Images[0])
+		if err != nil {
+			return fmt.Errorf("decode image %d: %w", i+1, err)
+		}
+
+		fileName := fmt.Sprintf("batch_%s_%03d.png", timestamp, i+1)
+		filePath := filepath.Join(params.OutputFolder, fileName)
+		if err := os.WriteFile(filePath, imgData, 0644); err != nil {
+			return fmt.Errorf("save image %d: %w", i+1, err)
+		}
+
+		runtime.EventsEmit(a.ctx, "batch:progress", BatchProgress{
+			Current:  i + 1,
+			Total:    params.Count,
+			FilePath: filePath,
+			Status:   "saved",
+		})
+	}
+
+	runtime.EventsEmit(a.ctx, "batch:progress", BatchProgress{
+		Current: params.Count,
+		Total:   params.Count,
+		Status:  "done",
+	})
+	return nil
+}
+
+func (a *App) SelectFolder() (string, error) {
+	path, err := runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{
+		Title: "Select Output Folder",
+	})
+	if err != nil {
+		return "", err
+	}
+	return path, nil
+}
+
+func (a *App) GetPresetForBatch(presetID int64, description string) (*GenerateSDPromptResult, error) {
+	if presetID <= 0 {
+		return nil, fmt.Errorf("preset is required")
+	}
+
+	if description != "" {
+		result, err := a.GenerateSDPrompt(GenerateSDPromptParams{
+			PresetID:    presetID,
+			Description: description,
+		})
+		if err != nil {
+			return nil, err
+		}
+		return result, nil
+	}
+
+	return nil, nil
 }
 
 func (a *App) UpscaleImage(params UpscaleImageParams) (*GenerateImageResult, error) {

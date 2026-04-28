@@ -11,6 +11,7 @@ import {
   ListPresetTypes, GetPresetType, CreatePresetType, UpdatePresetType, DeletePresetType,
   GetAllTags, GetSDLoRAs, ValidateImportModels,
   RecommendPreset, GetDefaultPromptInstruction, GetDefaultAnalyzePrompts,
+  BatchGenerate, SelectFolder, GetPresetForBatch,
 } from './wailsjs/go/main/App.js'
 
 export const api = {
@@ -61,4 +62,7 @@ export const api = {
   recommendPreset: (description) => RecommendPreset(description),
   getDefaultPromptInstruction: () => GetDefaultPromptInstruction(),
   getDefaultAnalyzePrompts: () => GetDefaultAnalyzePrompts(),
+  batchGenerate: (params) => BatchGenerate(params),
+  selectFolder: () => SelectFolder(),
+  getPresetForBatch: (presetId, description) => GetPresetForBatch(presetId, description),
 }
