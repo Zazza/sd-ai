@@ -75,7 +75,11 @@ func main() {
 		Title:     "SD Studio",
 		Width:     1280,
 		Height:    800,
-		Frameless: true,
+		Frameless: false,
+		MinWidth:  900,
+		MinHeight: 600,
+		MaxWidth:  7680,
+		MaxHeight: 4320,
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},

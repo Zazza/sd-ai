@@ -3500,6 +3500,12 @@ func (a *App) DecomposeScene(params DecomposeSceneParams) (*compositor.Scene, er
 
 	userMessage := params.Description
 	userMessage += fmt.Sprintf("\n\nPreset dimensions: %dx%d", p.Width, p.Height)
+	if p.Prompt != "" {
+		userMessage += fmt.Sprintf("\nPreset positive prompt (STYLE — all character and background prompts MUST follow this style): %s", p.Prompt)
+	}
+	if p.NegativePrompt != "" {
+		userMessage += fmt.Sprintf("\nPreset negative prompt (MERGE into scene negative_prompt): %s", p.NegativePrompt)
+	}
 
 	maxTokens := 1024
 	if v, err := a.presets.GetSetting("llm_max_tokens"); err == nil && v != "" {

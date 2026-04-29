@@ -17,6 +17,9 @@ const resultImage = ref('')
 const llmAvailable = ref(false)
 const sdAvailable = ref(false)
 const savedScenes = ref([])
+const batchCount = ref(1)
+const batchResults = ref([])
+const batchCurrent = ref(0)
 
 const presetOptions = computed(() =>
   presets.value.map(p => ({ id: p.id, name: p.name }))
@@ -129,41 +132,61 @@ async function decompose() {
 async function generate() {
   if (!scene.value) return
 
+  const count = Math.max(1, Math.min(batchCount.value || 1, 20))
+
   generating.value = true
   error.value = ''
   progress.value = null
   result.value = null
   resultImage.value = ''
+  batchResults.value = []
+  batchCurrent.value = 0
 
   EventsOn('multipass:progress', (p) => {
     progress.value = p
   })
 
-  try {
-    const r = await api.generateMultiPass(scene.value)
-    result.value = r
-    resultImage.value = r.image
-  } catch (e) {
-    error.value = 'Generation failed: ' + e
-  } finally {
-    generating.value = false
-    EventsOff('multipass:progress')
+  for (let i = 0; i < count; i++) {
+    batchCurrent.value = i + 1
+    try {
+      const r = await api.generateMultiPass(scene.value)
+      if (i === 0) {
+        result.value = r
+        resultImage.value = r.image
+      }
+      batchResults.value.push(r)
+    } catch (e) {
+      error.value = `Image ${i + 1}/${count} failed: ${e}`
+      break
+    }
   }
+
+  generating.value = false
+  EventsOff('multipass:progress')
 }
 
 function progressLabel() {
   if (!progress.value) return ''
   const p = progress.value
-  if (p.step === 'background') return 'Generating background...'
-  if (p.step === 'character') return `Generating character ${p.character}/${p.total}...`
-  if (p.step === 'done') return 'Compositing complete!'
-  return p.step
+  const prefix = batchCount.value > 1 ? `[${batchCurrent.value}/${batchCount.value}] ` : ''
+  if (p.step === 'background') return prefix + 'Generating background...'
+  if (p.step === 'character') return prefix + `Generating character ${p.character}/${p.total}...`
+  if (p.step === 'rembg') return prefix + `Removing background (${p.character}/${p.total})...`
+  if (p.step === 'refine') return prefix + 'Refining image...'
+  if (p.step === 'done') return prefix + 'Done!'
+  return prefix + p.step
 }
 
 async function saveImage() {
   if (!resultImage.value) return
   try {
     await api.saveImage(resultImage.value, 'scene')
+  } catch {}
+}
+
+async function downloadImage(imageBase64, index) {
+  try {
+    await api.saveImage(imageBase64, `scene-${index + 1}`)
   } catch {}
 }
 
@@ -244,6 +267,13 @@ onMounted(() => {
       </div>
 
       <div class="form-group">
+        <label>Preset</label>
+        <select v-model="selectedPresetId" @change="scene.preset_id = selectedPresetId">
+          <option v-for="p in presetOptions" :key="p.id" :value="p.id">{{ p.name }}</option>
+        </select>
+      </div>
+
+      <div class="form-group">
         <label>Background Prompt</label>
         <textarea v-model="scene.background_prompt" rows="2"></textarea>
       </div>
@@ -305,8 +335,12 @@ onMounted(() => {
       </div>
 
       <div class="editor-actions">
+        <div class="form-group" style="margin-bottom: 0;">
+          <label>Count</label>
+          <input type="number" v-model.number="batchCount" min="1" max="20" style="width: 70px;" />
+        </div>
         <button @click="generate" :disabled="generating || !sdAvailable" class="btn-primary">
-          {{ generating ? progressLabel() : 'Generate Multi-Pass' }}
+          {{ generating ? progressLabel() : `Generate${batchCount > 1 ? ' x' + batchCount : ''}` }}
         </button>
         <button @click="saveScene" :disabled="!scene" class="btn-secondary">Save Scene</button>
         <button @click="scene = null; result = null" class="btn-secondary">Cancel</button>
@@ -321,7 +355,7 @@ onMounted(() => {
     </div>
 
     <!-- Step 3: Result -->
-    <div class="section" v-if="resultImage">
+    <div class="section" v-if="resultImage && batchResults.length <= 1">
       <h3>Result</h3>
       <div class="result-image">
         <img :src="'data:image/png;base64,' + resultImage" alt="Generated scene" />
@@ -329,6 +363,22 @@ onMounted(() => {
       <div class="result-actions">
         <button @click="saveImage" class="btn-secondary">Save Image</button>
         <button @click="scene = null; result = null; resultImage = ''" class="btn-secondary">New Scene</button>
+      </div>
+    </div>
+
+    <!-- Step 3b: Batch Results -->
+    <div class="section" v-if="batchResults.length > 1">
+      <h3>Results ({{ batchResults.length }})</h3>
+      <div class="batch-results-grid">
+        <div v-for="(r, i) in batchResults" :key="i" class="batch-result-card">
+          <img class="batch-result-image" :src="'data:image/png;base64,' + r.image" :alt="'Result ' + (i + 1)" />
+          <div class="batch-result-meta">
+            <button @click="downloadImage(r.image, i)" class="btn-secondary btn-sm" style="width: 100%;">Save</button>
+          </div>
+        </div>
+      </div>
+      <div class="result-actions" style="margin-top: 12px;">
+        <button @click="scene = null; result = null; resultImage = ''; batchResults = []" class="btn-secondary">New Scene</button>
       </div>
     </div>
   </div>
@@ -596,5 +646,29 @@ textarea { resize: vertical; font-family: inherit; }
 .saved-scene-date {
   color: var(--color-text-secondary, #888);
   font-size: 0.8em;
+}
+
+.batch-results-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.batch-result-card {
+  border: 1px solid var(--color-border, #444);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--color-bg-mute, #252535);
+}
+
+.batch-result-image {
+  width: 100%;
+  display: block;
+  object-fit: cover;
+  background: var(--color-bg, #333);
+}
+
+.batch-result-meta {
+  padding: 8px;
 }
 </style>

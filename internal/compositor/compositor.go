@@ -91,10 +91,13 @@ func (c *Compositor) GenerateScene(scene Scene) (*MultiPassResult, error) {
 		c.emit(MultiPassProgress{Step: "background"})
 	}
 
-	bgPrompt := scene.BackgroundPrompt + ", no people, no characters, empty scene, landscape" + loraSuffix
+	stylePrefix := extractStyleTags(p.Prompt)
+	bgPrompt := stylePrefix + ", " + scene.BackgroundPrompt + ", no people, no characters, empty scene, landscape" + loraSuffix
 	bgNeg := scene.NegativePrompt
 	if bgNeg == "" {
 		bgNeg = p.NegativePrompt
+	} else if p.NegativePrompt != "" {
+		bgNeg = bgNeg + ", " + p.NegativePrompt
 	}
 
 	bgReq := buildTxt2ImgRequest(p, bgPrompt, bgNeg, scene.Width, scene.Height)
@@ -129,10 +132,12 @@ func (c *Compositor) GenerateScene(scene Scene) (*MultiPassResult, error) {
 		}
 
 		stylePrompt := extractStyleTags(p.Prompt)
-		charPrompt := stylePrompt + ", " + char.Prompt + ", plain white background, full body, standing pose" + loraSuffix
+		charPrompt := stylePrompt + ", " + char.Prompt + ", plain white background" + poseSuffix(char.Prompt) + loraSuffix
 		charNeg := scene.NegativePrompt
 		if charNeg == "" {
 			charNeg = p.NegativePrompt
+		} else if p.NegativePrompt != "" {
+			charNeg = charNeg + ", " + p.NegativePrompt
 		}
 
 		for j, other := range scene.Characters {
@@ -199,14 +204,51 @@ func (c *Compositor) GenerateScene(scene Scene) (*MultiPassResult, error) {
 	}
 
 	if c.emit != nil {
-		c.emit(MultiPassProgress{Step: "done"})
+		c.emit(MultiPassProgress{Step: "refine"})
 	}
 
-	finalBase64, err := encodeImageToBase64(resultImage)
+	compositeBase64, err := encodeImageToBase64(resultImage)
 	if err != nil {
-		return nil, fmt.Errorf("encode result: %w", err)
+		return nil, fmt.Errorf("encode composite: %w", err)
 	}
-	result.Image = finalBase64
+
+	refinePrompt := extractStyleTags(p.Prompt) + ", " + scene.BackgroundPrompt
+	refineNeg := p.NegativePrompt
+	if scene.NegativePrompt != "" {
+		refineNeg = scene.NegativePrompt + ", " + p.NegativePrompt
+	}
+
+	denoise := 0.35
+	refineReq := sd.Img2ImgRequest{
+		InitImages:        []string{compositeBase64},
+		Prompt:            refinePrompt,
+		NegativePrompt:    refineNeg,
+		SamplerName:       buildSamplerName(p),
+		Scheduler:         p.ScheduleType,
+		Steps:             p.Steps,
+		CfgScale:          p.CfgScale,
+		Width:             scene.Width,
+		Height:            scene.Height,
+		DenoisingStrength: &denoise,
+		Seed:              p.Seed,
+		ClipSkip:          buildClipSkip(p),
+		DoNotSaveImages:   true,
+		DoNotSaveGrid:     true,
+	}
+
+	refineResp, err := c.sd.Img2Img(refineReq)
+	if err != nil {
+		return nil, fmt.Errorf("refinement pass failed: %w", err)
+	}
+	if len(refineResp.Images) == 0 {
+		return nil, fmt.Errorf("refinement pass returned no images")
+	}
+
+	result.Image = refineResp.Images[0]
+
+	if c.emit != nil {
+		c.emit(MultiPassProgress{Step: "done"})
+	}
 
 	return result, nil
 }
@@ -249,6 +291,23 @@ func imageToRGBA(img image.Image) *image.RGBA {
 	return rgba
 }
 
+func poseSuffix(prompt string) string {
+	lower := strings.ToLower(prompt)
+	poseHints := []string{
+		"looking", "facing", "facing away", "turned", "glancing",
+		"from behind", "from side", "from left", "from right",
+		"profile", "back to", "standing pose", "sitting", "kneeling",
+		"lying", "crouching", "walking", "running", "fighting stance",
+		"portrait", "close-up", "upper body", "full body",
+	}
+	for _, h := range poseHints {
+		if strings.Contains(lower, h) {
+			return ""
+		}
+	}
+	return ", full body, standing pose"
+}
+
 func extractStyleTags(prompt string) string {
 	parts := strings.Split(prompt, ",")
 	var style []string
@@ -277,29 +336,35 @@ func extractStyleTags(prompt string) string {
 	return strings.Join(style, ", ")
 }
 
-func buildTxt2ImgRequestWithSeed(p *preset.Preset, prompt, negativePrompt string, width, height int, seed *int64) sd.Txt2ImgRequest {
+func buildSamplerName(p *preset.Preset) string {
 	samplerName := p.Sampler
 	if p.ScheduleType != "" {
 		st := strings.ToUpper(p.ScheduleType[:1]) + p.ScheduleType[1:]
 		samplerName = p.Sampler + " " + st
 	}
+	return samplerName
+}
 
+func buildClipSkip(p *preset.Preset) *int {
 	clipSkip := 1
 	if p.ClipSkip != nil {
 		clipSkip = *p.ClipSkip
 	}
+	return &clipSkip
+}
 
+func buildTxt2ImgRequestWithSeed(p *preset.Preset, prompt, negativePrompt string, width, height int, seed *int64) sd.Txt2ImgRequest {
 	return sd.Txt2ImgRequest{
 		Prompt:                 prompt,
 		NegativePrompt:         negativePrompt,
-		SamplerName:            samplerName,
+		SamplerName:            buildSamplerName(p),
 		Scheduler:              p.ScheduleType,
 		Steps:                  p.Steps,
 		CfgScale:               p.CfgScale,
 		Width:                  width,
 		Height:                 height,
 		Seed:                   seed,
-		ClipSkip:               &clipSkip,
+		ClipSkip:               buildClipSkip(p),
 		DoNotSaveImages:        true,
 		DoNotSaveGrid:          true,
 	}

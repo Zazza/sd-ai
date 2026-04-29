@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { WindowMinimise, Quit, EventsOn, EventsOff } from './wailsjs/runtime/runtime'
+import { WindowSetSystemDefaultTheme, EventsOn, EventsOff } from './wailsjs/runtime/runtime'
 import PresetsPage from './components/PresetsPage.vue'
 import GeneratePage from './components/GeneratePage.vue'
 import SettingsPage from './components/SettingsPage.vue'
@@ -39,28 +39,17 @@ function onNavigateToBatch(data) {
 }
 
 onMounted(() => {
+  WindowSetSystemDefaultTheme()
   EventsOn('navigate:batch', onNavigateToBatch)
 })
 
 onUnmounted(() => {
   EventsOff('navigate:batch')
 })
-
-const minimize = () => WindowMinimise()
-const close = () => Quit()
 </script>
 
 <template>
   <div class="app">
-    <div class="titlebar">
-      <div class="titlebar-drag">
-        <span class="titlebar-logo">&#9670;</span> SD Studio
-      </div>
-      <div class="titlebar-controls">
-        <button class="titlebar-btn" @click="minimize">&#8722;</button>
-        <button class="titlebar-btn titlebar-btn-close" @click="close">&#10005;</button>
-      </div>
-    </div>
     <div class="app-body">
     <aside class="sidebar">
       <div class="sidebar-logo">

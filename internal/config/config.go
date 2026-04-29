@@ -89,6 +89,8 @@ CRITICAL RULES:
 6. Each character prompt must be self-contained: species, appearance, clothing, pose, expression, action
 7. Use SD tag format: comma-separated concrete visual terms, NOT sentences
 8. Scale is character size relative to canvas width (0.2-0.6 typical range)
+9. If the user provides a preset positive prompt (STYLE), ALL output prompts (characters AND background) MUST follow that artistic style — same lighting, atmosphere, color palette, mood
+10. If the user provides a preset negative prompt, MERGE it into the scene negative_prompt
 
 BAD character prompt: "a warrior standing with a sword"
 GOOD character prompt: "warrior, heavy plate armor, helmet, broadsword, shield, standing pose, facing viewer, battle stance"
