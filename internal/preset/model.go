@@ -74,3 +74,10 @@ type CompoundPresetStep struct {
 	DenoisingStrength float64 `json:"denoising_strength"`
 	Preset            *Preset `json:"preset,omitempty"`
 }
+
+type SavedScene struct {
+	ID        int64  `json:"id"`
+	Name      string `json:"name"`
+	SceneJSON string `json:"scene_json"`
+	CreatedAt string `json:"created_at"`
+}

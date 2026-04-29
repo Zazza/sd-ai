@@ -239,8 +239,13 @@ type Img2ImgRequest struct {
 	ClipSkip          *int     `json:"clip_skip,omitempty"`
 	BatchSize         *int     `json:"batch_size,omitempty"`
 	BatchCount        *int     `json:"n_iter,omitempty"`
-	DoNotSaveImages   bool     `json:"do_not_save_images"`
-	DoNotSaveGrid     bool     `json:"do_not_save_grid"`
+	Mask                  string `json:"mask,omitempty"`
+	MaskBlur              int    `json:"mask_blur,omitempty"`
+	InpaintingFill        int    `json:"inpainting_fill,omitempty"`
+	InpaintFullRes        bool   `json:"inpaint_full_res,omitempty"`
+	InpaintFullResPadding int    `json:"inpaint_full_res_padding,omitempty"`
+	DoNotSaveImages       bool   `json:"do_not_save_images"`
+	DoNotSaveGrid         bool   `json:"do_not_save_grid"`
 }
 
 func (c *Client) Img2Img(req Img2ImgRequest) (*Txt2ImgResponse, error) {

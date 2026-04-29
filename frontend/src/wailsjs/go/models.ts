@@ -1,3 +1,147 @@
+export namespace compositor {
+	
+	export class Position {
+	    x: number;
+	    y: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new Position(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.x = source["x"];
+	        this.y = source["y"];
+	    }
+	}
+	export class CharacterSlot {
+	    name: string;
+	    prompt: string;
+	    position: Position;
+	    scale: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new CharacterSlot(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.prompt = source["prompt"];
+	        this.position = this.convertValues(source["position"], Position);
+	        this.scale = source["scale"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class  {
+	    name: string;
+	    image?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new (source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.image = source["image"];
+	    }
+	}
+	export class MultiPassResult {
+	    image: string;
+	    background?: string;
+	    characters?: [];
+	
+	    static createFrom(source: any = {}) {
+	        return new MultiPassResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.image = source["image"];
+	        this.background = source["background"];
+	        this.characters = this.convertValues(source["characters"], );
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
+	export class Scene {
+	    background_prompt: string;
+	    negative_prompt: string;
+	    characters: CharacterSlot[];
+	    width: number;
+	    height: number;
+	    preset_id: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new Scene(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.background_prompt = source["background_prompt"];
+	        this.negative_prompt = source["negative_prompt"];
+	        this.characters = this.convertValues(source["characters"], CharacterSlot);
+	        this.width = source["width"];
+	        this.height = source["height"];
+	        this.preset_id = source["preset_id"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+
+}
+
 export namespace llm {
 	
 	export class LLMModel {
@@ -19,6 +163,18 @@ export namespace llm {
 
 export namespace main {
 	
+	export class AnalyzeImageForGenResult {
+	    tags: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new AnalyzeImageForGenResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.tags = source["tags"];
+	    }
+	}
 	export class AnalyzePrompts {
 	    system_prompt: string;
 	    single_prompt: string;
@@ -75,6 +231,20 @@ export namespace main {
 	        this.output_folder = source["output_folder"];
 	    }
 	}
+	export class DecomposeSceneParams {
+	    description: string;
+	    preset_id: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new DecomposeSceneParams(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.description = source["description"];
+	        this.preset_id = source["preset_id"];
+	    }
+	}
 	export class GenerateCompoundImageParams {
 	    compound_preset_id: number;
 	    extra_prompt: string;
@@ -88,6 +258,32 @@ export namespace main {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.compound_preset_id = source["compound_preset_id"];
 	        this.extra_prompt = source["extra_prompt"];
+	        this.extra_negative_prompt = source["extra_negative_prompt"];
+	    }
+	}
+	export class GenerateFromImageParams {
+	    image_base64: string;
+	    mode: string;
+	    gen_mode: string;
+	    preset_id: number;
+	    compound_preset_id: number;
+	    denoising_strength: number;
+	    tags: string;
+	    extra_negative_prompt: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new GenerateFromImageParams(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.image_base64 = source["image_base64"];
+	        this.mode = source["mode"];
+	        this.gen_mode = source["gen_mode"];
+	        this.preset_id = source["preset_id"];
+	        this.compound_preset_id = source["compound_preset_id"];
+	        this.denoising_strength = source["denoising_strength"];
+	        this.tags = source["tags"];
 	        this.extra_negative_prompt = source["extra_negative_prompt"];
 	    }
 	}
@@ -644,6 +840,24 @@ export namespace preset {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
 	        this.text = source["text"];
+	        this.created_at = source["created_at"];
+	    }
+	}
+	export class SavedScene {
+	    id: number;
+	    name: string;
+	    scene_json: string;
+	    created_at: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new SavedScene(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.scene_json = source["scene_json"];
 	        this.created_at = source["created_at"];
 	    }
 	}

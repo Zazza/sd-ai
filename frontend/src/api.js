@@ -16,6 +16,8 @@ import {
   ListCompoundPresets, GetCompoundPreset, CreateCompoundPreset, UpdateCompoundPreset, DeleteCompoundPreset,
   GenerateCompoundImage, BatchCompoundGenerate, TestCompoundGenerate,
   AnalyzeImageForGeneration, GenerateFromImage,
+  DecomposeScene, GenerateMultiPass,
+  ListSavedScenes, GetSavedScene, SaveScene, UpdateSavedScene, DeleteSavedScene,
 } from './wailsjs/go/main/App.js'
 
 export const api = {
@@ -80,4 +82,11 @@ export const api = {
   testCompoundGenerate: (params) => TestCompoundGenerate(params),
   analyzeImageForGen: (imageBase64) => AnalyzeImageForGeneration(imageBase64),
   generateFromImage: (params) => GenerateFromImage(params),
+  decomposeScene: (params) => DecomposeScene(params),
+  generateMultiPass: (scene) => GenerateMultiPass(scene),
+  listSavedScenes: () => ListSavedScenes(),
+  getSavedScene: (id) => GetSavedScene(id),
+  saveScene: (data) => SaveScene(data),
+  updateSavedScene: (data) => UpdateSavedScene(data),
+  deleteSavedScene: (id) => DeleteSavedScene(id),
 }

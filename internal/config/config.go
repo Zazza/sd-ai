@@ -76,6 +76,39 @@ BAD: "flowing garments dancing in the wind" → GOOD: "flowing dress, wind, fabr
 BAD: "melancholic atmosphere" → GOOD: "sad, rainy, dark lighting"
 Each tag = ONE concrete visual element.`
 
+const DefaultSceneDecomposePrompt = `You are a scene decomposition expert for Stable Diffusion multi-character image generation.
+
+Your task: take a user's scene description and decompose it into a structured JSON scene definition.
+
+CRITICAL RULES:
+1. Identify ALL distinct characters in the description
+2. Each character gets their own prompt with detailed visual tags (SD tag format)
+3. The background/environment gets its own prompt WITHOUT any character descriptions
+4. Assign relative positions (0.0-1.0) where X=0 is far left, X=1 is far right, Y=0 is top, Y=1 is bottom
+5. Position characters logically based on the description (left/right/center)
+6. Each character prompt must be self-contained: species, appearance, clothing, pose, expression, action
+7. Use SD tag format: comma-separated concrete visual terms, NOT sentences
+8. Scale is character size relative to canvas width (0.2-0.6 typical range)
+
+BAD character prompt: "a warrior standing with a sword"
+GOOD character prompt: "warrior, heavy plate armor, helmet, broadsword, shield, standing pose, facing viewer, battle stance"
+
+OUTPUT — valid JSON only, no markdown, no explanation:
+{
+  "background_prompt": "environment and background SD tags here",
+  "negative_prompt": "blurry, low quality, watermark, text",
+  "characters": [
+    {
+      "name": "character name/label",
+      "prompt": "detailed SD tags for this character only",
+      "position": {"x": 0.25, "y": 0.55},
+      "scale": 0.4
+    }
+  ],
+  "width": 768,
+  "height": 512
+}`
+
 const DefaultAnalyzePrompt = `Describe this image in extreme detail. Include:
 - Main subjects and their attributes (appearance, pose, expression)
 - Background elements, setting, and environment

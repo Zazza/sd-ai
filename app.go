@@ -24,6 +24,7 @@ import (
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 
+	"go-sd/internal/compositor"
 	"go-sd/internal/config"
 	"go-sd/internal/kids"
 	"go-sd/internal/llm"
@@ -3459,4 +3460,124 @@ func (a *App) TestCompoundGenerate(params TestCompoundGenerateParams) ([]TestGen
 	}
 
 	return results, nil
+}
+
+// --- Multi-Pass Scene Generation ---
+
+type DecomposeSceneParams struct {
+	Description string `json:"description"`
+	PresetID    int64  `json:"preset_id"`
+}
+
+func (a *App) DecomposeScene(params DecomposeSceneParams) (*compositor.Scene, error) {
+	if params.Description == "" {
+		return nil, fmt.Errorf("description is required")
+	}
+	if params.PresetID <= 0 {
+		return nil, fmt.Errorf("preset is required")
+	}
+
+	p, err := a.presets.Get(params.PresetID)
+	if err != nil {
+		return nil, fmt.Errorf("preset not found: %w", err)
+	}
+
+	systemPrompt := config.DefaultSceneDecomposePrompt
+
+	userMessage := params.Description
+	userMessage += fmt.Sprintf("\n\nPreset dimensions: %dx%d", p.Width, p.Height)
+
+	maxTokens := 1024
+	if v, err := a.presets.GetSetting("llm_max_tokens"); err == nil && v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			maxTokens = n
+		}
+	}
+
+	generateModel := a.config.SDPromptModel
+	if v, err := a.presets.GetSetting("llm_generate_model"); err == nil && v != "" {
+		generateModel = v
+	}
+
+	a.applyLLMConfig("generate")
+
+	raw, err := a.llm.Chat(generateModel, systemPrompt, userMessage, 0.4, maxTokens)
+	if err != nil {
+		return nil, fmt.Errorf("LLM decomposition failed: %w", err)
+	}
+
+	scene, err := compositor.DecomposeSceneFromJSON(raw)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse scene from LLM response: %w", err)
+	}
+
+	scene.PresetID = params.PresetID
+	if scene.Width == 0 {
+		scene.Width = p.Width
+	}
+	if scene.Height == 0 {
+		scene.Height = p.Height
+	}
+
+	return scene, nil
+}
+
+func (a *App) GenerateMultiPass(scene compositor.Scene) (*compositor.MultiPassResult, error) {
+	emit := func(progress compositor.MultiPassProgress) {
+		runtime.EventsEmit(a.ctx, "multipass:progress", progress)
+	}
+
+	c := compositor.New(a.sd, a.presets, emit)
+	result, err := c.GenerateScene(scene)
+	if err != nil {
+		return nil, err
+	}
+
+	if result.Image != "" {
+		a.saveLastImage(result.Image, nil, false)
+	}
+
+	return result, nil
+}
+
+func (a *App) ListSavedScenes() ([]preset.SavedScene, error) {
+	items, err := a.presets.ListSavedScenes()
+	if err != nil {
+		return nil, err
+	}
+	if items == nil {
+		items = []preset.SavedScene{}
+	}
+	return items, nil
+}
+
+func (a *App) GetSavedScene(id int64) (*preset.SavedScene, error) {
+	return a.presets.GetSavedScene(id)
+}
+
+func (a *App) SaveScene(s preset.SavedScene) (*preset.SavedScene, error) {
+	if strings.TrimSpace(s.Name) == "" {
+		return nil, fmt.Errorf("scene name is required")
+	}
+	if s.SceneJSON == "" {
+		return nil, fmt.Errorf("scene data is required")
+	}
+	if err := a.presets.CreateSavedScene(&s); err != nil {
+		return nil, err
+	}
+	return &s, nil
+}
+
+func (a *App) UpdateSavedScene(s preset.SavedScene) (*preset.SavedScene, error) {
+	if s.ID <= 0 {
+		return nil, fmt.Errorf("invalid scene ID")
+	}
+	if err := a.presets.UpdateSavedScene(&s); err != nil {
+		return nil, err
+	}
+	return &s, nil
+}
+
+func (a *App) DeleteSavedScene(id int64) error {
+	return a.presets.DeleteSavedScene(id)
 }

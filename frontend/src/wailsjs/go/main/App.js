@@ -42,6 +42,10 @@ export function CreatePrompt(arg1) {
   return window['go']['main']['App']['CreatePrompt'](arg1);
 }
 
+export function DecomposeScene(arg1) {
+  return window['go']['main']['App']['DecomposeScene'](arg1);
+}
+
 export function DeleteCompoundPreset(arg1) {
   return window['go']['main']['App']['DeleteCompoundPreset'](arg1);
 }
@@ -62,6 +66,10 @@ export function DeletePrompt(arg1) {
   return window['go']['main']['App']['DeletePrompt'](arg1);
 }
 
+export function DeleteSavedScene(arg1) {
+  return window['go']['main']['App']['DeleteSavedScene'](arg1);
+}
+
 export function ExportPresets(arg1) {
   return window['go']['main']['App']['ExportPresets'](arg1);
 }
@@ -70,12 +78,16 @@ export function GenerateCompoundImage(arg1) {
   return window['go']['main']['App']['GenerateCompoundImage'](arg1);
 }
 
+export function GenerateFromImage(arg1) {
+  return window['go']['main']['App']['GenerateFromImage'](arg1);
+}
+
 export function GenerateImage(arg1) {
   return window['go']['main']['App']['GenerateImage'](arg1);
 }
 
-export function GenerateFromImage(arg1) {
-  return window['go']['main']['App']['GenerateFromImage'](arg1);
+export function GenerateMultiPass(arg1) {
+  return window['go']['main']['App']['GenerateMultiPass'](arg1);
 }
 
 export function GenerateSDPrompt(arg1) {
@@ -142,6 +154,10 @@ export function GetSDVAEs() {
   return window['go']['main']['App']['GetSDVAEs']();
 }
 
+export function GetSavedScene(arg1) {
+  return window['go']['main']['App']['GetSavedScene'](arg1);
+}
+
 export function GetSettings() {
   return window['go']['main']['App']['GetSettings']();
 }
@@ -178,6 +194,10 @@ export function ListPrompts() {
   return window['go']['main']['App']['ListPrompts']();
 }
 
+export function ListSavedScenes() {
+  return window['go']['main']['App']['ListSavedScenes']();
+}
+
 export function OpenImportFile() {
   return window['go']['main']['App']['OpenImportFile']();
 }
@@ -192,6 +212,10 @@ export function RecommendPreset(arg1) {
 
 export function SaveImage(arg1, arg2) {
   return window['go']['main']['App']['SaveImage'](arg1, arg2);
+}
+
+export function SaveScene(arg1) {
+  return window['go']['main']['App']['SaveScene'](arg1);
 }
 
 export function SelectFolder() {
@@ -220,6 +244,10 @@ export function UpdatePreset(arg1) {
 
 export function UpdatePresetType(arg1) {
   return window['go']['main']['App']['UpdatePresetType'](arg1);
+}
+
+export function UpdateSavedScene(arg1) {
+  return window['go']['main']['App']['UpdateSavedScene'](arg1);
 }
 
 export function UpdateSettings(arg1) {
