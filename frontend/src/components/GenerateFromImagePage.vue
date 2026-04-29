@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, nextTick, watch, onMounted, onUnmounted } from 'vue'
 import { api } from '../api.js'
 import { EventsOn, EventsOff } from '../wailsjs/runtime/runtime'
 
@@ -45,6 +45,15 @@ let statusInterval = null
 
 const isDragOver = ref(false)
 
+const brushSize = ref(30)
+const maskBlur = ref(4)
+const inpaintFill = ref(1)
+const inpaintFullRes = ref(true)
+const isDrawing = ref(false)
+const maskCanvasRef = ref(null)
+const maskHistory = ref([])
+const imgEl = ref(null)
+
 const filteredPresets = computed(() => {
   if (!selectedTypeId.value) return presets.value
   return presets.value.filter(p => p.type_id === selectedTypeId.value)
@@ -59,6 +68,8 @@ const formattedGenInfo = computed(() => {
     return String(genInfo.value)
   }
 })
+
+const hasMask = computed(() => maskHistory.value.length > 0)
 
 async function checkServices() {
   try {
@@ -91,6 +102,7 @@ async function uploadImage() {
       tags.value = ''
       recommendation.value = null
       error.value = ''
+      clearMask()
     }
   } catch (e) {
     error.value = String(e)
@@ -106,6 +118,7 @@ async function useLastImage() {
       tags.value = ''
       recommendation.value = null
       error.value = ''
+      clearMask()
     } else {
       error.value = 'No last generated image found'
     }
@@ -136,6 +149,7 @@ function handlePaste(e) {
           tags.value = ''
           recommendation.value = null
           error.value = ''
+          clearMask()
         }
       }
       reader.readAsDataURL(file)
@@ -167,6 +181,7 @@ function onDrop(e) {
       tags.value = ''
       recommendation.value = null
       error.value = ''
+      clearMask()
     }
   }
   reader.readAsDataURL(file)
@@ -182,6 +197,7 @@ function clearImage() {
   effectiveNegative.value = ''
   recommendation.value = null
   error.value = ''
+  clearMask()
 }
 
 async function analyzeImage() {
@@ -226,6 +242,147 @@ async function recommendPreset(tagsText) {
   }
 }
 
+function initMaskCanvas() {
+  const canvas = maskCanvasRef.value
+  if (!canvas) return
+  const img = imgEl.value
+  if (!img) return
+
+  canvas.width = img.naturalWidth
+  canvas.height = img.naturalHeight
+
+  const container = canvas.parentElement
+  canvas.style.width = img.clientWidth + 'px'
+  canvas.style.height = img.clientHeight + 'px'
+
+  const ctx = canvas.getContext('2d')
+  ctx.clearRect(0, 0, canvas.width, canvas.height)
+  maskHistory.value = []
+}
+
+function getCanvasCoords(e) {
+  const canvas = maskCanvasRef.value
+  if (!canvas) return { x: 0, y: 0 }
+  const rect = canvas.getBoundingClientRect()
+  const scaleX = canvas.width / rect.width
+  const scaleY = canvas.height / rect.height
+  const clientX = e.touches ? e.touches[0].clientX : e.clientX
+  const clientY = e.touches ? e.touches[0].clientY : e.clientY
+  return {
+    x: (clientX - rect.left) * scaleX,
+    y: (clientY - rect.top) * scaleY,
+  }
+}
+
+function saveMaskState() {
+  const canvas = maskCanvasRef.value
+  if (!canvas) return
+  const ctx = canvas.getContext('2d')
+  maskHistory.value.push(ctx.getImageData(0, 0, canvas.width, canvas.height))
+  if (maskHistory.value.length > 30) {
+    maskHistory.value.shift()
+  }
+}
+
+function startDraw(e) {
+  e.preventDefault()
+  isDrawing.value = true
+  saveMaskState()
+  draw(e)
+}
+
+function draw(e) {
+  if (!isDrawing.value) return
+  e.preventDefault()
+  const canvas = maskCanvasRef.value
+  if (!canvas) return
+  const ctx = canvas.getContext('2d')
+  const { x, y } = getCanvasCoords(e)
+  const scaledBrush = brushSize.value * (canvas.width / canvas.getBoundingClientRect().width)
+
+  ctx.globalCompositeOperation = 'source-over'
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.6)'
+  ctx.beginPath()
+  ctx.arc(x, y, scaledBrush / 2, 0, Math.PI * 2)
+  ctx.fill()
+}
+
+function stopDraw() {
+  isDrawing.value = false
+}
+
+function clearMask() {
+  const canvas = maskCanvasRef.value
+  if (!canvas) return
+  const ctx = canvas.getContext('2d')
+  ctx.clearRect(0, 0, canvas.width, canvas.height)
+  maskHistory.value = []
+}
+
+function undoMask() {
+  if (maskHistory.value.length === 0) return
+  const canvas = maskCanvasRef.value
+  if (!canvas) return
+  const ctx = canvas.getContext('2d')
+  const prev = maskHistory.value.pop()
+  ctx.putImageData(prev, 0, 0)
+}
+
+function getMaskBase64() {
+  const canvas = maskCanvasRef.value
+  if (!canvas) return ''
+  const w = canvas.width
+  const h = canvas.height
+  const ctx = canvas.getContext('2d')
+  const src = ctx.getImageData(0, 0, w, h)
+
+  const maskCanvas = document.createElement('canvas')
+  maskCanvas.width = w
+  maskCanvas.height = h
+  const maskCtx = maskCanvas.getContext('2d')
+  const maskData = maskCtx.createImageData(w, h)
+
+  for (let i = 0; i < src.data.length; i += 4) {
+    const alpha = src.data[i + 3]
+    if (alpha > 10) {
+      maskData.data[i] = 255
+      maskData.data[i + 1] = 255
+      maskData.data[i + 2] = 255
+      maskData.data[i + 3] = 255
+    }
+  }
+  maskCtx.putImageData(maskData, 0, 0)
+
+  const dataUrl = maskCanvas.toDataURL('image/png')
+  return dataUrl.split(',')[1] || ''
+}
+
+watch(mode, (newMode) => {
+  if (newMode === 'inpaint' && uploadedImage.value) {
+    nextTick(() => {
+      const img = imgEl.value
+      if (img && img.complete) {
+        initMaskCanvas()
+      } else if (img) {
+        img.onload = () => initMaskCanvas()
+      }
+    })
+  }
+})
+
+watch(uploadedImage, () => {
+  if (mode.value === 'inpaint') {
+    nextTick(() => {
+      const img = imgEl.value
+      if (img && img.complete) {
+        initMaskCanvas()
+      } else if (img) {
+        img.onload = () => initMaskCanvas()
+      }
+    })
+  }
+})
+
 async function generate() {
   if (!uploadedImage.value) {
     error.value = 'Upload an image first'
@@ -239,6 +396,10 @@ async function generate() {
     error.value = 'Select a pipeline first'
     return
   }
+  if (mode.value === 'inpaint' && !hasMask.value) {
+    error.value = 'Draw a mask on the image first'
+    return
+  }
 
   generatingImage.value = true
   generationStage.value = 'analyzing'
@@ -250,7 +411,7 @@ async function generate() {
 
   try {
     generationStage.value = 'generating'
-    const result = await api.generateFromImage({
+    const params = {
       image_base64: uploadedImage.value,
       mode: mode.value,
       gen_mode: genMode.value,
@@ -259,7 +420,14 @@ async function generate() {
       denoising_strength: denoisingStrength.value,
       tags: tags.value,
       extra_negative_prompt: extraNegativePrompt.value,
-    })
+    }
+    if (mode.value === 'inpaint') {
+      params.mask_base64 = getMaskBase64()
+      params.mask_blur = maskBlur.value
+      params.inpaint_fill = inpaintFill.value
+      params.inpaint_full_res = inpaintFullRes.value
+    }
+    const result = await api.generateFromImage(params)
     if (!result || !result.image) {
       error.value = 'No image returned. Check preset settings.'
     } else {
@@ -341,21 +509,42 @@ onUnmounted(() => {
       <div class="generate-section">
         <div class="card">
           <div
+            v-if="!uploadedImage"
             class="drop-zone"
-            :class="{ 'drop-zone-active': isDragOver, 'drop-zone-has-image': uploadedImage }"
+            :class="{ 'drop-zone-active': isDragOver }"
             @dragover.prevent="isDragOver = true"
             @dragleave="isDragOver = false"
             @drop.prevent="onDrop"
-            @click="!uploadedImage && uploadImage()"
+            @click="uploadImage()"
           >
-            <template v-if="!uploadedImage">
-              <div style="font-size: 32px; color: var(--text-dim);">&#128444;</div>
-              <p style="color: var(--text-dim); margin-top: 8px;">Drop image here, click to upload, or Ctrl+V</p>
-            </template>
-            <template v-else>
-              <img :src="'data:' + uploadedImageMime + ';base64,' + uploadedImage" alt="Source" style="max-height: 200px; border-radius: 6px;" />
-            </template>
+            <div style="font-size: 32px; color: var(--text-dim);">&#128444;</div>
+            <p style="color: var(--text-dim); margin-top: 8px;">Drop image here, click to upload, or Ctrl+V</p>
           </div>
+
+          <div v-else class="inpaint-canvas-container">
+            <img
+              ref="imgEl"
+              :src="'data:' + uploadedImageMime + ';base64,' + uploadedImage"
+              alt="Source"
+              class="inpaint-source-img"
+              @load="mode === 'inpaint' && initMaskCanvas()"
+            />
+            <canvas
+              v-if="mode === 'inpaint'"
+              ref="maskCanvasRef"
+              class="inpaint-mask-canvas"
+              :style="{ cursor: 'crosshair' }"
+              @mousedown="startDraw"
+              @mousemove="draw"
+              @mouseup="stopDraw"
+              @mouseleave="stopDraw"
+              @touchstart="startDraw"
+              @touchmove="draw"
+              @touchend="stopDraw"
+            />
+            <div v-if="mode === 'inpaint'" class="inpaint-brush-indicator"></div>
+          </div>
+
           <div v-if="uploadedImage" class="fi-btn-row">
             <button class="btn btn-sm btn-secondary" @click="uploadImage">Change</button>
             <button class="btn btn-sm btn-secondary" @click="useLastImage">Last Generated</button>
@@ -365,14 +554,52 @@ onUnmounted(() => {
           <div style="display: flex; gap: 8px; margin-top: 16px; margin-bottom: 12px;">
             <button class="btn btn-sm" :class="mode === 'txt2img' ? 'btn-primary' : 'btn-secondary'" @click="mode = 'txt2img'" :disabled="generatingImage">txt2img</button>
             <button class="btn btn-sm" :class="mode === 'img2img' ? 'btn-primary' : 'btn-secondary'" @click="mode = 'img2img'" :disabled="generatingImage">img2img</button>
+            <button class="btn btn-sm" :class="mode === 'inpaint' ? 'btn-primary' : 'btn-secondary'" @click="mode = 'inpaint'" :disabled="generatingImage">inpaint</button>
           </div>
 
-          <div v-if="mode === 'img2img'" class="form-group">
+          <div v-if="mode === 'img2img' || mode === 'inpaint'" class="form-group">
             <label class="form-label">Denoising Strength: {{ denoisingStrength.toFixed(2) }}</label>
             <input type="range" class="form-range" v-model.number="denoisingStrength" min="0.05" max="1.0" step="0.05" :disabled="generatingImage" />
             <div style="display: flex; justify-content: space-between; font-size: 11px; color: var(--text-dim);">
               <span>Keep original</span>
               <span>Full redraw</span>
+            </div>
+          </div>
+
+          <div v-if="mode === 'inpaint'" class="inpaint-controls">
+            <div class="form-group">
+              <label class="form-label">Brush Size: {{ brushSize }}px</label>
+              <input type="range" class="form-range" v-model.number="brushSize" min="5" max="100" step="1" />
+            </div>
+            <div class="fi-btn-row">
+              <button class="btn btn-sm btn-secondary" @click="clearMask" :disabled="!hasMask">Clear Mask</button>
+              <button class="btn btn-sm btn-secondary" @click="undoMask" :disabled="!hasMask">Undo</button>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 8px;">
+              <div class="form-group">
+                <label class="form-label">Mask Blur: {{ maskBlur }}</label>
+                <input type="range" class="form-range" v-model.number="maskBlur" min="0" max="64" step="1" />
+              </div>
+              <div class="form-group">
+                <label class="form-label">Inpaint Fill</label>
+                <select class="form-select" v-model="inpaintFill">
+                  <option :value="0">Fill</option>
+                  <option :value="1">Original</option>
+                  <option :value="2">Latent Noise</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-group" style="margin-top: 4px;">
+              <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                <input type="checkbox" v-model="inpaintFullRes" style="accent-color: var(--accent);" />
+                <span style="font-size: 12px;">Inpaint Full Resolution</span>
+              </label>
+            </div>
+            <div v-if="hasMask" style="font-size: 11px; color: var(--accent); margin-top: 4px;">
+              Mask drawn ({{ maskHistory.length }} strokes)
+            </div>
+            <div v-else style="font-size: 11px; color: var(--text-dim); margin-top: 4px;">
+              Paint over areas to regenerate
             </div>
           </div>
 
@@ -451,7 +678,7 @@ onUnmounted(() => {
             <textarea class="form-textarea" v-model="extraNegativePrompt" rows="2" placeholder="Additional negative prompt..." :disabled="generatingImage"></textarea>
           </div>
 
-          <button class="btn btn-primary" style="width: 100%; justify-content: center; padding: 12px;" @click="generate" :disabled="generatingImage || !uploadedImage || (genMode === 'preset' ? !selectedPresetId : !selectedCompoundPresetId)">
+          <button class="btn btn-primary" style="width: 100%; justify-content: center; padding: 12px;" @click="generate" :disabled="generatingImage || !uploadedImage || (mode === 'inpaint' && !hasMask) || (genMode === 'preset' ? !selectedPresetId : !selectedCompoundPresetId)">
             <span v-if="generatingImage" style="display: inline-flex; align-items: center; gap: 6px;">
               <span class="spinner" style="width: 14px; height: 14px; border-width: 2px;"></span>
               {{ generationStage === 'analyzing' ? 'Analyzing image...' : 'Generating image...' }}
@@ -523,10 +750,6 @@ onUnmounted(() => {
   border-color: var(--accent);
   background: var(--surface-2);
 }
-.drop-zone-has-image {
-  cursor: default;
-  border-style: solid;
-}
 .form-range {
   width: 100%;
   accent-color: var(--accent);
@@ -543,6 +766,36 @@ onUnmounted(() => {
   background: var(--surface-2);
   border: 1px solid var(--border);
   border-left: 3px solid var(--accent);
+  border-radius: var(--radius-sm);
+}
+.inpaint-canvas-container {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: #000;
+}
+.inpaint-source-img {
+  max-height: 400px;
+  max-width: 100%;
+  display: block;
+  border-radius: var(--radius-sm);
+}
+.inpaint-mask-canvas {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  max-height: 400px;
+  max-width: 100%;
+  border-radius: var(--radius-sm);
+}
+.inpaint-controls {
+  margin-top: 12px;
+  padding: 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
   border-radius: var(--radius-sm);
 }
 </style>

@@ -2562,6 +2562,10 @@ type GenerateFromImageParams struct {
 	DenoisingStrength   float64 `json:"denoising_strength"`
 	Tags                string  `json:"tags"`
 	ExtraNegativePrompt string  `json:"extra_negative_prompt"`
+	MaskBase64          string  `json:"mask_base64"`
+	MaskBlur            int     `json:"mask_blur"`
+	InpaintFill         int     `json:"inpaint_fill"`
+	InpaintFullRes      bool    `json:"inpaint_full_res"`
 }
 
 func (a *App) GenerateFromImage(params GenerateFromImageParams) (*GenerateImageResult, error) {
@@ -2580,8 +2584,11 @@ func (a *App) GenerateFromImage(params GenerateFromImageParams) (*GenerateImageR
 	if params.GenMode == "compound" && params.CompoundPresetID <= 0 {
 		return nil, fmt.Errorf("compound preset is required")
 	}
-	if params.Mode != "txt2img" && params.Mode != "img2img" {
-		return nil, fmt.Errorf("mode must be txt2img or img2img")
+	if params.Mode != "txt2img" && params.Mode != "img2img" && params.Mode != "inpaint" {
+		return nil, fmt.Errorf("mode must be txt2img, img2img or inpaint")
+	}
+	if params.Mode == "inpaint" && params.MaskBase64 == "" {
+		return nil, fmt.Errorf("mask is required for inpaint mode")
 	}
 	if params.DenoisingStrength <= 0 {
 		params.DenoisingStrength = 0.5
@@ -2716,34 +2723,43 @@ RESPONSE LENGTH: your response is limited to ~%d tokens. You MUST fit within thi
 	batchSize := 1
 	batchCount := 1
 
-	if params.Mode == "img2img" {
+	if params.Mode == "img2img" || params.Mode == "inpaint" {
 		denoising := params.DenoisingStrength
 		if denoising <= 0 {
 			denoising = 0.5
 		}
+		maskBlur := params.MaskBlur
+		if maskBlur <= 0 {
+			maskBlur = 4
+		}
 		result, err := a.sd.Img2Img(sd.Img2ImgRequest{
-			InitImages:        []string{params.ImageBase64},
-			Prompt:            prompt,
-			NegativePrompt:    negativePrompt,
-			SamplerName:       samplerName,
-			Scheduler:         p.ScheduleType,
-			Steps:             p.Steps,
-			CfgScale:          p.CfgScale,
-			Width:             p.Width,
-			Height:            p.Height,
-			Seed:              p.Seed,
-			DenoisingStrength: &denoising,
-			ClipSkip:          &clipSkip,
-			BatchSize:         &batchSize,
-			BatchCount:        &batchCount,
-			DoNotSaveImages:   true,
-			DoNotSaveGrid:     true,
+			InitImages:            []string{params.ImageBase64},
+			Prompt:                prompt,
+			NegativePrompt:        negativePrompt,
+			SamplerName:           samplerName,
+			Scheduler:             p.ScheduleType,
+			Steps:                 p.Steps,
+			CfgScale:              p.CfgScale,
+			Width:                 p.Width,
+			Height:                p.Height,
+			Seed:                  p.Seed,
+			DenoisingStrength:     &denoising,
+			ClipSkip:              &clipSkip,
+			BatchSize:             &batchSize,
+			BatchCount:            &batchCount,
+			Mask:                  params.MaskBase64,
+			MaskBlur:              maskBlur,
+			InpaintingFill:        params.InpaintFill,
+			InpaintFullRes:        params.InpaintFullRes,
+			InpaintFullResPadding: 32,
+			DoNotSaveImages:       true,
+			DoNotSaveGrid:         true,
 		})
 		if err != nil {
 			return nil, err
 		}
 		if len(result.Images) == 0 {
-			return nil, fmt.Errorf("no image generated (img2img)")
+			return nil, fmt.Errorf("no image generated (%s)", params.Mode)
 		}
 		img := &GenerateImageResult{
 			Image:                   result.Images[0],

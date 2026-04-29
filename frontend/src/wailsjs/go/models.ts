@@ -258,6 +258,10 @@ export namespace main {
 	    denoising_strength: number;
 	    tags: string;
 	    extra_negative_prompt: string;
+	    mask_base64: string;
+	    mask_blur: number;
+	    inpaint_fill: number;
+	    inpaint_full_res: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new GenerateFromImageParams(source);
@@ -273,6 +277,10 @@ export namespace main {
 	        this.denoising_strength = source["denoising_strength"];
 	        this.tags = source["tags"];
 	        this.extra_negative_prompt = source["extra_negative_prompt"];
+	        this.mask_base64 = source["mask_base64"];
+	        this.mask_blur = source["mask_blur"];
+	        this.inpaint_fill = source["inpaint_fill"];
+	        this.inpaint_full_res = source["inpaint_full_res"];
 	    }
 	}
 	export class GenerateImageParams {
