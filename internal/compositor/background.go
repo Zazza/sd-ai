@@ -7,52 +7,84 @@ import (
 	"math"
 )
 
-func RemoveWhiteBackground(img image.Image, threshold uint8) *image.RGBA {
+func RemoveWhiteBackground(img image.Image) *image.RGBA {
 	bounds := img.Bounds()
 	w, h := bounds.Dx(), bounds.Dy()
 
+	removed := make([][]bool, h)
+	for y := 0; y < h; y++ {
+		removed[y] = make([]bool, w)
+	}
+
+	visited := make([][]bool, h)
+	for y := 0; y < h; y++ {
+		visited[y] = make([]bool, w)
+	}
+
+	queue := make([][2]int, 0, w*2+h*2)
+
+	for x := 0; x < w; x++ {
+		if isNearWhite(img, x, 0, bounds.Min) {
+			queue = append(queue, [2]int{0, x})
+		}
+		if isNearWhite(img, x, h-1, bounds.Min) {
+			queue = append(queue, [2]int{h - 1, x})
+		}
+	}
+	for y := 1; y < h-1; y++ {
+		if isNearWhite(img, 0, y, bounds.Min) {
+			queue = append(queue, [2]int{y, 0})
+		}
+		if isNearWhite(img, w-1, y, bounds.Min) {
+			queue = append(queue, [2]int{y, w - 1})
+		}
+	}
+
+	for len(queue) > 0 {
+		cy, cx := queue[0][0], queue[0][1]
+		queue = queue[1:]
+
+		if visited[cy][cx] {
+			continue
+		}
+		visited[cy][cx] = true
+
+		if !isNearWhite(img, cx, cy, bounds.Min) {
+			continue
+		}
+
+		removed[cy][cx] = true
+
+		dirs := [4][2]int{{-1, 0}, {1, 0}, {0, -1}, {0, 1}}
+		for _, d := range dirs {
+			ny, nx := cy+d[0], cx+d[1]
+			if ny >= 0 && ny < h && nx >= 0 && nx < w && !visited[ny][nx] {
+				queue = append(queue, [2]int{ny, nx})
+			}
+		}
+	}
+
+	dist := computeDistanceField(removed, w, h)
+
+	const featherRadius = 6.0
 	alphaMask := make([][]float64, h)
 	for y := 0; y < h; y++ {
 		alphaMask[y] = make([]float64, w)
 		for x := 0; x < w; x++ {
-			c := color.NRGBAModel.Convert(img.At(x+bounds.Min.X, y+bounds.Min.Y)).(color.NRGBA)
-			lum := 0.299*float64(c.R) + 0.587*float64(c.G) + 0.114*float64(c.B)
-
-			t := float64(threshold)
-			feather := 20.0
-			alpha := (t - lum) / feather
-			if alpha < 0 {
-				alpha = 0
-			}
-			if alpha > 1 {
-				alpha = 1
-			}
-			if c.A < 255 {
-				alpha *= float64(c.A) / 255.0
-			}
-			alphaMask[y][x] = alpha
-		}
-	}
-
-	const blurRadius = 2
-	smoothed := make([][]float64, h)
-	for y := 0; y < h; y++ {
-		smoothed[y] = make([]float64, w)
-		for x := 0; x < w; x++ {
-			sum := 0.0
-			count := 0.0
-			for dy := -blurRadius; dy <= blurRadius; dy++ {
-				for dx := -blurRadius; dx <= blurRadius; dx++ {
-					ny, nx := y+dy, x+dx
-					if ny >= 0 && ny < h && nx >= 0 && nx < w {
-						sum += alphaMask[ny][nx]
-						count++
-					}
+			if removed[y][x] {
+				alphaMask[y][x] = 0
+			} else {
+				d := dist[y][x]
+				if d < featherRadius {
+					alphaMask[y][x] = d / featherRadius
+				} else {
+					alphaMask[y][x] = 1.0
 				}
 			}
-			smoothed[y][x] = sum / count
 		}
 	}
+
+	smoothed := blurMask(alphaMask, w, h, 3)
 
 	result := image.NewRGBA(bounds)
 	for y := 0; y < h; y++ {
@@ -72,6 +104,78 @@ func RemoveWhiteBackground(img image.Image, threshold uint8) *image.RGBA {
 	}
 
 	return cropToBoundingBox(result)
+}
+
+func isNearWhite(img image.Image, x, y int, min image.Point) bool {
+	c := color.NRGBAModel.Convert(img.At(x+min.X, y+min.Y)).(color.NRGBA)
+	r, g, b := float64(c.R), float64(c.G), float64(c.B)
+	mx := math.Max(r, math.Max(g, b))
+	mn := math.Min(r, math.Min(g, b))
+	lightness := (mx + mn) / 2.0
+	saturation := 0.0
+	if mx > 0 {
+		saturation = (mx - mn) / mx
+	}
+	return lightness > 200 && saturation < 0.20
+}
+
+func computeDistanceField(removed [][]bool, w, h int) [][]float64 {
+	dist := make([][]float64, h)
+	for y := 0; y < h; y++ {
+		dist[y] = make([]float64, w)
+		for x := 0; x < w; x++ {
+			if removed[y][x] {
+				dist[y][x] = 0
+			} else {
+				dist[y][x] = 1e9
+			}
+		}
+	}
+
+	for y := 1; y < h; y++ {
+		for x := 1; x < w; x++ {
+			d := math.Min(dist[y-1][x]+1, dist[y][x-1]+1)
+			if d < dist[y][x] {
+				dist[y][x] = d
+			}
+		}
+	}
+	for y := h - 2; y >= 0; y-- {
+		for x := w - 2; x >= 0; x-- {
+			d := math.Min(dist[y+1][x]+1, dist[y][x+1]+1)
+			if d < dist[y][x] {
+				dist[y][x] = d
+			}
+		}
+	}
+
+	return dist
+}
+
+func blurMask(mask [][]float64, w, h, radius int) [][]float64 {
+	result := make([][]float64, h)
+	for y := 0; y < h; y++ {
+		result[y] = make([]float64, w)
+		for x := 0; x < w; x++ {
+			sum := 0.0
+			weight := 0.0
+			for dy := -radius; dy <= radius; dy++ {
+				for dx := -radius; dx <= radius; dx++ {
+					ny, nx := y+dy, x+dx
+					if ny >= 0 && ny < h && nx >= 0 && nx < w {
+						d := math.Sqrt(float64(dx*dx + dy*dy))
+						g := math.Exp(-d * d / (2.0 * float64(radius) * float64(radius)))
+						sum += mask[ny][nx] * g
+						weight += g
+					}
+				}
+			}
+			if weight > 0 {
+				result[y][x] = sum / weight
+			}
+		}
+	}
+	return result
 }
 
 func cropToBoundingBox(img *image.RGBA) *image.RGBA {
@@ -182,50 +286,58 @@ func clamp(v, lo, hi int) int {
 	return v
 }
 
-func createCharacterMask(bounds image.Rectangle, pos Position, scale float64) *image.RGBA {
-	mask := image.NewRGBA(bounds)
-	w := bounds.Dx()
-	h := bounds.Dy()
+func computeDifferenceMask(bg image.Image, fg image.Image) [][]float64 {
+	bounds := bg.Bounds()
+	w, h := bounds.Dx(), bounds.Dy()
+	mask := make([][]float64, h)
 
-	maskW := int(float64(w) * scale)
-	maskH := int(float64(maskW) * 1.5)
-	if maskH > int(float64(h)*0.9) {
-		maskH = int(float64(h) * 0.9)
-		maskW = int(float64(maskH) / 1.5)
-	}
-	if maskW < 64 {
-		maskW = 64
-	}
-	if maskH < 64 {
-		maskH = 64
-	}
+	for y := 0; y < h; y++ {
+		mask[y] = make([]float64, w)
+		for x := 0; x < w; x++ {
+			br, bg_, bb, _ := bg.At(x+bounds.Min.X, y+bounds.Min.Y).RGBA()
+			fr, fg_, fb, _ := fg.At(x+bounds.Min.X, y+bounds.Min.Y).RGBA()
 
-	cx := int(pos.X * float64(w))
-	cy := int(pos.Y * float64(h))
+			dr := float64(int(br>>8)) - float64(int(fr>>8))
+			dg := float64(int(bg_>>8)) - float64(int(fg_>>8))
+			db := float64(int(bb>>8)) - float64(int(fb>>8))
 
-	x1 := clamp(cx-maskW/2, 0, w)
-	y1 := clamp(cy-maskH/2, 0, h)
-	x2 := clamp(cx+maskW/2, 0, w)
-	y2 := clamp(cy+maskH/2, 0, h)
+			dist := math.Sqrt(dr*dr + dg*dg + db*db)
 
-	draw.Draw(mask, image.Rect(x1, y1, x2, y2), &image.Uniform{color.White}, image.Point{}, draw.Src)
-
-	return mask
-}
-
-func applyMaskedRegion(dst *image.RGBA, src image.Image, mask *image.RGBA) {
-	bounds := dst.Bounds()
-	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
-		for x := bounds.Min.X; x < bounds.Max.X; x++ {
-			if mask.RGBAAt(x, y).A > 128 {
-				r, g, b, a := src.At(x, y).RGBA()
-				dst.SetRGBA(x, y, color.RGBA{
-					R: uint8(r >> 8),
-					G: uint8(g >> 8),
-					B: uint8(b >> 8),
-					A: uint8(a >> 8),
-				})
+			const threshold = 20.0
+			const feather = 15.0
+			alpha := (dist - threshold) / feather
+			if alpha < 0 {
+				alpha = 0
 			}
+			if alpha > 1 {
+				alpha = 1
+			}
+			mask[y][x] = alpha
 		}
 	}
+
+	return blurMask(mask, w, h, 4)
+}
+
+func compositeDifference(dst *image.RGBA, src image.Image, mask [][]float64) {
+	bounds := dst.Bounds()
+
+	layer := image.NewRGBA(bounds)
+	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
+		for x := bounds.Min.X; x < bounds.Max.X; x++ {
+			a := mask[y-bounds.Min.Y][x-bounds.Min.X]
+			if a < 0.01 {
+				continue
+			}
+			r, g, b, _ := src.At(x, y).RGBA()
+			layer.SetRGBA(x, y, color.RGBA{
+				R: uint8(r >> 8),
+				G: uint8(g >> 8),
+				B: uint8(b >> 8),
+				A: uint8(a * 255),
+			})
+		}
+	}
+
+	draw.Draw(dst, bounds, layer, bounds.Min, draw.Over)
 }

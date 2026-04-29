@@ -18,6 +18,10 @@ export function BatchGenerate(arg1) {
   return window['go']['main']['App']['BatchGenerate'](arg1);
 }
 
+export function CheckRembg() {
+  return window['go']['main']['App']['CheckRembg']();
+}
+
 export function CheckServices() {
   return window['go']['main']['App']['CheckServices']();
 }

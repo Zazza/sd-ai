@@ -89,6 +89,14 @@ const analyzeSaved = ref(false)
 const analyzeError = ref('')
 const defaultAnalyzePrompts = ref(null)
 
+const rembgForm = reactive({
+  rembg_url: '',
+})
+const rembgSaved = ref(false)
+const rembgError = ref('')
+const rembgTesting = ref(false)
+const rembgStatus = ref('')
+
 watch(() => connectionForm.llm_backend, (newVal, oldVal) => {
   if (oldVal && defaultURLs[oldVal] && connectionForm.llm_url === defaultURLs[oldVal]) {
     connectionForm.llm_url = defaultURLs[newVal] || defaultURLs.lmstudio
@@ -123,6 +131,7 @@ async function loadSettings() {
     generationForm.preview_width = parseInt(settings.preview_width) || 512
     generationForm.preview_height = parseInt(settings.preview_height) || 512
     promptInstruction.value = settings.sd_prompt_instruction || ''
+    rembgForm.rembg_url = settings.rembg_url || ''
   } catch (e) {
     console.error('loadSettings:', e)
   }
@@ -336,6 +345,34 @@ function resetAnalyzePrompts() {
   }
 }
 
+async function saveRembg() {
+  rembgSaved.value = false
+  rembgError.value = ''
+  rembgStatus.value = ''
+  try {
+    await api.updateSettings({ rembg_url: rembgForm.rembg_url })
+    rembgSaved.value = true
+  } catch (e) {
+    rembgError.value = String(e)
+  }
+}
+
+async function testRembg() {
+  rembgTesting.value = true
+  rembgStatus.value = ''
+  rembgError.value = ''
+  try {
+    await api.updateSettings({ rembg_url: rembgForm.rembg_url })
+    await api.checkRembg()
+    rembgStatus.value = 'ok'
+  } catch (e) {
+    rembgStatus.value = 'error'
+    rembgError.value = String(e)
+  } finally {
+    rembgTesting.value = false
+  }
+}
+
 onMounted(loadSettings)
 </script>
 
@@ -353,6 +390,7 @@ onMounted(loadSettings)
       <button class="tab" :class="{ active: activeTab === 'generation' }" @click="switchTab('generation')">Generation</button>
       <button class="tab" :class="{ active: activeTab === 'prompt' }" @click="switchTab('prompt')">Prompt</button>
       <button class="tab" :class="{ active: activeTab === 'analyze' }" @click="switchTab('analyze')">Analyze</button>
+      <button class="tab" :class="{ active: activeTab === 'rembg' }" @click="switchTab('rembg')">Rembg</button>
     </div>
 
     <!-- Connection Tab -->
@@ -677,6 +715,42 @@ onMounted(loadSettings)
         <button class="btn btn-primary" @click="saveAnalyzePrompts">Save Prompts</button>
         <button class="btn btn-secondary" @click="resetAnalyzePrompts">Reset to Default</button>
       </div>
+    </div>
+
+    <!-- Rembg Tab -->
+    <div v-if="activeTab === 'rembg'" class="card">
+      <h3 style="color: var(--text-bright); margin-bottom: 16px;">Rembg (Background Removal)</h3>
+      <div v-if="rembgSaved" class="status status-success" style="margin-bottom: 16px;">URL saved.</div>
+      <div v-if="rembgError" class="status status-error" style="margin-bottom: 16px;">{{ rembgError }}</div>
+
+      <div style="color: var(--text-dim); font-size: 13px; margin-bottom: 12px; line-height: 1.5;">
+        Rembg is an AI background removal service. Run it on any device with Python/CUDA:
+        <code style="background: var(--surface-2); padding: 2px 6px; border-radius: 4px; font-size: 12px;">rembg s --host 0.0.0.0 --port 7000</code>
+        <br>Then enter its URL below. Required for clean multi-character compositing.
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Rembg Server URL</label>
+        <div style="display: flex; gap: 8px;">
+          <input class="form-input" v-model="rembgForm.rembg_url" placeholder="http://192.168.1.100:7000" style="flex: 1;" />
+          <button class="btn btn-secondary btn-sm" @click="testRembg" :disabled="rembgTesting || !rembgForm.rembg_url">
+            {{ rembgTesting ? 'Testing...' : 'Test' }}
+          </button>
+        </div>
+      </div>
+
+      <div v-if="rembgStatus === 'ok'" style="color: #4ade80; font-size: 13px; margin-bottom: 12px;">
+        Connection successful — rembg is running.
+      </div>
+      <div v-if="rembgStatus === 'error'" style="color: #f87171; font-size: 13px; margin-bottom: 12px;">
+        Connection failed — check URL and make sure rembg is running.
+      </div>
+
+      <div v-if="!rembgForm.rembg_url" style="color: var(--text-dim); font-size: 12px; padding: 8px; background: var(--surface-2); border-radius: 6px; margin-bottom: 12px;">
+        Without rembg, Go-based white background removal will be used (lower quality, visible artifacts on edges).
+      </div>
+
+      <button class="btn btn-primary" @click="saveRembg">Save Rembg URL</button>
     </div>
 
     <PinModal v-if="showPinModal" :mode="pinMode" :error="pinError" @confirm="onPinConfirm" @cancel="onPinCancel" />

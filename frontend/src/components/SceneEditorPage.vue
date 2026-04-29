@@ -6,6 +6,7 @@ import { api } from '../api.js'
 const presets = ref([])
 const selectedPresetId = ref(null)
 const description = ref('')
+const negativePrompt = ref('')
 const scene = ref(null)
 const generating = ref(false)
 const decomposing = ref(false)
@@ -84,6 +85,9 @@ async function decompose() {
       description: description.value,
       preset_id: selectedPresetId.value
     })
+    if (negativePrompt.value.trim()) {
+      s.negative_prompt = negativePrompt.value.trim()
+    }
     scene.value = s
   } catch (e) {
     error.value = 'Decomposition failed: ' + e
@@ -177,6 +181,11 @@ onMounted(() => {
       <div class="form-group">
         <label>Scene Description</label>
         <textarea v-model="description" rows="4" placeholder="Describe the scene with all characters, e.g.: A warrior and a mage standing in a dark forest clearing. The warrior is on the left with a sword, the mage on the right casting fire."></textarea>
+      </div>
+
+      <div class="form-group">
+        <label>Negative Prompt</label>
+        <input v-model="negativePrompt" type="text" placeholder="e.g.: female, woman, girl, nude, deformed" />
       </div>
 
       <button @click="decompose" :disabled="decomposing || !llmAvailable || !selectedPresetId" class="btn-primary">

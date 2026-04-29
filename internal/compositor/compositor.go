@@ -8,9 +8,11 @@ import (
 	"image"
 	"image/draw"
 	"image/png"
+	"math/rand"
 	"strings"
 
 	"go-sd/internal/preset"
+	"go-sd/internal/rembg"
 	"go-sd/internal/sd"
 )
 
@@ -21,6 +23,10 @@ type SDGenerator interface {
 	SetVAE(vaeName string) error
 }
 
+type RembgClient interface {
+	RemoveBackgroundBase64(base64Image string) (string, error)
+}
+
 type PresetGetter interface {
 	Get(id int64) (*preset.Preset, error)
 }
@@ -29,13 +35,15 @@ type ProgressEmitter func(progress MultiPassProgress)
 
 type Compositor struct {
 	sd      SDGenerator
+	rembg   RembgClient
 	presets PresetGetter
 	emit    ProgressEmitter
 }
 
-func New(sdClient SDGenerator, presetDB PresetGetter, emit ProgressEmitter) *Compositor {
+func New(sdClient SDGenerator, rembgClient RembgClient, presetDB PresetGetter, emit ProgressEmitter) *Compositor {
 	return &Compositor{
 		sd:      sdClient,
+		rembg:   rembgClient,
 		presets: presetDB,
 		emit:    emit,
 	}
@@ -83,7 +91,7 @@ func (c *Compositor) GenerateScene(scene Scene) (*MultiPassResult, error) {
 		c.emit(MultiPassProgress{Step: "background"})
 	}
 
-	bgPrompt := p.Prompt + ", " + scene.BackgroundPrompt + loraSuffix
+	bgPrompt := scene.BackgroundPrompt + ", no people, no characters, empty scene, landscape" + loraSuffix
 	bgNeg := scene.NegativePrompt
 	if bgNeg == "" {
 		bgNeg = p.NegativePrompt
@@ -104,7 +112,8 @@ func (c *Compositor) GenerateScene(scene Scene) (*MultiPassResult, error) {
 	}
 	bgImage := imageToRGBA(bgDecoded)
 
-	originalBgBase64 := bgResp.Images[0]
+	resultImage := image.NewRGBA(bgImage.Bounds())
+	draw.Draw(resultImage, bgImage.Bounds(), bgImage, bgImage.Bounds().Min, draw.Src)
 
 	result := &MultiPassResult{
 		Background: bgResp.Images[0],
@@ -119,83 +128,81 @@ func (c *Compositor) GenerateScene(scene Scene) (*MultiPassResult, error) {
 			})
 		}
 
-		charPrompt := p.Prompt + ", " + char.Prompt + loraSuffix
+		stylePrompt := extractStyleTags(p.Prompt)
+		charPrompt := stylePrompt + ", " + char.Prompt + ", plain white background, full body, standing pose" + loraSuffix
 		charNeg := scene.NegativePrompt
 		if charNeg == "" {
 			charNeg = p.NegativePrompt
+		}
+
+		for j, other := range scene.Characters {
+			if j != i {
+				charNeg += ", " + other.Name
+			}
+		}
+
+		charW, charH := 512, 768
+		if scene.Width > 512 {
+			charW = 640
+			charH = 960
+		}
+
+		charSeed := rand.Int63()
+		charReq := buildTxt2ImgRequestWithSeed(p, charPrompt, charNeg, charW, charH, &charSeed)
+		charResp, err := c.sd.Txt2Img(charReq)
+		if err != nil {
+			return nil, fmt.Errorf("character %q generation failed: %w", char.Name, err)
+		}
+		if len(charResp.Images) == 0 {
+			return nil, fmt.Errorf("no image for character %q", char.Name)
+		}
+
+		var charRGBA *image.RGBA
+		if c.rembg != nil {
+			if c.emit != nil {
+				c.emit(MultiPassProgress{
+					Step:      "rembg",
+					Character: i + 1,
+					Total:     len(scene.Characters),
+				})
+			}
+
+			rembgBase64, err := c.rembg.RemoveBackgroundBase64(charResp.Images[0])
+			if err != nil {
+				return nil, fmt.Errorf("rembg failed for %q: %w", char.Name, err)
+			}
+
+			rembgDecoded, err := decodeBase64PNG(rembgBase64)
+			if err != nil {
+				return nil, fmt.Errorf("decode rembg result for %q: %w", char.Name, err)
+			}
+			charRGBA = imageToRGBA(rembgDecoded)
+		} else {
+			charDecoded, err := decodeBase64PNG(charResp.Images[0])
+			if err != nil {
+				return nil, fmt.Errorf("decode character %q: %w", char.Name, err)
+			}
+			charRGBA = RemoveWhiteBackground(charDecoded)
 		}
 
 		scale := char.Scale
 		if scale <= 0 {
 			scale = 0.4
 		}
-
-		mask := createCharacterMask(bgImage.Bounds(), char.Position, scale)
-		maskBase64, err := encodeImageToBase64(mask)
-		if err != nil {
-			return nil, fmt.Errorf("encode mask for character %q: %w", char.Name, err)
-		}
-
-		samplerName := p.Sampler
-		if p.ScheduleType != "" {
-			st := strings.ToUpper(p.ScheduleType[:1]) + p.ScheduleType[1:]
-			samplerName = p.Sampler + " " + st
-		}
-
-		clipSkip := 1
-		if p.ClipSkip != nil {
-			clipSkip = *p.ClipSkip
-		}
-
-		denoising := 0.65
-		inpaintReq := sd.Img2ImgRequest{
-			InitImages:           []string{originalBgBase64},
-			Mask:                 maskBase64,
-			Prompt:               charPrompt,
-			NegativePrompt:       charNeg,
-			SamplerName:          samplerName,
-			Scheduler:            p.ScheduleType,
-			Steps:                p.Steps,
-			CfgScale:             p.CfgScale,
-			Width:                scene.Width,
-			Height:               scene.Height,
-			Seed:                 p.Seed,
-			DenoisingStrength:    &denoising,
-			ClipSkip:             &clipSkip,
-			MaskBlur:             8,
-			InpaintingFill:       1,
-			InpaintFullRes:       true,
-			InpaintFullResPadding: 32,
-			DoNotSaveImages:      true,
-			DoNotSaveGrid:        true,
-		}
-
-		inpaintResp, err := c.sd.Img2Img(inpaintReq)
-		if err != nil {
-			return nil, fmt.Errorf("character %q inpaint failed: %w", char.Name, err)
-		}
-		if len(inpaintResp.Images) == 0 {
-			return nil, fmt.Errorf("no image for character %q", char.Name)
-		}
-
-		charResult, err := decodeBase64PNG(inpaintResp.Images[0])
-		if err != nil {
-			return nil, fmt.Errorf("decode character %q: %w", char.Name, err)
-		}
-
-		applyMaskedRegion(bgImage, charResult, mask)
+		composited := CompositeOver(resultImage, charRGBA, char.Position, scale)
+		resultImage = composited
 
 		result.Characters = append(result.Characters, struct {
 			Name  string `json:"name"`
 			Image string `json:"image,omitempty"`
-		}{Name: char.Name, Image: inpaintResp.Images[0]})
+		}{Name: char.Name, Image: charResp.Images[0]})
 	}
 
 	if c.emit != nil {
 		c.emit(MultiPassProgress{Step: "done"})
 	}
 
-	finalBase64, err := encodeImageToBase64(bgImage)
+	finalBase64, err := encodeImageToBase64(resultImage)
 	if err != nil {
 		return nil, fmt.Errorf("encode result: %w", err)
 	}
@@ -242,7 +249,35 @@ func imageToRGBA(img image.Image) *image.RGBA {
 	return rgba
 }
 
-func buildTxt2ImgRequest(p *preset.Preset, prompt, negativePrompt string, width, height int) sd.Txt2ImgRequest {
+func extractStyleTags(prompt string) string {
+	parts := strings.Split(prompt, ",")
+	var style []string
+	skipWords := []string{"man", "woman", "boy", "girl", "person", "character", "warrior", "knight",
+		"wizard", "bear", "wolf", "dragon", "animal", "creature", "fighting", "holding",
+		"standing", "sitting", "walking", "running", "sword", "axe", "shield", "weapon",
+		"riding", "attacking", "defending", "scene", "forest", "mountain", "battle",
+		"forest", "woods", "field", "river", "castle", "village", "city", "sky"}
+
+	for _, part := range parts {
+		p := strings.TrimSpace(strings.ToLower(part))
+		skip := false
+		for _, sw := range skipWords {
+			if strings.Contains(p, sw) {
+				skip = true
+				break
+			}
+		}
+		if !skip && p != "" {
+			style = append(style, strings.TrimSpace(part))
+		}
+	}
+	if len(style) == 0 {
+		return prompt
+	}
+	return strings.Join(style, ", ")
+}
+
+func buildTxt2ImgRequestWithSeed(p *preset.Preset, prompt, negativePrompt string, width, height int, seed *int64) sd.Txt2ImgRequest {
 	samplerName := p.Sampler
 	if p.ScheduleType != "" {
 		st := strings.ToUpper(p.ScheduleType[:1]) + p.ScheduleType[1:]
@@ -263,11 +298,15 @@ func buildTxt2ImgRequest(p *preset.Preset, prompt, negativePrompt string, width,
 		CfgScale:               p.CfgScale,
 		Width:                  width,
 		Height:                 height,
-		Seed:                   p.Seed,
+		Seed:                   seed,
 		ClipSkip:               &clipSkip,
 		DoNotSaveImages:        true,
 		DoNotSaveGrid:          true,
 	}
+}
+
+func buildTxt2ImgRequest(p *preset.Preset, prompt, negativePrompt string, width, height int) sd.Txt2ImgRequest {
+	return buildTxt2ImgRequestWithSeed(p, prompt, negativePrompt, width, height, p.Seed)
 }
 
 func decodeBase64PNG(data string) (image.Image, error) {
@@ -289,3 +328,6 @@ func encodeImageToBase64(img image.Image) (string, error) {
 	}
 	return base64.StdEncoding.EncodeToString(buf.Bytes()), nil
 }
+
+// ensure rembg.Client satisfies RembgClient interface
+var _ RembgClient = (*rembg.Client)(nil)

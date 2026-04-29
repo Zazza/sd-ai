@@ -14,6 +14,8 @@ export function BatchCompoundGenerate(arg1:main.BatchCompoundGenerateParams):Pro
 
 export function BatchGenerate(arg1:main.BatchGenerateParams):Promise<void>;
 
+export function CheckRembg():Promise<void>;
+
 export function CheckServices():Promise<main.ServiceStatus>;
 
 export function CreateCompoundPreset(arg1:preset.CompoundPreset):Promise<preset.CompoundPreset>;

@@ -18,6 +18,7 @@ import {
   AnalyzeImageForGeneration, GenerateFromImage,
   DecomposeScene, GenerateMultiPass,
   ListSavedScenes, GetSavedScene, SaveScene, UpdateSavedScene, DeleteSavedScene,
+  CheckRembg,
 } from './wailsjs/go/main/App.js'
 
 export const api = {
@@ -89,4 +90,5 @@ export const api = {
   saveScene: (data) => SaveScene(data),
   updateSavedScene: (data) => UpdateSavedScene(data),
   deleteSavedScene: (id) => DeleteSavedScene(id),
+  checkRembg: () => CheckRembg(),
 }

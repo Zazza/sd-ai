@@ -29,27 +29,30 @@ import (
 	"go-sd/internal/kids"
 	"go-sd/internal/llm"
 	"go-sd/internal/preset"
+	"go-sd/internal/rembg"
 	"go-sd/internal/sd"
 )
 
 type App struct {
-	ctx         context.Context
-	presets     *preset.DB
-	llm         *llm.Client
-	sd          *sd.Client
-	config      *config.Config
-	dataDir     string
-	batchMu     sync.Mutex
+	ctx          context.Context
+	presets      *preset.DB
+	llm          *llm.Client
+	sd           *sd.Client
+	rembgClient  *rembg.Client
+	config       *config.Config
+	dataDir      string
+	batchMu      sync.Mutex
 	batchRunning bool
 }
 
 func NewApp(presets *preset.DB, llmClient *llm.Client, sdClient *sd.Client, cfg *config.Config) *App {
 	return &App{
-		presets: presets,
-		llm:     llmClient,
-		sd:      sdClient,
-		config:  cfg,
-		dataDir: filepath.Dir(cfg.DBPath),
+		presets:     presets,
+		llm:         llmClient,
+		sd:          sdClient,
+		rembgClient: rembg.New(""),
+		config:      cfg,
+		dataDir:     filepath.Dir(cfg.DBPath),
 	}
 }
 
@@ -1543,6 +1546,7 @@ func (a *App) GetSettings() (map[string]string, error) {
 		"llm_analyze_top_p":         "0.9",
 		"llm_analyze_num_thread":    "0",
 		"kids_mode":                 "false",
+		"rembg_url":                 "",
 		"preview_mode":              "false",
 		"preview_width":             "512",
 		"preview_height":            "512",
@@ -1566,6 +1570,7 @@ func (a *App) UpdateSettings(data map[string]string) error {
 		"llm_analyze_temperature": true, "llm_analyze_num_ctx": true, "llm_analyze_num_predict": true,
 		"llm_analyze_top_p": true, "llm_analyze_num_thread": true,
 		"kids_mode": true, "kids_pin_hash": true,
+		"rembg_url": true,
 		"preview_mode": true, "preview_width": true, "preview_height": true,
 		"gen_preset_id": true, "gen_action_pose": true, "gen_characters": true,
 		"gen_clothing_details": true,
@@ -1609,6 +1614,9 @@ func (a *App) UpdateSettings(data map[string]string) error {
 	}
 	if v, ok := data["llm_analyze_model"]; ok {
 		a.config.VisionModel = v
+	}
+	if v, ok := data["rembg_url"]; ok {
+		a.rembgClient.SetURL(v)
 	}
 
 	return nil
@@ -3527,7 +3535,14 @@ func (a *App) GenerateMultiPass(scene compositor.Scene) (*compositor.MultiPassRe
 		runtime.EventsEmit(a.ctx, "multipass:progress", progress)
 	}
 
-	c := compositor.New(a.sd, a.presets, emit)
+	rembgURL, _ := a.presets.GetSetting("rembg_url")
+	var rembgIf compositor.RembgClient
+	if rembgURL != "" {
+		a.rembgClient.SetURL(rembgURL)
+		rembgIf = a.rembgClient
+	}
+
+	c := compositor.New(a.sd, rembgIf, a.presets, emit)
 	result, err := c.GenerateScene(scene)
 	if err != nil {
 		return nil, err
@@ -3538,6 +3553,15 @@ func (a *App) GenerateMultiPass(scene compositor.Scene) (*compositor.MultiPassRe
 	}
 
 	return result, nil
+}
+
+func (a *App) CheckRembg() error {
+	rembgURL, _ := a.presets.GetSetting("rembg_url")
+	if rembgURL == "" {
+		return fmt.Errorf("rembg URL not configured")
+	}
+	a.rembgClient.SetURL(rembgURL)
+	return a.rembgClient.HealthCheck()
 }
 
 func (a *App) ListSavedScenes() ([]preset.SavedScene, error) {
