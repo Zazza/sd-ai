@@ -163,18 +163,6 @@ export namespace llm {
 
 export namespace main {
 	
-	export class AnalyzeImageForGenResult {
-	    tags: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new AnalyzeImageForGenResult(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.tags = source["tags"];
-	    }
-	}
 	export class AnalyzePrompts {
 	    system_prompt: string;
 	    single_prompt: string;

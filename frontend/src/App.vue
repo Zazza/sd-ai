@@ -3,7 +3,6 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { WindowMinimise, Quit, EventsOn, EventsOff } from './wailsjs/runtime/runtime'
 import PresetsPage from './components/PresetsPage.vue'
 import GeneratePage from './components/GeneratePage.vue'
-import AnalyzePage from './components/AnalyzePage.vue'
 import SettingsPage from './components/SettingsPage.vue'
 import BatchPage from './components/BatchPage.vue'
 import TestPage from './components/TestPage.vue'
@@ -18,7 +17,6 @@ const currentPage = computed(() => {
   switch (page.value) {
     case 'presets': return PresetsPage
     case 'generate': return GeneratePage
-    case 'analyze': return AnalyzePage
     case 'batch': return BatchPage
     case 'test': return TestPage
     case 'pipelines': return CompoundPresetsPage
@@ -85,9 +83,6 @@ const close = () => Quit()
         </a>
         <a class="sidebar-link" :class="{ active: page === 'scene' }" @click="page = 'scene'">
           &#9674; Multi-Scene
-        </a>
-        <a class="sidebar-link" :class="{ active: page === 'analyze' }" @click="page = 'analyze'">
-          &#9673; Analyze
         </a>
         <a class="sidebar-link" :class="{ active: page === 'presets' }" @click="page = 'presets'">
           &#9776; Presets

@@ -6,10 +6,6 @@ export function AnalyzeImage(arg1) {
   return window['go']['main']['App']['AnalyzeImage'](arg1);
 }
 
-export function AnalyzeImageForGeneration(arg1) {
-  return window['go']['main']['App']['AnalyzeImageForGeneration'](arg1);
-}
-
 export function BatchCompoundGenerate(arg1) {
   return window['go']['main']['App']['BatchCompoundGenerate'](arg1);
 }

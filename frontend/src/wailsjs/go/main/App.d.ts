@@ -8,8 +8,6 @@ import {sd} from '../models';
 
 export function AnalyzeImage(arg1:string):Promise<string>;
 
-export function AnalyzeImageForGeneration(arg1:string):Promise<main.AnalyzeImageForGenResult>;
-
 export function BatchCompoundGenerate(arg1:main.BatchCompoundGenerateParams):Promise<void>;
 
 export function BatchGenerate(arg1:main.BatchGenerateParams):Promise<void>;

@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { api } from '../api.js'
+import { EventsOn, EventsOff } from '../wailsjs/runtime/runtime'
 
 const uploadedImage = ref('')
 const uploadedImageMime = ref('image/png')
@@ -25,6 +26,15 @@ const analyzing = ref(false)
 const generatingImage = ref(false)
 const generationStage = ref('')
 const error = ref('')
+
+const analyzeMode = ref('quick')
+const chainStep = ref(0)
+const chainTotal = ref(0)
+const analyzeElapsed = ref(0)
+let analyzeTimer = null
+
+const recommending = ref(false)
+const recommendation = ref(null)
 
 const llmAvailable = ref(false)
 const llmModel = ref('')
@@ -79,10 +89,58 @@ async function uploadImage() {
       uploadedImage.value = base64
       uploadedImageMime.value = 'image/png'
       tags.value = ''
+      recommendation.value = null
       error.value = ''
     }
   } catch (e) {
     error.value = String(e)
+  }
+}
+
+async function useLastImage() {
+  try {
+    const last = await api.getLastImage()
+    if (last && last.image) {
+      uploadedImage.value = last.image
+      uploadedImageMime.value = 'image/png'
+      tags.value = ''
+      recommendation.value = null
+      error.value = ''
+    } else {
+      error.value = 'No last generated image found'
+    }
+  } catch (e) {
+    error.value = String(e)
+  }
+}
+
+function handlePaste(e) {
+  const items = e.clipboardData?.items
+  if (!items) return
+  for (const item of items) {
+    if (item.type.startsWith('image/')) {
+      e.preventDefault()
+      const file = item.getAsFile()
+      if (!file) continue
+      if (file.size > 16 * 1024 * 1024) {
+        error.value = 'Image too large (max 16 MB)'
+        return
+      }
+      const reader = new FileReader()
+      reader.onload = () => {
+        const base64 = reader.result.split(',')[1]
+        const mime = reader.result.split(':')[1]?.split(';')[0] || 'image/png'
+        if (base64) {
+          uploadedImage.value = base64
+          uploadedImageMime.value = mime
+          tags.value = ''
+          recommendation.value = null
+          error.value = ''
+        }
+      }
+      reader.readAsDataURL(file)
+      return
+    }
   }
 }
 
@@ -107,6 +165,7 @@ function onDrop(e) {
       uploadedImage.value = base64
       uploadedImageMime.value = mime
       tags.value = ''
+      recommendation.value = null
       error.value = ''
     }
   }
@@ -121,6 +180,7 @@ function clearImage() {
   genInfo.value = null
   effectivePrompt.value = ''
   effectiveNegative.value = ''
+  recommendation.value = null
   error.value = ''
 }
 
@@ -128,13 +188,41 @@ async function analyzeImage() {
   if (!uploadedImage.value) return
   analyzing.value = true
   error.value = ''
+  chainStep.value = 0
+  chainTotal.value = 0
+  analyzeElapsed.value = 0
+
+  if (analyzeMode.value === 'deep') {
+    analyzeTimer = setInterval(() => { analyzeElapsed.value++ }, 1000)
+  }
+
   try {
-    const result = await api.analyzeImageForGen(uploadedImage.value)
-    tags.value = result?.tags || ''
+    const result = await api.analyzeImage(uploadedImage.value)
+    tags.value = result || ''
+    if (analyzeMode.value === 'deep' && tags.value.trim()) {
+      recommendPreset(tags.value)
+    }
   } catch (e) {
     error.value = 'Analysis failed: ' + String(e)
   } finally {
     analyzing.value = false
+    if (analyzeTimer) {
+      clearInterval(analyzeTimer)
+      analyzeTimer = null
+    }
+  }
+}
+
+async function recommendPreset(tagsText) {
+  recommending.value = true
+  recommendation.value = null
+  try {
+    const rec = await api.recommendPreset(tagsText)
+    if (rec) recommendation.value = rec
+  } catch (e) {
+    console.error('Recommend preset failed:', e)
+  } finally {
+    recommending.value = false
   }
 }
 
@@ -198,14 +286,33 @@ async function downloadImage() {
   }
 }
 
+function applyRecommendation() {
+  if (!recommendation.value) return
+  if (recommendation.value.preset_id) {
+    selectedPresetId.value = recommendation.value.preset_id
+    genMode.value = 'preset'
+  }
+  if (recommendation.value.extra_prompt) {
+    const current = tags.value.trim()
+    tags.value = current ? current + ', ' + recommendation.value.extra_prompt : recommendation.value.extra_prompt
+  }
+}
+
 onMounted(async () => {
   loadPresets()
   checkServices()
   statusInterval = setInterval(checkServices, 30000)
+  document.addEventListener('paste', handlePaste)
+  EventsOn("analyze:step", (step, total) => {
+    chainStep.value = step
+    chainTotal.value = total
+  })
 })
 
 onUnmounted(() => {
   if (statusInterval) clearInterval(statusInterval)
+  document.removeEventListener('paste', handlePaste)
+  EventsOff("analyze:step")
 })
 </script>
 
@@ -243,14 +350,15 @@ onUnmounted(() => {
           >
             <template v-if="!uploadedImage">
               <div style="font-size: 32px; color: var(--text-dim);">&#128444;</div>
-              <p style="color: var(--text-dim); margin-top: 8px;">Drop image here or click to upload</p>
+              <p style="color: var(--text-dim); margin-top: 8px;">Drop image here, click to upload, or Ctrl+V</p>
             </template>
             <template v-else>
               <img :src="'data:' + uploadedImageMime + ';base64,' + uploadedImage" alt="Source" style="max-height: 200px; border-radius: 6px;" />
             </template>
           </div>
-          <div v-if="uploadedImage" style="display: flex; gap: 8px; margin-top: 8px;">
+          <div v-if="uploadedImage" class="fi-btn-row">
             <button class="btn btn-sm btn-secondary" @click="uploadImage">Change</button>
+            <button class="btn btn-sm btn-secondary" @click="useLastImage">Last Generated</button>
             <button class="btn btn-sm btn-secondary" @click="clearImage">Clear</button>
           </div>
 
@@ -299,13 +407,43 @@ onUnmounted(() => {
           </div>
 
           <div class="form-group" style="margin-top: 12px;">
-            <label class="form-label">Extracted Tags</label>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+              <label class="form-label" style="margin-bottom: 0;">Extracted Tags</label>
+              <div style="display: flex; gap: 6px;">
+                <button class="btn btn-sm" :class="analyzeMode === 'quick' ? 'btn-primary' : 'btn-secondary'" @click="analyzeMode = 'quick'" style="font-size: 11px; padding: 2px 8px;">Quick</button>
+                <button class="btn btn-sm" :class="analyzeMode === 'deep' ? 'btn-primary' : 'btn-secondary'" @click="analyzeMode = 'deep'" style="font-size: 11px; padding: 2px 8px;">Deep</button>
+              </div>
+            </div>
             <div style="display: flex; gap: 8px; margin-bottom: 6px;">
               <button class="btn btn-sm btn-secondary" @click="analyzeImage" :disabled="analyzing || !uploadedImage">
-                {{ analyzing ? 'Analyzing...' : 'Analyze Image' }}
+                <template v-if="analyzing">
+                  <span v-if="analyzeMode === 'deep' && chainStep > 0">Step {{ chainStep }}/{{ chainTotal }} &mdash; {{ analyzeElapsed }}s</span>
+                  <span v-else>Analyzing...</span>
+                </template>
+                <span v-else>Analyze</span>
               </button>
+              <button class="btn btn-sm btn-secondary" @click="tags = ''" :disabled="!tags || generatingImage" title="Clear tags">&#10005;</button>
             </div>
             <textarea class="form-textarea" v-model="tags" rows="4" placeholder="Tags extracted from image will appear here. Click Analyze or generate directly." :disabled="generatingImage"></textarea>
+          </div>
+
+          <div v-if="recommendation" class="fi-recommendation">
+            <div style="font-weight: 600; margin-bottom: 6px;">Recommended: {{ recommendation.preset_name }}</div>
+            <div v-if="recommendation.reasoning" style="font-size: 12px; color: var(--text-dim); margin-bottom: 8px;">
+              {{ recommendation.reasoning }}
+            </div>
+            <div v-if="recommendation.extra_prompt" style="font-size: 12px; color: var(--text-dim); margin-bottom: 8px;">
+              <span style="font-weight: 600;">Extra tags:</span> {{ recommendation.extra_prompt }}
+            </div>
+            <div style="display: flex; gap: 8px;">
+              <button class="btn btn-sm btn-primary" @click="applyRecommendation">Apply</button>
+              <button class="btn btn-sm btn-secondary" @click="recommendation = null">Dismiss</button>
+            </div>
+          </div>
+
+          <div v-if="recommending" style="margin-top: 8px; display: flex; align-items: center; gap: 8px; color: var(--text-dim); font-size: 13px;">
+            <span class="spinner" style="width: 14px; height: 14px; border-width: 2px;"></span>
+            Recommending preset...
           </div>
 
           <div class="form-group">
@@ -392,5 +530,19 @@ onUnmounted(() => {
 .form-range {
   width: 100%;
   accent-color: var(--accent);
+}
+.fi-btn-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+.fi-recommendation {
+  margin-top: 12px;
+  padding: 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-sm);
 }
 </style>

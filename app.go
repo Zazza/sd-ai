@@ -431,6 +431,9 @@ func (a *App) AnalyzeImage(imageBase64 string) (string, error) {
 	if imageBase64 == "" {
 		return "", fmt.Errorf("image is required")
 	}
+	if len(imageBase64) > 22*1024*1024 {
+		return "", fmt.Errorf("image too large (max 16 MB)")
+	}
 
 	model := a.config.VisionModel
 	if v, err := a.presets.GetSetting("llm_analyze_model"); err == nil && v != "" {
@@ -467,7 +470,14 @@ func (a *App) AnalyzeImage(imageBase64 string) (string, error) {
 		if prompt == "" {
 			prompt = config.DefaultAnalyzePrompt
 		}
-		return a.llm.AnalyzeImage(model, systemPrompt+"\n\n"+prompt, imageBase64, maxTokens)
+		tags, err := a.llm.AnalyzeImage(model, systemPrompt+"\n\n"+prompt, imageBase64, maxTokens)
+		if err != nil {
+			return "", err
+		}
+		if a.isKidsMode() {
+			tags = kids.FilterOutput(tags)
+		}
+		return tags, nil
 	}
 
 	chainPrompts := a.getAnalyzeChainPrompts()
@@ -512,7 +522,11 @@ func (a *App) AnalyzeImage(imageBase64 string) (string, error) {
 		}
 	}
 
-	return llm.CleanTags(lastResp), nil
+	tags := llm.CleanTags(lastResp)
+	if a.isKidsMode() {
+		tags = kids.FilterOutput(tags)
+	}
+	return tags, nil
 }
 
 func (a *App) getAnalyzeChainPrompts() []string {
@@ -2520,29 +2534,6 @@ func (a *App) GenerateCompoundImage(params GenerateCompoundImageParams) (*Genera
 	return img, nil
 }
 
-type AnalyzeImageForGenResult struct {
-	Tags string `json:"tags"`
-}
-
-func (a *App) AnalyzeImageForGeneration(imageBase64 string) (*AnalyzeImageForGenResult, error) {
-	if imageBase64 == "" {
-		return nil, fmt.Errorf("image is required")
-	}
-	if len(imageBase64) > 22*1024*1024 {
-		return nil, fmt.Errorf("image too large (max 16 MB)")
-	}
-
-	tags, err := a.AnalyzeImage(imageBase64)
-	if err != nil {
-		return nil, fmt.Errorf("image analysis failed: %w", err)
-	}
-
-	if a.isKidsMode() {
-		tags = kids.FilterOutput(tags)
-	}
-
-	return &AnalyzeImageForGenResult{Tags: tags}, nil
-}
 
 type GenerateFromImageParams struct {
 	ImageBase64         string  `json:"image_base64"`
@@ -2583,15 +2574,11 @@ func (a *App) GenerateFromImage(params GenerateFromImageParams) (*GenerateImageR
 
 	tags := params.Tags
 	if tags == "" {
-		analysisResult, err := a.AnalyzeImageForGeneration(params.ImageBase64)
+		var err error
+		tags, err = a.AnalyzeImage(params.ImageBase64)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("image analysis failed: %w", err)
 		}
-		tags = analysisResult.Tags
-	}
-
-	if a.isKidsMode() {
-		tags = kids.FilterOutput(tags)
 	}
 
 	if params.GenMode == "compound" {
