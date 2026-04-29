@@ -673,7 +673,7 @@ onUnmounted(() => {
             Recommending preset...
           </div>
 
-          <div class="form-group">
+          <div v-if="!kidsModeActive" class="form-group">
             <label class="form-label">Extra Negative</label>
             <textarea class="form-textarea" v-model="extraNegativePrompt" rows="2" placeholder="Additional negative prompt..." :disabled="generatingImage"></textarea>
           </div>

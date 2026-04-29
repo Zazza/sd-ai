@@ -64,6 +64,11 @@ func (a *App) startup(ctx context.Context) {
 	a.log.SetContext(ctx)
 }
 
+const (
+	maxPinAttempts = 5
+	pinLockoutMins = 5
+)
+
 func (a *App) isKidsMode() bool {
 	v, _ := a.presets.GetSetting("kids_mode")
 	return v == "true"
@@ -84,20 +89,93 @@ func (a *App) SetKidsMode(enabled bool, pin string) error {
 				return err
 			}
 		}
+		a.presets.SetSetting("kids_pin_attempts", "0")
+		a.presets.SetSetting("kids_pin_lockout", "")
 		return a.presets.SetSetting("kids_mode", "true")
 	}
 
 	storedHash, _ := a.presets.GetSetting("kids_pin_hash")
 	if storedHash != "" {
+		if err := a.checkPinLockout(); err != nil {
+			return err
+		}
 		if pin == "" {
 			return fmt.Errorf("PIN required")
 		}
 		hash := sha256.Sum256([]byte(pin))
 		if hex.EncodeToString(hash[:]) != storedHash {
+			a.recordFailedPinAttempt()
 			return fmt.Errorf("incorrect PIN")
 		}
+		a.presets.SetSetting("kids_pin_attempts", "0")
+		a.presets.SetSetting("kids_pin_lockout", "")
 	}
 	return a.presets.SetSetting("kids_mode", "false")
+}
+
+func (a *App) checkPinLockout() error {
+	lockoutStr, _ := a.presets.GetSetting("kids_pin_lockout")
+	if lockoutStr == "" {
+		return nil
+	}
+	lockoutTime, err := time.Parse(time.RFC3339, lockoutStr)
+	if err != nil {
+		a.presets.SetSetting("kids_pin_lockout", "")
+		a.presets.SetSetting("kids_pin_attempts", "0")
+		return nil
+	}
+	if time.Now().Before(lockoutTime) {
+		remaining := time.Until(lockoutTime).Truncate(time.Second)
+		return fmt.Errorf("PIN locked. Try again in %s", remaining)
+	}
+	a.presets.SetSetting("kids_pin_lockout", "")
+	a.presets.SetSetting("kids_pin_attempts", "0")
+	return nil
+}
+
+func (a *App) recordFailedPinAttempt() {
+	attemptsStr, _ := a.presets.GetSetting("kids_pin_attempts")
+	attempts := 0
+	if n, err := strconv.Atoi(attemptsStr); err == nil {
+		attempts = n
+	}
+	attempts++
+	a.presets.SetSetting("kids_pin_attempts", strconv.Itoa(attempts))
+	if attempts >= maxPinAttempts {
+		lockoutUntil := time.Now().Add(pinLockoutMins * time.Minute).Format(time.RFC3339)
+		a.presets.SetSetting("kids_pin_lockout", lockoutUntil)
+	}
+}
+
+func (a *App) applyKidsSystemPrompt(systemPrompt string) string {
+	if !a.isKidsMode() {
+		return systemPrompt
+	}
+	return systemPrompt + config.KidsModePrompt
+}
+
+func (a *App) applyKidsNegative(negativePrompt string) string {
+	if !a.isKidsMode() {
+		return negativePrompt
+	}
+	if negativePrompt != "" {
+		return negativePrompt + ", " + config.KidsModeNegativePrompt
+	}
+	return config.KidsModeNegativePrompt
+}
+
+func (a *App) filterKidsInput(text string) (string, error) {
+	if !a.isKidsMode() {
+		return text, nil
+	}
+	return kids.FilterInput(text)
+}
+
+func (a *App) filterKidsOutput(text string) string {
+	if !a.isKidsMode() {
+		return text
+	}
+	return kids.FilterOutput(text)
 }
 
 // --- Service Status ---
@@ -280,11 +358,16 @@ func (a *App) GenerateSDPrompt(params GenerateSDPromptParams) (*GenerateSDPrompt
 
 	systemPrompt := sdPromptInstruction
 
-	if a.isKidsMode() {
-		description = kids.FilterInput(description)
-		negative = kids.FilterInput(negative)
-		systemPrompt += config.KidsModePrompt
+	var filterErr error
+	description, filterErr = a.filterKidsInput(description)
+	if filterErr != nil {
+		return nil, filterErr
 	}
+	negative, filterErr = a.filterKidsInput(negative)
+	if filterErr != nil {
+		return nil, filterErr
+	}
+	systemPrompt = a.applyKidsSystemPrompt(systemPrompt)
 
 	maxTokens := 256
 	if v, err := a.presets.GetSetting("llm_max_tokens"); err == nil && v != "" {
@@ -343,10 +426,8 @@ RESPONSE LENGTH: your response is limited to ~%d tokens. You MUST fit within thi
 	result.NegativePrompt = stripJunk(result.NegativePrompt)
 	result.NegativePrompt = truncateRepetitive(result.NegativePrompt, 500)
 
-	if a.isKidsMode() {
-		result.Prompt = kids.FilterOutput(result.Prompt)
-		result.NegativePrompt = kids.FilterOutput(result.NegativePrompt)
-	}
+	result.Prompt = a.filterKidsOutput(result.Prompt)
+	result.NegativePrompt = a.filterKidsOutput(result.NegativePrompt)
 
 	return &result, nil
 }
@@ -481,9 +562,7 @@ func (a *App) AnalyzeImage(imageBase64 string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		if a.isKidsMode() {
-			tags = kids.FilterOutput(tags)
-		}
+		tags = a.filterKidsOutput(tags)
 		return tags, nil
 	}
 
@@ -530,9 +609,7 @@ func (a *App) AnalyzeImage(imageBase64 string) (string, error) {
 	}
 
 	tags := llm.CleanTags(lastResp)
-	if a.isKidsMode() {
-		tags = kids.FilterOutput(tags)
-	}
+	tags = a.filterKidsOutput(tags)
 	return tags, nil
 }
 
@@ -626,9 +703,7 @@ func (a *App) GenerateImage(params GenerateImageParams) (*GenerateImageResult, e
 		negativePrompt = params.ExtraNegativePrompt
 	}
 
-	if a.isKidsMode() {
-		negativePrompt += ", " + config.KidsModeNegativePrompt
-	}
+	negativePrompt = a.applyKidsNegative(negativePrompt)
 
 	if p.ModelName != "" {
 		_ = a.sd.SetModel(p.ModelName)
@@ -827,8 +902,10 @@ func (a *App) BatchGenerate(params BatchGenerateParams) error {
 	}
 
 	prompt := params.Prompt
-	if a.isKidsMode() {
-		prompt = kids.FilterInput(prompt)
+	var filterErr error
+	prompt, filterErr = a.filterKidsInput(prompt)
+	if filterErr != nil {
+		return filterErr
 	}
 	if p.Loras != "" {
 		var loras []preset.LoRAEntry
@@ -840,10 +917,11 @@ func (a *App) BatchGenerate(params BatchGenerateParams) error {
 	}
 
 	negativePrompt := params.NegativePrompt
-	if a.isKidsMode() {
-		negativePrompt = kids.FilterInput(negativePrompt)
-		negativePrompt += ", " + config.KidsModeNegativePrompt
+	negativePrompt, filterErr = a.filterKidsInput(negativePrompt)
+	if filterErr != nil {
+		return filterErr
 	}
+	negativePrompt = a.applyKidsNegative(negativePrompt)
 
 	if p.ModelName != "" {
 		_ = a.sd.SetModel(p.ModelName)
@@ -1060,8 +1138,9 @@ func (a *App) TestGenerate(params TestGenerateParams) ([]TestGenerateResultItem,
 		}
 
 		prompt := params.Prompt
-		if a.isKidsMode() {
-			prompt = kids.FilterInput(prompt)
+		prompt, filterErr := a.filterKidsInput(prompt)
+		if filterErr != nil {
+			return nil, fmt.Errorf("generating image: %w", filterErr)
 		}
 		if p.Loras != "" && params.Mode == "presets" {
 			var loras []preset.LoRAEntry
@@ -1080,12 +1159,7 @@ func (a *App) TestGenerate(params TestGenerateParams) ([]TestGenerateResultItem,
 				negPrompt = p.NegativePrompt
 			}
 		}
-		if a.isKidsMode() {
-			if negPrompt != "" {
-				negPrompt += ", "
-			}
-			negPrompt += config.KidsModeNegativePrompt
-		}
+		negPrompt = a.applyKidsNegative(negPrompt)
 
 		sampler := p.Sampler
 		scheduleType := p.ScheduleType
@@ -1263,9 +1337,7 @@ func (a *App) UpscaleImage(params UpscaleImageParams) (*GenerateImageResult, err
 	prompt := info.Prompt
 	negativePrompt := info.NegativePrompt
 
-	if a.isKidsMode() {
-		negativePrompt += ", " + config.KidsModeNegativePrompt
-	}
+	negativePrompt = a.applyKidsNegative(negativePrompt)
 
 	samplerName, scheduler := splitCompositeSampler(info.SamplerName, info.Scheduler)
 	steps := 30
@@ -1431,9 +1503,7 @@ func (a *App) UpscalePreview(params UpscalePreviewParams) (*GenerateImageResult,
 	prompt := p.Prompt
 	negativePrompt := p.NegativePrompt
 
-	if a.isKidsMode() {
-		negativePrompt += ", " + config.KidsModeNegativePrompt
-	}
+	negativePrompt = a.applyKidsNegative(negativePrompt)
 
 	if p.ModelName != "" {
 		_ = a.sd.SetModel(p.ModelName)
@@ -2441,9 +2511,7 @@ func (a *App) GenerateCompoundImage(params GenerateCompoundImageParams) (*Genera
 		if params.ExtraNegativePrompt != "" {
 			negativePrompt = params.ExtraNegativePrompt
 		}
-		if a.isKidsMode() {
-			negativePrompt += ", " + config.KidsModeNegativePrompt
-		}
+		negativePrompt = a.applyKidsNegative(negativePrompt)
 
 		if p.ModelName != "" {
 			_ = a.sd.SetModel(p.ModelName)
@@ -2620,10 +2688,7 @@ func (a *App) GenerateFromImage(params GenerateFromImageParams) (*GenerateImageR
 		sdPromptInstruction = v
 	}
 
-	systemPrompt := sdPromptInstruction
-	if a.isKidsMode() {
-		systemPrompt += config.KidsModePrompt
-	}
+	systemPrompt := a.applyKidsSystemPrompt(sdPromptInstruction)
 
 	maxTokens := 256
 	if v, err := a.presets.GetSetting("llm_max_tokens"); err == nil && v != "" {
@@ -2680,10 +2745,8 @@ RESPONSE LENGTH: your response is limited to ~%d tokens. You MUST fit within thi
 	promptResult.NegativePrompt = stripJunk(promptResult.NegativePrompt)
 	promptResult.NegativePrompt = truncateRepetitive(promptResult.NegativePrompt, 500)
 
-	if a.isKidsMode() {
-		promptResult.Prompt = kids.FilterOutput(promptResult.Prompt)
-		promptResult.NegativePrompt = kids.FilterOutput(promptResult.NegativePrompt)
-	}
+	promptResult.Prompt = a.filterKidsOutput(promptResult.Prompt)
+	promptResult.NegativePrompt = a.filterKidsOutput(promptResult.NegativePrompt)
 
 	prompt := promptResult.Prompt
 	if p.Loras != "" {
@@ -2699,9 +2762,7 @@ RESPONSE LENGTH: your response is limited to ~%d tokens. You MUST fit within thi
 	if params.ExtraNegativePrompt != "" {
 		negativePrompt += ", " + params.ExtraNegativePrompt
 	}
-	if a.isKidsMode() {
-		negativePrompt += ", " + config.KidsModeNegativePrompt
-	}
+	negativePrompt = a.applyKidsNegative(negativePrompt)
 
 	if p.ModelName != "" {
 		_ = a.sd.SetModel(p.ModelName)
@@ -2877,10 +2938,7 @@ func (a *App) generateFromImageCompound(params GenerateFromImageParams, tags str
 		sdPromptInstruction = v
 	}
 
-	systemPrompt := sdPromptInstruction
-	if a.isKidsMode() {
-		systemPrompt += config.KidsModePrompt
-	}
+	systemPrompt := a.applyKidsSystemPrompt(sdPromptInstruction)
 
 	maxTokens := 256
 	if v, err := a.presets.GetSetting("llm_max_tokens"); err == nil && v != "" {
@@ -2933,10 +2991,8 @@ RESPONSE LENGTH: your response is limited to ~%d tokens. You MUST fit within thi
 	promptResult.NegativePrompt = stripJunk(promptResult.NegativePrompt)
 	promptResult.NegativePrompt = truncateRepetitive(promptResult.NegativePrompt, 500)
 
-	if a.isKidsMode() {
-		promptResult.Prompt = kids.FilterOutput(promptResult.Prompt)
-		promptResult.NegativePrompt = kids.FilterOutput(promptResult.NegativePrompt)
-	}
+	promptResult.Prompt = a.filterKidsOutput(promptResult.Prompt)
+	promptResult.NegativePrompt = a.filterKidsOutput(promptResult.NegativePrompt)
 
 	var lastImage string
 	var lastInfo json.RawMessage
@@ -2970,9 +3026,7 @@ RESPONSE LENGTH: your response is limited to ~%d tokens. You MUST fit within thi
 		if params.ExtraNegativePrompt != "" {
 			negativePrompt += ", " + params.ExtraNegativePrompt
 		}
-		if a.isKidsMode() {
-			negativePrompt += ", " + config.KidsModeNegativePrompt
-		}
+		negativePrompt = a.applyKidsNegative(negativePrompt)
 
 		if p.ModelName != "" {
 			_ = a.sd.SetModel(p.ModelName)
@@ -3182,11 +3236,16 @@ func (a *App) BatchCompoundGenerate(params BatchCompoundGenerateParams) error {
 			if params.ExtraNegativePrompt != "" {
 				negativePrompt = params.ExtraNegativePrompt
 			}
-			if a.isKidsMode() {
-				prompt = kids.FilterInput(prompt)
-				negativePrompt = kids.FilterInput(negativePrompt)
-				negativePrompt += ", " + config.KidsModeNegativePrompt
+			var filterErr error
+			prompt, filterErr = a.filterKidsInput(prompt)
+			if filterErr != nil {
+				return fmt.Errorf("step %d: %w", stepIdx+1, filterErr)
 			}
+			negativePrompt, filterErr = a.filterKidsInput(negativePrompt)
+			if filterErr != nil {
+				return fmt.Errorf("step %d: %w", stepIdx+1, filterErr)
+			}
+			negativePrompt = a.applyKidsNegative(negativePrompt)
 
 			if p.ModelName != "" {
 				_ = a.sd.SetModel(p.ModelName)
@@ -3357,8 +3416,10 @@ func (a *App) TestCompoundGenerate(params TestCompoundGenerateParams) ([]TestGen
 			}
 
 			prompt := params.Prompt
-			if a.isKidsMode() {
-				prompt = kids.FilterInput(prompt)
+			prompt, filterErr := a.filterKidsInput(prompt)
+			if filterErr != nil {
+				item.Error = filterErr.Error()
+				break
 			}
 			if p.Loras != "" {
 				var loras []preset.LoRAEntry
@@ -3377,9 +3438,7 @@ func (a *App) TestCompoundGenerate(params TestCompoundGenerateParams) ([]TestGen
 					negPrompt = p.NegativePrompt
 				}
 			}
-			if a.isKidsMode() {
-				negPrompt += ", " + config.KidsModeNegativePrompt
-			}
+			negPrompt = a.applyKidsNegative(negPrompt)
 
 			if p.ModelName != "" {
 				_ = a.sd.SetModel(p.ModelName)

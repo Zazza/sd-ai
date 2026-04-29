@@ -543,7 +543,7 @@ onUnmounted(() => {
             Batch Generation
           </button>
 
-          <details style="margin-top: 8px;" class="card">
+          <details v-if="!kidsModeActive" style="margin-top: 8px;" class="card">
             <summary style="cursor: pointer; color: var(--text-dim); font-size: 13px; padding: 8px;">Edit SD Prompt</summary>
             <div style="margin-top: 8px;">
               <div class="form-group">
@@ -559,6 +559,9 @@ onUnmounted(() => {
               </button>
             </div>
           </details>
+          <div v-else style="margin-top: 8px; padding: 8px; background: var(--bg-secondary); border-radius: 6px; text-align: center; font-size: 12px; color: var(--text-dim);">
+            &#128274; Prompt editing disabled in Kids Mode
+          </div>
         </div>
       </div>
 
