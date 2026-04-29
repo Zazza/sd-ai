@@ -1,6 +1,6 @@
-# SD Studio — Установка сервисов
+# SD Studio — Service Setup Guide
 
-## Содержание
+## Contents
 
 - [Stable Diffusion WebUI](#stable-diffusion-webui)
 - [Ollama](#ollama)
@@ -12,16 +12,15 @@
 
 ## Stable Diffusion WebUI
 
-Генерация изображений. SD Studio подключается по API.
+Image generation engine. SD Studio connects via REST API.
 
-### Установка (Python + Git)
+### Installation (Python + Git)
 
 ```bash
-# Клонирование
 git clone https://github.com/AUTOMATIC1111/stable-diffusion-webui.git
 cd stable-diffusion-webui
 
-# Запуск с доступом по сети
+# Start with network access
 ./webui.sh --listen --api --enable-insecure-extension-access
 ```
 
@@ -30,84 +29,83 @@ Windows:
 webui.bat --listen --api --enable-insecure-extension-access
 ```
 
-### Флаги
+### Flags
 
-| Флаг | Описание |
-|------|----------|
-| `--listen` | Доступ с других устройств в сети |
-| `--api` | Включить REST API |
-| `--enable-insecure-extension-access` | Разрешить установку расширений |
-| `--port 7860` | Порт (по умолчанию 7860) |
-| `--xformers` | Ускорение генерации (NVIDIA) |
-| `--medvram` | Экономия VRAM (4–6 ГБ) |
-| `--lowvram` | Минимальное потребление VRAM (2–4 ГБ) |
+| Flag | Description |
+|------|-------------|
+| `--listen` | Allow connections from other devices |
+| `--api` | Enable REST API |
+| `--enable-insecure-extension-access` | Allow extension installation |
+| `--port 7860` | Port (default: 7860) |
+| `--xformers` | Accelerate generation (NVIDIA) |
+| `--medvram` | Save VRAM (4–6 GB) |
+| `--lowvram` | Minimal VRAM usage (2–4 GB) |
 
-### Проверка
+### Verification
 
-Открыть `http://localhost:7860/sdapi/v1/sd-models` — должен вернуть JSON со списком моделей.
+Open `http://localhost:7860/sdapi/v1/sd-models` — should return JSON with model list.
 
-### Модели
+### Models
 
-Скачать `.safetensors` в папку `models/Stable-diffusion/`:
+Download `.safetensors` into `models/Stable-diffusion/`:
 
-- [Civitai](https://civitai.com/) — основное хранилище моделей
+- [Civitai](https://civitai.com/) — main model repository
 - [HuggingFace](https://huggingface.co/models?pipeline_tag=text-to-image)
 
-LoRA — в `models/Lora/`, VAE — в `models/VAE/`.
+LoRA → `models/Lora/`, VAE → `models/VAE/`.
 
 ---
 
 ## Ollama
 
-Локальный LLM-сервер. SD Studio использует его для генерации промптов и анализа изображений.
+Local LLM server. SD Studio uses it for prompt generation and image analysis.
 
-### Установка
+### Installation
 
 **macOS / Linux:**
 ```bash
 curl -fsSL https://ollama.com/install.sh | sh
 ```
 
-**macOS (альтернатива):** Скачать с [ollama.com/download](https://ollama.com/download)
+**macOS (alternative):** Download from [ollama.com/download](https://ollama.com/download)
 
-**Linux (ручная установка):**
+**Linux (manual):**
 ```bash
 curl -L https://ollama.com/download/ollama-linux-amd64 -o /usr/local/bin/ollama
 chmod +x /usr/local/bin/ollama
 ```
 
-### Запуск
+### Running
 
 ```bash
-# Автозапуск (macOS app / systemd)
+# Auto-start (macOS app / systemd)
 ollama serve
 
-# Запуск модели
+# Run a model
 ollama run llama3.2-vision
 ```
 
-### Модели для SD Studio
+### Recommended Models
 
 ```bash
-# Для генерации промптов (обязательно)
+# For prompt generation (required)
 ollama pull llama3.2
 
-# Для анализа изображений (требуется vision-модель)
+# For image analysis (vision model required)
 ollama pull llama3.2-vision
 ollama pull llava:13b
 ollama pull minicpm-v
 ```
 
-### Доступ по сети
+### Network Access
 
-Ollama слушает только `localhost` по умолчанию. Для доступа с другого устройства:
+Ollama listens on `localhost` by default. To allow remote connections:
 
 ```bash
-# Linux/macOS
 OLLAMA_HOST=0.0.0.0:11434 ollama serve
 ```
 
-Или переменная окружения:
+Or set environment variable:
 ```bash
 export OLLAMA_HOST=0.0.0.0:11434
 ```
@@ -118,64 +116,64 @@ systemd (`/etc/systemd/system/ollama.service`):
 Environment="OLLAMA_HOST=0.0.0.0:11434"
 ```
 
-### Проверка
+### Verification
 
 ```bash
 curl http://localhost:11434/api/tags
 ```
 
-В SD Studio Settings → Connection: выбрать **Ollama**, URL `http://localhost:11434`.
+In SD Studio → Settings → Connection: select **Ollama**, URL `http://localhost:11434`.
 
 ---
 
 ## LM Studio
 
-GUI-приложение для LLM. Проще в настройке, чем Ollama.
+GUI application for LLMs. Easier to set up than Ollama.
 
-### Установка
+### Installation
 
-Скачать с [lmstudio.ai](https://lmstudio.ai/) (macOS / Windows / Linux).
+Download from [lmstudio.ai](https://lmstudio.ai/) (macOS / Windows / Linux).
 
-### Настройка
+### Setup
 
-1. Открыть LM Studio
-2. Скачать модель (вкладка Search):
-   - `Llama 3.2 3B Instruct` — для генерации промптов
-   - `Llama 3.2 11B Vision Instruct` — для анализа изображений
-3. Перейти на вкладку **Local Server** (значок ➔ на левой панели)
-4. Выбрать модель из выпадающего списка
-5. Нажать **Start Server**
-6. Порт по умолчанию: `1234`
+1. Open LM Studio
+2. Download a model (Search tab):
+   - `Llama 3.2 3B Instruct` — for prompt generation
+   - `Llama 3.2 11B Vision Instruct` — for image analysis
+3. Go to **Local Server** tab (arrow icon on the left panel)
+4. Select a model from the dropdown
+5. Click **Start Server**
+6. Default port: `1234`
 
-### Доступ по сети
+### Network Access
 
-В LM Studio: Settings → Advanced → **Enable CORS** и в настройках сервера указать `0.0.0.0`.
+In LM Studio: Settings → Advanced → **Enable CORS** and set server host to `0.0.0.0`.
 
-### Проверка
+### Verification
 
 ```bash
 curl http://localhost:1234/v1/models
 ```
 
-В SD Studio Settings → Connection: выбрать **LM Studio**, URL `http://localhost:1234`.
+In SD Studio → Settings → Connection: select **LM Studio**, URL `http://localhost:1234`.
 
 ---
 
 ## llama.cpp
 
-Минимальный LLM-сервер на C++. Для слабых машин без Python.
+Minimal C++ LLM server. Good for low-end machines without Python.
 
-### Установка
+### Installation
 
-**Сборка из исходников:**
+**Build from source:**
 ```bash
 git clone https://github.com/ggerganov/llama.cpp
 cd llama.cpp
 
-# С CUDA
+# With CUDA
 cmake -B build -DGGML_CUDA=ON && cmake --build build --config Release
 
-# Только CPU
+# CPU only
 cmake -B build && cmake --build build --config Release
 ```
 
@@ -184,48 +182,48 @@ cmake -B build && cmake --build build --config Release
 brew install llama.cpp
 ```
 
-### Запуск сервера
+### Running the Server
 
 ```bash
 # CPU
 ./llama-server -m model.gguf --host 0.0.0.0 --port 8081 -c 4096
 
-# С GPU (CUDA)
+# With GPU (CUDA)
 ./llama-server -m model.gguf --host 0.0.0.0 --port 8081 -ngl 99 -c 4096
 ```
 
-| Параметр | Описание |
-|----------|----------|
-| `-m` | Путь к .gguf файлу модели |
-| `--host` | Адрес привязки (`0.0.0.0` для сети) |
-| `--port` | Порт |
-| `-ngl` | Количество слоёв на GPU (99 = все) |
-| `-c` | Размер контекста |
+| Parameter | Description |
+|-----------|-------------|
+| `-m` | Path to .gguf model file |
+| `--host` | Bind address (`0.0.0.0` for network) |
+| `--port` | Port number |
+| `-ngl` | GPU layers (99 = all) |
+| `-c` | Context size |
 
-### Где брать модели
+### Models
 
-Скачать `.gguf` файлы с [HuggingFace](https://huggingface.co/models?search=gguf):
+Download `.gguf` files from [HuggingFace](https://huggingface.co/models?search=gguf):
 
 - [Llama 3.2 3B](https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-GGUF)
-- [Llama 3.2 Vision](https://huggingface.co/bartowski/Llama-3.2-11B-Vision-Instruct-GGUF) — для анализа
+- [Llama 3.2 Vision](https://huggingface.co/bartowski/Llama-3.2-11B-Vision-Instruct-GGUF) — for analysis
 
-### Проверка
+### Verification
 
 ```bash
 curl http://localhost:8081/v1/models
 ```
 
-В SD Studio Settings → Connection: выбрать **llama.cpp**, URL `http://localhost:8081`.
+In SD Studio → Settings → Connection: select **llama.cpp**, URL `http://localhost:8081`.
 
-> **Примечание:** llama.cpp не поддерживает смену модели через API. Модель задаётся при запуске сервера.
+> **Note:** llama.cpp does not support model switching via API. The model is set at server startup.
 
 ---
 
 ## Rembg
 
-AI-удаление фона. Используется для чистого вырезания персонажей при multi-character генерации. Работает как отдельный HTTP-сервис.
+AI background removal. Used for clean character extraction in multi-character generation. Runs as a standalone HTTP service.
 
-### Установка
+### Installation
 
 **CPU:**
 ```bash
@@ -237,56 +235,61 @@ pip install "rembg[cli]"
 pip install "rembg[gpu,cli]"
 ```
 
-> Требуется Python 3.10+. Для GPU: CUDA Toolkit + cuDNN.
+> Requires Python 3.10+. For GPU: CUDA Toolkit + cuDNN.
 
-### Запуск сервера
+**Windows (if `rembg` command not found):**
+```bat
+python -m rembg s --host 0.0.0.0 --port 7000
+```
+
+### Running the Server
 
 ```bash
 rembg s --host 0.0.0.0 --port 7000 --log_level info
 ```
 
-При первом запуске скачается модель (~180 МБ, сохраняется в `~/.u2net/`).
+On first run, the model downloads automatically (~180 MB, saved to `~/.u2net/`).
 
-### Модели
+### Models
 
-По умолчанию используется `u2net`. Можно указать другую:
+Default model is `u2net`. Specify a different one:
 
 ```bash
 rembg s --host 0.0.0.0 --port 7000 -m birefnet-general
 ```
 
-| Модель | Размер | Качество | Скорость |
-|--------|--------|----------|----------|
-| `u2net` | 176 МБ | Хорошее | Средняя |
-| `u2netp` | 4 МБ | Среднее | Быстрая |
-| `isnet-general-use` | 176 МБ | Хорошее | Средняя |
-| `birefnet-general` | 176 МБ | Отличное | Медленнее |
-| `birefnet-general-lite` | 88 МБ | Хорошее | Средняя |
-| `birefnet-portrait` | 176 МБ | Отличное для портретов | Средняя |
-| `isnet-anime` | 176 МБ | Отличное для аниме | Средняя |
+| Model | Size | Quality | Speed |
+|-------|------|---------|-------|
+| `u2net` | 176 MB | Good | Medium |
+| `u2netp` | 4 MB | Fair | Fast |
+| `isnet-general-use` | 176 MB | Good | Medium |
+| `birefnet-general` | 176 MB | Excellent | Slower |
+| `birefnet-general-lite` | 88 MB | Good | Medium |
+| `birefnet-portrait` | 176 MB | Excellent for portraits | Medium |
+| `isnet-anime` | 176 MB | Excellent for anime | Medium |
 
-### Проверка
+### Verification
 
 ```bash
-# Проверка API
+# Check API
 curl http://localhost:7000/api
 
-# Тест удаления фона
+# Test background removal
 curl -s -F file=@test.png http://localhost:7000/api/remove -o result.png
 ```
 
-### Настройка в SD Studio
+### SD Studio Configuration
 
-Settings → Rembg → ввести URL (`http://192.168.1.100:7000`) → **Test** → **Save**.
+Settings → Rembg → enter URL (e.g. `http://192.168.1.100:7000`) → **Test** → **Save**.
 
-Если rembg не настроен, SD Studio использует встроенный Go-алгоритм удаления фона (худшее качество, артефакты на краях).
+If rembg is not configured, SD Studio falls back to built-in Go-based background removal (lower quality, visible edge artifacts).
 
 ---
 
-## Быстрая сводка по подключению
+## Quick Reference
 
-| Сервис | Порт по умолчанию | URL для SD Studio |
-|--------|-------------------|-------------------|
+| Service | Default Port | SD Studio URL |
+|---------|-------------|---------------|
 | Stable Diffusion | 7860 | `http://localhost:7860` |
 | Ollama | 11434 | `http://localhost:11434` |
 | LM Studio | 1234 | `http://localhost:1234` |

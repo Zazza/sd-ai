@@ -9,6 +9,7 @@ import TestPage from './components/TestPage.vue'
 import CompoundPresetsPage from './components/CompoundPresetsPage.vue'
 import GenerateFromImagePage from './components/GenerateFromImagePage.vue'
 import SceneEditorPage from './components/SceneEditorPage.vue'
+import AppFooter from './components/AppFooter.vue'
 
 const page = ref('generate')
 const batchProps = ref({})
@@ -103,5 +104,6 @@ const close = () => Quit()
       <SceneEditorPage v-else-if="page === 'scene'" />
     </main>
     </div>
+    <AppFooter />
   </div>
 </template>

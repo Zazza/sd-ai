@@ -16,6 +16,7 @@ const result = ref(null)
 const resultImage = ref('')
 const llmAvailable = ref(false)
 const sdAvailable = ref(false)
+const savedScenes = ref([])
 
 const presetOptions = computed(() =>
   presets.value.map(p => ({ id: p.id, name: p.name }))
@@ -62,6 +63,35 @@ async function checkServices() {
     llmAvailable.value = status.llm?.available || false
     sdAvailable.value = status.sd?.available || false
   } catch {}
+}
+
+async function loadSavedScenes() {
+  try {
+    const list = await api.listSavedScenes()
+    savedScenes.value = list || []
+  } catch {}
+}
+
+async function loadScene(id) {
+  try {
+    const saved = await api.getSavedScene(id)
+    const parsed = JSON.parse(saved.scene_json)
+    scene.value = parsed
+    selectedPresetId.value = parsed.preset_id || null
+    result.value = null
+    resultImage.value = ''
+  } catch (e) {
+    error.value = 'Failed to load scene: ' + e
+  }
+}
+
+async function deleteScene(id) {
+  try {
+    await api.deleteSavedScene(id)
+    savedScenes.value = savedScenes.value.filter(s => s.id !== id)
+  } catch (e) {
+    error.value = 'Delete failed: ' + e
+  }
 }
 
 async function decompose() {
@@ -146,6 +176,7 @@ async function saveScene() {
       name,
       scene_json: JSON.stringify(scene.value)
     })
+    loadSavedScenes()
   } catch (e) {
     error.value = 'Save failed: ' + e
   }
@@ -154,6 +185,7 @@ async function saveScene() {
 onMounted(() => {
   loadPresets()
   checkServices()
+  loadSavedScenes()
 })
 </script>
 
@@ -191,6 +223,17 @@ onMounted(() => {
       <button @click="decompose" :disabled="decomposing || !llmAvailable || !selectedPresetId" class="btn-primary">
         {{ decomposing ? 'Decomposing...' : 'Decompose Scene' }}
       </button>
+
+      <div v-if="savedScenes.length > 0" class="saved-scenes">
+        <h4>Saved Scenes</h4>
+        <div v-for="s in savedScenes" :key="s.id" class="saved-scene-item">
+          <div class="saved-scene-info">
+            <span class="saved-scene-name" @click="loadScene(s.id)">{{ s.name }}</span>
+            <span class="saved-scene-date">{{ s.created_at?.slice(0, 10) }}</span>
+          </div>
+          <button @click="deleteScene(s.id)" class="btn-danger btn-sm">Delete</button>
+        </div>
+      </div>
     </div>
 
     <!-- Step 2: Scene Editor -->
@@ -513,5 +556,45 @@ textarea { resize: vertical; font-family: inherit; }
   border-radius: 4px;
   cursor: pointer;
   font-size: 0.85em;
+}
+
+.saved-scenes {
+  margin-top: 20px;
+  border-top: 1px solid var(--color-border, #444);
+  padding-top: 16px;
+}
+
+.saved-scenes h4 {
+  margin-bottom: 10px;
+  color: var(--color-text-secondary, #aaa);
+}
+
+.saved-scene-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--color-border, #333);
+}
+
+.saved-scene-info {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.saved-scene-name {
+  color: var(--color-text, #eee);
+  cursor: pointer;
+  font-size: 0.9em;
+}
+
+.saved-scene-name:hover {
+  text-decoration: underline;
+}
+
+.saved-scene-date {
+  color: var(--color-text-secondary, #888);
+  font-size: 0.8em;
 }
 </style>

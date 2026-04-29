@@ -28,6 +28,7 @@ import (
 	"go-sd/internal/config"
 	"go-sd/internal/kids"
 	"go-sd/internal/llm"
+	"go-sd/internal/logger"
 	"go-sd/internal/preset"
 	"go-sd/internal/rembg"
 	"go-sd/internal/sd"
@@ -39,6 +40,7 @@ type App struct {
 	llm          *llm.Client
 	sd           *sd.Client
 	rembgClient  *rembg.Client
+	log          *logger.Logger
 	config       *config.Config
 	dataDir      string
 	batchMu      sync.Mutex
@@ -51,6 +53,7 @@ func NewApp(presets *preset.DB, llmClient *llm.Client, sdClient *sd.Client, cfg 
 		llm:         llmClient,
 		sd:          sdClient,
 		rembgClient: rembg.New(""),
+		log:         logger.New(nil),
 		config:      cfg,
 		dataDir:     filepath.Dir(cfg.DBPath),
 	}
@@ -58,6 +61,7 @@ func NewApp(presets *preset.DB, llmClient *llm.Client, sdClient *sd.Client, cfg 
 
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+	a.log.SetContext(ctx)
 }
 
 func (a *App) isKidsMode() bool {
@@ -117,6 +121,7 @@ func (a *App) CheckServices() ServiceStatus {
 		defer wg.Done()
 		if err := a.llm.HealthCheck(); err != nil {
 			status.LLM.Available = false
+			a.log.Warn("LLM unavailable: %s", err)
 			return
 		}
 		status.LLM.Available = true
@@ -127,6 +132,7 @@ func (a *App) CheckServices() ServiceStatus {
 		defer wg.Done()
 		if err := a.sd.HealthCheck(); err != nil {
 			status.SD.Available = false
+			a.log.Warn("SD unavailable: %s", err)
 			return
 		}
 		status.SD.Available = true
@@ -139,6 +145,7 @@ func (a *App) CheckServices() ServiceStatus {
 	}()
 
 	wg.Wait()
+	a.log.Debug("Service check: LLM=%v SD=%v", status.LLM.Available, status.SD.Available)
 	return status
 }
 
@@ -594,8 +601,10 @@ type GenerateImageResult struct {
 }
 
 func (a *App) GenerateImage(params GenerateImageParams) (*GenerateImageResult, error) {
+	a.log.UserAction("Generate image (preset_id=%d)", params.PresetID)
 	p, err := a.presets.Get(params.PresetID)
 	if err != nil {
+		a.log.Error("Generate image: preset not found: %s", err)
 		return nil, err
 	}
 
@@ -1633,6 +1642,14 @@ func (a *App) UpdateSettings(data map[string]string) error {
 		a.rembgClient.SetURL(v)
 	}
 
+	var changed []string
+	for k := range data {
+		if allowed[k] {
+			changed = append(changed, k)
+		}
+	}
+	a.log.UserAction("Settings updated: %s", strings.Join(changed, ", "))
+
 	return nil
 }
 
@@ -1820,6 +1837,7 @@ func (a *App) SaveImage(base64Data, defaultName string) (string, error) {
 		return "", err
 	}
 
+	a.log.UserAction("Image saved: %s", path)
 	return path, nil
 }
 
@@ -3465,6 +3483,7 @@ type DecomposeSceneParams struct {
 }
 
 func (a *App) DecomposeScene(params DecomposeSceneParams) (*compositor.Scene, error) {
+	a.log.UserAction("Decompose scene: %s", truncate(params.Description, 80))
 	if params.Description == "" {
 		return nil, fmt.Errorf("description is required")
 	}
@@ -3518,8 +3537,20 @@ func (a *App) DecomposeScene(params DecomposeSceneParams) (*compositor.Scene, er
 }
 
 func (a *App) GenerateMultiPass(scene compositor.Scene) (*compositor.MultiPassResult, error) {
+	a.log.UserAction("Multi-pass generation: %d characters", len(scene.Characters))
+
 	emit := func(progress compositor.MultiPassProgress) {
 		runtime.EventsEmit(a.ctx, "multipass:progress", progress)
+		switch progress.Step {
+		case "background":
+			a.log.Info("Generating background...")
+		case "character":
+			a.log.Info("Generating character %d/%d", progress.Character, progress.Total)
+		case "rembg":
+			a.log.Info("Removing background (character %d/%d)", progress.Character, progress.Total)
+		case "done":
+			a.log.Info("Multi-pass generation complete")
+		}
 	}
 
 	rembgURL, _ := a.presets.GetSetting("rembg_url")
@@ -3527,11 +3558,15 @@ func (a *App) GenerateMultiPass(scene compositor.Scene) (*compositor.MultiPassRe
 	if rembgURL != "" {
 		a.rembgClient.SetURL(rembgURL)
 		rembgIf = a.rembgClient
+		a.log.Debug("Rembg enabled: %s", rembgURL)
+	} else {
+		a.log.Warn("Rembg not configured, using Go-based background removal")
 	}
 
 	c := compositor.New(a.sd, rembgIf, a.presets, emit)
 	result, err := c.GenerateScene(scene)
 	if err != nil {
+		a.log.Error("Multi-pass failed: %s", err)
 		return nil, err
 	}
 
@@ -3548,7 +3583,13 @@ func (a *App) CheckRembg() error {
 		return fmt.Errorf("rembg URL not configured")
 	}
 	a.rembgClient.SetURL(rembgURL)
-	return a.rembgClient.HealthCheck()
+	err := a.rembgClient.HealthCheck()
+	if err != nil {
+		a.log.Error("Rembg check failed: %s", err)
+	} else {
+		a.log.Info("Rembg connected: %s", rembgURL)
+	}
+	return err
 }
 
 func (a *App) ListSavedScenes() ([]preset.SavedScene, error) {
@@ -3591,4 +3632,11 @@ func (a *App) UpdateSavedScene(s preset.SavedScene) (*preset.SavedScene, error) 
 
 func (a *App) DeleteSavedScene(id int64) error {
 	return a.presets.DeleteSavedScene(id)
+}
+
+func truncate(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "..."
 }
