@@ -1,4 +1,8 @@
-.PHONY: dev build test lint tidy clean
+.PHONY: setup dev build test lint tidy clean
+
+setup:
+	go mod download
+	cd frontend && npm install
 
 dev:
 	wails dev

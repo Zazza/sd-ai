@@ -77,6 +77,7 @@ go install github.com/wailsapp/wails/v2/cmd/wails@latest
 ### Makefile Commands
 
 ```bash
+make setup     # first-time: download Go + frontend deps
 make dev       # wails dev
 make build     # npm install + wails build
 make test      # go vet/test + frontend build
