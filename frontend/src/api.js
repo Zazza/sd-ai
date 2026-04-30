@@ -21,6 +21,7 @@ import {
   CheckRembg,
   ClearLastImage,
   ListExportPresets, SaveExportPreset, DeleteExportPreset, ExportImage,
+  BrowseDirectory, ReadFileAsBase64, ReadThumbnail, SelectBrowserFolder, SetLastImage,
 } from './wailsjs/go/main/App.js'
 
 export const api = {
@@ -102,4 +103,9 @@ export const api = {
   saveExportPreset: (data) => SaveExportPreset(data),
   deleteExportPreset: (id) => DeleteExportPreset(id),
   exportImage: (params) => ExportImage(params),
+  browseDirectory: (path) => BrowseDirectory(path),
+  readFileAsBase64: (path) => ReadFileAsBase64(path),
+  readThumbnail: (path) => ReadThumbnail(path),
+  selectBrowserFolder: () => SelectBrowserFolder(),
+  setLastImage: (base64) => SetLastImage(base64),
 }

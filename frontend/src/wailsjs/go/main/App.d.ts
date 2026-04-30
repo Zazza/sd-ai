@@ -12,6 +12,8 @@ export function BatchCompoundGenerate(arg1:main.BatchCompoundGenerateParams):Pro
 
 export function BatchGenerate(arg1:main.BatchGenerateParams):Promise<void>;
 
+export function BrowseDirectory(arg1:string):Promise<Array<main.FileEntry>>;
+
 export function CheckRembg():Promise<void>;
 
 export function CheckServices():Promise<main.ServiceStatus>;
@@ -120,7 +122,11 @@ export function OpenImportFile():Promise<main.ImportPreview>;
 
 export function ReadClipboardImage():Promise<string>;
 
+export function ReadFileAsBase64(arg1:string):Promise<string>;
+
 export function ReadImageFile():Promise<string>;
+
+export function ReadThumbnail(arg1:string):Promise<string>;
 
 export function RecommendPreset(arg1:string):Promise<main.RecommendPresetResult>;
 
@@ -130,11 +136,15 @@ export function SaveImage(arg1:string,arg2:string):Promise<string>;
 
 export function SaveScene(arg1:preset.SavedScene):Promise<preset.SavedScene>;
 
+export function SelectBrowserFolder():Promise<string>;
+
 export function SelectFolder():Promise<string>;
 
 export function SetKidsCategory(arg1:string,arg2:boolean,arg3:string):Promise<void>;
 
 export function SetKidsMode(arg1:boolean,arg2:string):Promise<void>;
+
+export function SetLastImage(arg1:string):Promise<void>;
 
 export function TestCompoundGenerate(arg1:main.TestCompoundGenerateParams):Promise<Array<main.TestGenerateResultItem>>;
 

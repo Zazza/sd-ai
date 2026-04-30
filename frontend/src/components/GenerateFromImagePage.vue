@@ -533,6 +533,9 @@ onMounted(async () => {
     if (shared.selectedCompoundPresetId) selectedCompoundPresetId.value = shared.selectedCompoundPresetId
     if (shared.genMode) genMode.value = shared.genMode
   }
+  if (!props.droppedImage && !uploadedImage.value) {
+    await useLastImage()
+  }
 })
 
 onUnmounted(() => {

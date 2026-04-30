@@ -1,7 +1,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { WindowSetSystemDefaultTheme, EventsOn, EventsOff } from './wailsjs/runtime/runtime'
-import { Diamond, Sparkles, LayoutGrid, Sliders, Settings, RotateCcw, Download } from 'lucide-vue-next'
+import { Diamond, Sparkles, LayoutGrid, Sliders, Settings, RotateCcw, Download, FolderOpen } from 'lucide-vue-next'
 import { api } from './api.js'
 import UnifiedPresetsPage from './components/UnifiedPresetsPage.vue'
 import UnifiedGeneratePage from './components/UnifiedGeneratePage.vue'
@@ -9,12 +9,16 @@ import ExportPage from './components/ExportPage.vue'
 import SettingsPage from './components/SettingsPage.vue'
 import SceneEditorPage from './components/SceneEditorPage.vue'
 import AppFooter from './components/AppFooter.vue'
+import FileBrowserPage from './components/FileBrowserPage.vue'
 
 const page = ref('generate')
 const resetKey = ref(0)
 const confirmReset = ref(false)
 const resetting = ref(false)
 let resetTimer = null
+
+const generateTab = ref('')
+const generateKey = ref(0)
 
 async function resetAll() {
   if (resetting.value) return
@@ -69,6 +73,14 @@ async function resetAll() {
   }
 }
 
+function onBrowserNavigate(target) {
+  if (target.tab) {
+    generateTab.value = target.tab
+    generateKey.value++
+  }
+  page.value = target.page
+}
+
 const currentPage = computed(() => {
   switch (page.value) {
     case 'generate': return UnifiedGeneratePage
@@ -76,6 +88,7 @@ const currentPage = computed(() => {
     case 'scene': return SceneEditorPage
     case 'presets': return UnifiedPresetsPage
     case 'settings': return SettingsPage
+    case 'browser': return FileBrowserPage
     default: return UnifiedGeneratePage
   }
 })
@@ -110,6 +123,12 @@ onUnmounted(() => {
           </a>
         </div>
         <div class="sidebar-group">
+          <div class="sidebar-group-label">Tools</div>
+          <a class="sidebar-link" :class="{ active: page === 'browser' }" @click="page = 'browser'">
+            <FolderOpen :size="16" class="icon" /> File Browser
+          </a>
+        </div>
+        <div class="sidebar-group">
           <div class="sidebar-group-label">Management</div>
           <a class="sidebar-link" :class="{ active: page === 'presets' }" @click="page = 'presets'">
             <Sliders :size="16" class="icon" /> Presets
@@ -126,8 +145,9 @@ onUnmounted(() => {
       </div>
     </aside>
     <main class="main">
-      <UnifiedGeneratePage v-if="page === 'generate'" :key="resetKey" />
+      <UnifiedGeneratePage v-if="page === 'generate'" :key="resetKey + '-' + generateKey" :initial-tab="generateTab" />
       <ExportPage v-else-if="page === 'export'" />
+      <FileBrowserPage v-else-if="page === 'browser'" @navigate="onBrowserNavigate" />
       <component v-else :is="currentPage" />
     </main>
     </div>

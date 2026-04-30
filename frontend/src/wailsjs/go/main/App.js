@@ -14,6 +14,10 @@ export function BatchGenerate(arg1) {
   return window['go']['main']['App']['BatchGenerate'](arg1);
 }
 
+export function BrowseDirectory(arg1) {
+  return window['go']['main']['App']['BrowseDirectory'](arg1);
+}
+
 export function CheckRembg() {
   return window['go']['main']['App']['CheckRembg']();
 }
@@ -230,8 +234,16 @@ export function ReadClipboardImage() {
   return window['go']['main']['App']['ReadClipboardImage']();
 }
 
+export function ReadFileAsBase64(arg1) {
+  return window['go']['main']['App']['ReadFileAsBase64'](arg1);
+}
+
 export function ReadImageFile() {
   return window['go']['main']['App']['ReadImageFile']();
+}
+
+export function ReadThumbnail(arg1) {
+  return window['go']['main']['App']['ReadThumbnail'](arg1);
 }
 
 export function RecommendPreset(arg1) {
@@ -250,6 +262,10 @@ export function SaveScene(arg1) {
   return window['go']['main']['App']['SaveScene'](arg1);
 }
 
+export function SelectBrowserFolder() {
+  return window['go']['main']['App']['SelectBrowserFolder']();
+}
+
 export function SelectFolder() {
   return window['go']['main']['App']['SelectFolder']();
 }
@@ -260,6 +276,10 @@ export function SetKidsCategory(arg1, arg2, arg3) {
 
 export function SetKidsMode(arg1, arg2) {
   return window['go']['main']['App']['SetKidsMode'](arg1, arg2);
+}
+
+export function SetLastImage(arg1) {
+  return window['go']['main']['App']['SetLastImage'](arg1);
 }
 
 export function TestCompoundGenerate(arg1) {

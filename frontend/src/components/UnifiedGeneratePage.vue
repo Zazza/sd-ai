@@ -7,7 +7,11 @@ import GenerateFromImagePage from './GenerateFromImagePage.vue'
 import BatchPage from './BatchPage.vue'
 import TestPage from './TestPage.vue'
 
-const activeTab = ref('generate')
+const props = defineProps({
+  initialTab: { type: String, default: '' },
+})
+
+const activeTab = ref(props.initialTab || 'generate')
 const batchProps = ref({})
 const droppedImage = ref(null)
 
