@@ -16,6 +16,8 @@ export function CheckRembg():Promise<void>;
 
 export function CheckServices():Promise<main.ServiceStatus>;
 
+export function ClearLastImage():Promise<void>;
+
 export function CreateCompoundPreset(arg1:preset.CompoundPreset):Promise<preset.CompoundPreset>;
 
 export function CreateDescription(arg1:string):Promise<preset.SavedDescription>;

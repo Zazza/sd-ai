@@ -1,7 +1,8 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { WindowSetSystemDefaultTheme, EventsOn, EventsOff } from './wailsjs/runtime/runtime'
-import { Diamond, Sparkles, LayoutGrid, Sliders, Settings } from 'lucide-vue-next'
+import { Diamond, Sparkles, LayoutGrid, Sliders, Settings, RotateCcw } from 'lucide-vue-next'
+import { api } from './api.js'
 import UnifiedPresetsPage from './components/UnifiedPresetsPage.vue'
 import UnifiedGeneratePage from './components/UnifiedGeneratePage.vue'
 import SettingsPage from './components/SettingsPage.vue'
@@ -9,6 +10,63 @@ import SceneEditorPage from './components/SceneEditorPage.vue'
 import AppFooter from './components/AppFooter.vue'
 
 const page = ref('generate')
+const resetKey = ref(0)
+const confirmReset = ref(false)
+const resetting = ref(false)
+let resetTimer = null
+
+async function resetAll() {
+  if (resetting.value) return
+  if (!confirmReset.value) {
+    confirmReset.value = true
+    resetTimer = setTimeout(() => { confirmReset.value = false }, 3000)
+    return
+  }
+  clearTimeout(resetTimer)
+  confirmReset.value = false
+  resetting.value = true
+  try {
+    await api.updateSettings({
+      gen_preset_id: '',
+      gen_type_id: '',
+      gen_description: '',
+      gen_negative: '',
+      gen_extra_prompt: '',
+      gen_extra_negative: '',
+      gen_mode: 'preset',
+      gen_compound_preset_id: '',
+      fi_mode: 'img2img',
+      fi_preset_id: '',
+      fi_compound_preset_id: '',
+      fi_gen_mode: 'preset',
+      fi_denoising: '0.5',
+      fi_extra_negative: '',
+      fi_analyze_mode: 'quick',
+      batch_preset_id: '',
+      batch_compound_preset_id: '',
+      batch_mode: 'preset',
+      batch_prompt: '',
+      batch_negative: '',
+      batch_count: '',
+      batch_output_folder: '',
+      test_prompt: '',
+      test_negative: '',
+      test_mode: 'preset',
+      test_sampler: '',
+      test_schedule_type: '',
+      test_steps: '',
+      test_cfg_scale: '',
+      test_width: '',
+      test_height: '',
+    })
+    api.clearLastImage()
+    resetKey.value++
+  } catch (e) {
+    console.error('Reset failed:', e)
+  } finally {
+    resetting.value = false
+  }
+}
 
 const currentPage = computed(() => {
   switch (page.value) {
@@ -25,6 +83,7 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  clearTimeout(resetTimer)
 })
 </script>
 
@@ -55,9 +114,15 @@ onUnmounted(() => {
           </a>
         </div>
       </nav>
+      <div class="sidebar-footer">
+        <button class="sidebar-reset-btn" :class="{ confirm: confirmReset }" @click="resetAll">
+          <RotateCcw :size="14" class="icon" /> {{ confirmReset ? 'Confirm?' : 'Reset All' }}
+        </button>
+      </div>
     </aside>
     <main class="main">
-      <component :is="currentPage" />
+      <UnifiedGeneratePage v-if="page === 'generate'" :key="resetKey" />
+      <component v-else :is="currentPage" />
     </main>
     </div>
     <AppFooter />

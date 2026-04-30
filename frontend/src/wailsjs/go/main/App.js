@@ -22,6 +22,10 @@ export function CheckServices() {
   return window['go']['main']['App']['CheckServices']();
 }
 
+export function ClearLastImage() {
+  return window['go']['main']['App']['ClearLastImage']();
+}
+
 export function CreateCompoundPreset(arg1) {
   return window['go']['main']['App']['CreateCompoundPreset'](arg1);
 }

@@ -1975,6 +1975,11 @@ func (a *App) GetLastImage() (*GenerateImageResult, error) {
 	}, nil
 }
 
+func (a *App) ClearLastImage() {
+	os.Remove(filepath.Join(a.dataDir, "last_image.png"))
+	os.Remove(filepath.Join(a.dataDir, "last_image.json"))
+}
+
 // --- Save Image ---
 
 func (a *App) SaveImage(base64Data, defaultName string) (string, error) {
