@@ -704,9 +704,12 @@ function onKeydown(e) {
                 </template>
                 <span v-else>Analyze</span>
               </button>
-              <button class="btn btn-sm btn-secondary" @click="tags = ''" :disabled="!tags || generatingImage" title="Clear tags">&#10005;</button>
+              <button v-if="!kidsModeActive" class="btn btn-sm btn-secondary" @click="tags = ''" :disabled="!tags || generatingImage" title="Clear tags">&#10005;</button>
             </div>
-            <textarea class="form-textarea" v-model="tags" rows="4" placeholder="Tags extracted from image will appear here. Click Analyze or generate directly." :disabled="generatingImage"></textarea>
+            <textarea class="form-textarea" v-model="tags" rows="4" placeholder="Tags extracted from image will appear here. Click Analyze or generate directly." :disabled="generatingImage || kidsModeActive"></textarea>
+            <div v-if="kidsModeActive" style="margin-top: 4px; padding: 6px; background: var(--bg-secondary); border-radius: 4px; text-align: center; font-size: 11px; color: var(--text-dim);">
+              &#128274; Tags editing restricted in Kids Mode
+            </div>
           </div>
 
           <div v-if="recommendation" class="fi-recommendation">

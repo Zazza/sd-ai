@@ -65,8 +65,6 @@ SAFETY RULES (mandatory):
 - Only produce safe, family-friendly, child-appropriate content tags.
 - If the request cannot be made safe, respond with: "safe landscape, beautiful nature, sunny day, clear sky, peaceful meadow, colorful flowers, butterflies, gentle breeze, warm sunlight, family-friendly, wholesome, cute animals playing, rainbow"`
 
-const KidsModeNegativePrompt = "nsfw, nude, naked, porn, erotic, sexual, violence, gore, blood, horror, torture, death, kill, murder, weapon harm, drugs, alcohol, smoking, self-harm, suicide, abuse, assault, mature content, explicit, suggestive, provocative, disturbing, frightening, scary, creepy, disgusting, obscene"
-
 const DefaultAnalyzeSystemPrompt = `You are an expert image analyst for Stable Diffusion tag extraction.
 
 CRITICAL: SD is a limited image model. It does NOT understand sentences, metaphors, or abstract concepts.

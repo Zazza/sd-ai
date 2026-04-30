@@ -113,6 +113,68 @@ func (a *App) SetKidsMode(enabled bool, pin string) error {
 	return a.presets.SetSetting("kids_mode", "false")
 }
 
+type KidsCategoryInfo struct {
+	Name     string `json:"name"`
+	Label    string `json:"label"`
+	AlwaysOn bool   `json:"alwaysOn"`
+	Enabled  bool   `json:"enabled"`
+}
+
+func (a *App) GetKidsCategories() ([]KidsCategoryInfo, error) {
+	var result []KidsCategoryInfo
+	for _, cat := range kids.Categories {
+		v, _ := a.presets.GetSetting("kids_cat_" + cat.Name)
+		enabled := cat.AlwaysOn || v != "false"
+		result = append(result, KidsCategoryInfo{
+			Name:     cat.Name,
+			Label:    cat.Label,
+			AlwaysOn: cat.AlwaysOn,
+			Enabled:  enabled,
+		})
+	}
+	return result, nil
+}
+
+func (a *App) SetKidsCategory(name string, enabled bool, pin string) error {
+	if !a.isKidsMode() {
+		return fmt.Errorf("Kids Mode is not active")
+	}
+	var found *kids.Category
+	for i := range kids.Categories {
+		if kids.Categories[i].Name == name {
+			found = &kids.Categories[i]
+			break
+		}
+	}
+	if found == nil {
+		return fmt.Errorf("unknown category: %s", name)
+	}
+	if found.AlwaysOn {
+		return fmt.Errorf("category %s cannot be disabled", name)
+	}
+	storedHash, _ := a.presets.GetSetting("kids_pin_hash")
+	if storedHash != "" {
+		if err := a.checkPinLockout(); err != nil {
+			return err
+		}
+		if pin == "" {
+			return fmt.Errorf("PIN required")
+		}
+		hash := sha256.Sum256([]byte(pin))
+		if hex.EncodeToString(hash[:]) != storedHash {
+			a.recordFailedPinAttempt()
+			return fmt.Errorf("incorrect PIN")
+		}
+		a.presets.SetSetting("kids_pin_attempts", "0")
+		a.presets.SetSetting("kids_pin_lockout", "")
+	}
+	val := "true"
+	if !enabled {
+		val = "false"
+	}
+	return a.presets.SetSetting("kids_cat_"+name, val)
+}
+
 func (a *App) checkPinLockout() error {
 	lockoutStr, _ := a.presets.GetSetting("kids_pin_lockout")
 	if lockoutStr == "" {
@@ -147,6 +209,20 @@ func (a *App) recordFailedPinAttempt() {
 	}
 }
 
+func (a *App) getKidsDisabledCategories() map[string]bool {
+	disabled := make(map[string]bool)
+	for _, cat := range kids.Categories {
+		if cat.AlwaysOn {
+			continue
+		}
+		v, _ := a.presets.GetSetting("kids_cat_" + cat.Name)
+		if v == "false" {
+			disabled[cat.Name] = true
+		}
+	}
+	return disabled
+}
+
 func (a *App) applyKidsSystemPrompt(systemPrompt string) string {
 	if !a.isKidsMode() {
 		return systemPrompt
@@ -158,24 +234,26 @@ func (a *App) applyKidsNegative(negativePrompt string) string {
 	if !a.isKidsMode() {
 		return negativePrompt
 	}
+	disabled := a.getKidsDisabledCategories()
+	kidsNeg := kids.NegativePrompt(disabled)
 	if negativePrompt != "" {
-		return negativePrompt + ", " + config.KidsModeNegativePrompt
+		return negativePrompt + ", " + kidsNeg
 	}
-	return config.KidsModeNegativePrompt
+	return kidsNeg
 }
 
 func (a *App) filterKidsInput(text string) (string, error) {
 	if !a.isKidsMode() {
 		return text, nil
 	}
-	return kids.FilterInput(text)
+	return kids.FilterInput(text, a.getKidsDisabledCategories())
 }
 
 func (a *App) filterKidsOutput(text string) string {
 	if !a.isKidsMode() {
 		return text
 	}
-	return kids.FilterOutput(text)
+	return kids.FilterOutput(text, a.getKidsDisabledCategories())
 }
 
 // --- Service Status ---
@@ -1639,6 +1717,11 @@ func (a *App) GetSettings() (map[string]string, error) {
 		"llm_analyze_top_p":         "0.9",
 		"llm_analyze_num_thread":    "0",
 		"kids_mode":                 "false",
+		"kids_cat_violence":         "true",
+		"kids_cat_horror":           "true",
+		"kids_cat_weapons":          "true",
+		"kids_cat_substances":       "true",
+		"kids_cat_mature":           "true",
 		"rembg_url":                 "",
 		"preview_mode":              "false",
 		"preview_width":             "512",
@@ -1663,6 +1746,8 @@ func (a *App) UpdateSettings(data map[string]string) error {
 		"llm_analyze_temperature": true, "llm_analyze_num_ctx": true, "llm_analyze_num_predict": true,
 		"llm_analyze_top_p": true, "llm_analyze_num_thread": true,
 		"kids_mode": true, "kids_pin_hash": true,
+		"kids_cat_violence": true, "kids_cat_horror": true, "kids_cat_weapons": true,
+		"kids_cat_substances": true, "kids_cat_mature": true,
 		"rembg_url": true,
 		"preview_mode": true, "preview_width": true, "preview_height": true,
 		"gen_preset_id": true, "gen_action_pose": true, "gen_characters": true,
@@ -2692,6 +2777,16 @@ func (a *App) GenerateFromImage(params GenerateFromImageParams) (*GenerateImageR
 		if err != nil {
 			return nil, fmt.Errorf("image analysis failed: %w", err)
 		}
+	}
+
+	var filterErr error
+	tags, filterErr = a.filterKidsInput(tags)
+	if filterErr != nil {
+		return nil, filterErr
+	}
+	params.ExtraNegativePrompt, filterErr = a.filterKidsInput(params.ExtraNegativePrompt)
+	if filterErr != nil {
+		return nil, filterErr
 	}
 
 	if params.GenMode == "compound" {

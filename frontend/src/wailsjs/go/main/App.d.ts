@@ -62,6 +62,8 @@ export function GetDefaultAnalyzePrompts():Promise<main.AnalyzePrompts>;
 
 export function GetDefaultPromptInstruction():Promise<string>;
 
+export function GetKidsCategories():Promise<Array<main.KidsCategoryInfo>>;
+
 export function GetLLMModels():Promise<Array<llm.LLMModel>>;
 
 export function GetLastImage():Promise<main.GenerateImageResult>;
@@ -117,6 +119,8 @@ export function SaveImage(arg1:string,arg2:string):Promise<string>;
 export function SaveScene(arg1:preset.SavedScene):Promise<preset.SavedScene>;
 
 export function SelectFolder():Promise<string>;
+
+export function SetKidsCategory(arg1:string,arg2:boolean,arg3:string):Promise<void>;
 
 export function SetKidsMode(arg1:boolean,arg2:string):Promise<void>;
 

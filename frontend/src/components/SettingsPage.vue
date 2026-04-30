@@ -67,6 +67,10 @@ const kidsMode = ref(false)
 const showPinModal = ref(false)
 const pinMode = ref('set')
 const pinError = ref('')
+const kidsCategories = ref([])
+const kidsCatPinModal = ref(false)
+const kidsCatPinError = ref('')
+const kidsCatPending = ref(null)
 
 const generationForm = reactive({
   preview_mode: false,
@@ -127,6 +131,7 @@ async function loadSettings() {
     analyzeParams.num_thread = parseInt(settings.llm_analyze_num_thread) || 0
     loadConnectionLLMModels()
     kidsMode.value = await api.isKidsModeActive()
+    loadKidsCategories()
     generationForm.preview_mode = settings.preview_mode === 'true'
     generationForm.preview_width = parseInt(settings.preview_width) || 512
     generationForm.preview_height = parseInt(settings.preview_height) || 512
@@ -281,6 +286,7 @@ async function onPinConfirm(pin) {
     await api.setKidsMode(enabled, pin)
     kidsMode.value = enabled
     showPinModal.value = false
+    if (enabled) loadKidsCategories()
   } catch (e) {
     pinError.value = String(e) || 'Error'
   }
@@ -289,6 +295,39 @@ async function onPinConfirm(pin) {
 function onPinCancel() {
   showPinModal.value = false
   pinError.value = ''
+}
+
+async function loadKidsCategories() {
+  try {
+    kidsCategories.value = await api.getKidsCategories()
+  } catch {}
+}
+
+function onKidsCatToggle(cat) {
+  if (cat.alwaysOn || !kidsMode.value) return
+  kidsCatPending.value = { name: cat.name, enabled: !cat.enabled }
+  kidsCatPinError.value = ''
+  kidsCatPinModal.value = true
+}
+
+async function onKidsCatPinConfirm(pin) {
+  if (!kidsCatPending.value) return
+  kidsCatPinError.value = ''
+  try {
+    await api.setKidsCategory(kidsCatPending.value.name, kidsCatPending.value.enabled, pin)
+    const cat = kidsCategories.value.find(c => c.name === kidsCatPending.value.name)
+    if (cat) cat.enabled = kidsCatPending.value.enabled
+    kidsCatPinModal.value = false
+    kidsCatPending.value = null
+  } catch (e) {
+    kidsCatPinError.value = String(e) || 'Error'
+  }
+}
+
+function onKidsCatPinCancel() {
+  kidsCatPinModal.value = false
+  kidsCatPending.value = null
+  kidsCatPinError.value = ''
 }
 
 async function saveGeneration() {
@@ -664,6 +703,21 @@ onMounted(loadSettings)
           </div>
         </div>
       </div>
+
+      <div v-if="kidsMode && kidsCategories.length > 0" style="margin-bottom: 16px; padding: 12px; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm);">
+        <div style="color: var(--text-bright); font-weight: 500; margin-bottom: 10px;">Filter Categories</div>
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+          <div v-for="cat in kidsCategories" :key="cat.name" style="display: flex; align-items: center; justify-content: space-between; padding: 4px 0;">
+            <div>
+              <span style="color: var(--text-bright); font-size: 13px;">{{ cat.label }}</span>
+              <span v-if="cat.alwaysOn" style="color: var(--text-dim); font-size: 11px; margin-left: 6px;">(always on)</span>
+            </div>
+            <ToggleSwitch :modelValue="cat.enabled" @update:modelValue="onKidsCatToggle(cat)" :disabled="cat.alwaysOn" />
+          </div>
+        </div>
+        <div style="color: var(--text-dim); font-size: 11px; margin-top: 8px;">PIN required to change categories</div>
+      </div>
+
       <div style="color: var(--text-dim); font-size: 13px; line-height: 1.6;">
         When enabled, Kids Mode applies multiple safety layers:
         <ul style="margin: 8px 0 0 16px; padding: 0;">
@@ -746,5 +800,6 @@ onMounted(loadSettings)
     </div>
 
     <PinModal v-if="showPinModal" :mode="pinMode" :error="pinError" @confirm="onPinConfirm" @cancel="onPinCancel" />
+    <PinModal v-if="kidsCatPinModal" mode="verify" :error="kidsCatPinError" @confirm="onKidsCatPinConfirm" @cancel="onKidsCatPinCancel" />
   </div>
 </template>

@@ -443,6 +443,24 @@ export namespace main {
 		    return a;
 		}
 	}
+	export class KidsCategoryInfo {
+	    name: string;
+	    label: string;
+	    alwaysOn: boolean;
+	    enabled: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new KidsCategoryInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.label = source["label"];
+	        this.alwaysOn = source["alwaysOn"];
+	        this.enabled = source["enabled"];
+	    }
+	}
 	
 	export class RecommendPresetResult {
 	    preset_id: number;

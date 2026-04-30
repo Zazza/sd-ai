@@ -114,6 +114,10 @@ export function GetDefaultPromptInstruction() {
   return window['go']['main']['App']['GetDefaultPromptInstruction']();
 }
 
+export function GetKidsCategories() {
+  return window['go']['main']['App']['GetKidsCategories']();
+}
+
 export function GetLLMModels() {
   return window['go']['main']['App']['GetLLMModels']();
 }
@@ -224,6 +228,10 @@ export function SaveScene(arg1) {
 
 export function SelectFolder() {
   return window['go']['main']['App']['SelectFolder']();
+}
+
+export function SetKidsCategory(arg1, arg2, arg3) {
+  return window['go']['main']['App']['SetKidsCategory'](arg1, arg2, arg3);
 }
 
 export function SetKidsMode(arg1, arg2) {
