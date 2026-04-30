@@ -1,7 +1,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { WindowSetSystemDefaultTheme, EventsOn, EventsOff } from './wailsjs/runtime/runtime'
-import { Diamond, Sparkles, LayoutGrid, Sliders, Settings, RotateCcw, Download, FolderOpen } from 'lucide-vue-next'
+import { Diamond, Sparkles, LayoutGrid, Sliders, Settings, RotateCcw, Download, FolderOpen, Sun, Moon } from 'lucide-vue-next'
 import { api } from './api.js'
 import UnifiedPresetsPage from './components/UnifiedPresetsPage.vue'
 import UnifiedGeneratePage from './components/UnifiedGeneratePage.vue'
@@ -19,6 +19,13 @@ let resetTimer = null
 
 const generateTab = ref('')
 const generateKey = ref(0)
+const theme = ref('dark')
+
+function toggleTheme() {
+  theme.value = theme.value === 'dark' ? 'light' : 'dark'
+  document.documentElement.setAttribute('data-theme', theme.value)
+  api.updateSettings({ theme: theme.value }).catch(() => {})
+}
 
 async function resetAll() {
   if (resetting.value) return
@@ -93,8 +100,15 @@ const currentPage = computed(() => {
   }
 })
 
-onMounted(() => {
+onMounted(async () => {
   WindowSetSystemDefaultTheme()
+  try {
+    const s = await api.getSettings()
+    if (s?.theme) {
+      theme.value = s.theme
+      document.documentElement.setAttribute('data-theme', s.theme)
+    }
+  } catch {}
 })
 
 onUnmounted(() => {
@@ -139,6 +153,10 @@ onUnmounted(() => {
         </div>
       </nav>
       <div class="sidebar-footer">
+        <button class="sidebar-theme-btn" @click="toggleTheme" :title="theme === 'dark' ? 'Light mode' : 'Dark mode'">
+          <Sun v-if="theme === 'dark'" :size="14" class="icon" />
+          <Moon v-else :size="14" class="icon" />
+        </button>
         <button class="sidebar-reset-btn" :class="{ confirm: confirmReset }" @click="resetAll">
           <RotateCcw :size="14" class="icon" /> {{ confirmReset ? 'Confirm?' : 'Reset All' }}
         </button>

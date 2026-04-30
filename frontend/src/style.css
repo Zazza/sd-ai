@@ -18,6 +18,24 @@
   --radius-sm: 5px;
 }
 
+[data-theme="light"] {
+  --bg: #f4f4f8;
+  --surface: #ffffff;
+  --surface-2: #eaeaef;
+  --surface-3: #dddde3;
+  --border: #ccccd4;
+  --text: #2a2a3a;
+  --text-dim: #6a6a7e;
+  --text-bright: #1a1a2a;
+  --accent: #6a4cfc;
+  --accent-hover: #8a6cff;
+  --accent-bg: rgba(106, 76, 252, 0.1);
+  --danger: #d04040;
+  --danger-hover: #e05050;
+  --success: #3a9a3e;
+  --warning: #d89020;
+}
+
 * {
   box-sizing: border-box;
   margin: 0;
@@ -838,6 +856,28 @@ input, textarea, select {
   margin-top: auto;
   padding: 12px 8px 0;
   border-top: 1px solid var(--border);
+  display: flex;
+  gap: 6px;
+}
+
+.sidebar-theme-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+
+.sidebar-theme-btn:hover {
+  color: var(--text);
+  background: var(--surface-2);
 }
 
 .sidebar-reset-btn {
