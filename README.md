@@ -44,6 +44,10 @@ Both services must be reachable from the machine running SD Studio. If they run 
 - NSFW preset section
 - Event logger with footer log viewer
 - Preview mode with upscale to full resolution
+- **File Browser** — browse images in a folder with thumbnail grid, fullscreen viewer with prev/next navigation (arrow keys), quick send to Generate From Image or Export
+- **Export** — post-generation image export with resize, format conversion (PNG/JPEG/WebP), quality and interpolation settings, export presets
+- **Light/Dark theme** — toggle in sidebar, persisted across sessions
+- **Remove Object mode** — inpaint-based object removal via canvas mask drawing
 
 ## Requirements
 
@@ -132,6 +136,10 @@ Settings are stored in SQLite (`data/presets.db`) and persist across reinstalls.
 │   ├── llm/             # LLM client
 │   ├── preset/          # SQLite CRUD (presets, settings)
 │   ├── sd/              # Stable Diffusion client
+│   ├── compositor/      # Multi-scene compositing
+│   ├── kids/            # Kids mode filtering
+│   ├── rembg/           # Background removal client
+│   ├── logger/          # Event logger
 │   └── api/             # HTTP API
 ├── frontend/
 │   └── src/

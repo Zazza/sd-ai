@@ -1801,6 +1801,7 @@ func (a *App) UpdateSettings(data map[string]string) error {
 		"test_cfg_scale": true, "test_width": true, "test_height": true,
 		"fi_mode": true, "fi_preset_id": true, "fi_compound_preset_id": true,
 		"fi_gen_mode": true, "fi_denoising": true, "fi_extra_negative": true, "fi_analyze_mode": true,
+		"theme": true, "file_browser_path": true,
 	}
 
 	for k, v := range data {
