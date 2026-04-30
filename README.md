@@ -74,10 +74,21 @@ Both services must be reachable from the machine running SD Studio. If they run 
 go install github.com/wailsapp/wails/v2/cmd/wails@latest
 ```
 
+### Makefile Commands
+
+```bash
+make dev       # wails dev
+make build     # npm install + wails build
+make test      # go vet/test + frontend build
+make lint      # go vet + vue-tsc
+make tidy      # go mod tidy
+make clean     # remove build/
+```
+
 ### Development
 
 ```bash
-wails dev
+make dev
 ```
 
 Frontend hot-reload at `http://localhost:34115`, desktop window opens automatically.
@@ -85,7 +96,7 @@ Frontend hot-reload at `http://localhost:34115`, desktop window opens automatica
 ### Production Build
 
 ```bash
-wails build
+make build
 ```
 
 Binary: `build/bin/sd-studio` (Linux/macOS) or `build/bin/sd-studio.exe` (Windows).
