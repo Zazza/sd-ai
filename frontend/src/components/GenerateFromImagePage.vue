@@ -1,7 +1,26 @@
 <script setup>
-import { ref, computed, nextTick, watch, onMounted, onUnmounted } from 'vue'
+import { ref, computed, nextTick, watch, onMounted, onUnmounted, inject } from 'vue'
 import { api } from '../api.js'
 import { EventsOn, EventsOff } from '../wailsjs/runtime/runtime'
+import ImageViewer from './ImageViewer.vue'
+
+const props = defineProps({
+  droppedImage: { type: String, default: null }
+})
+const emit = defineEmits(['clear-dropped'])
+
+watch(() => props.droppedImage, (val) => {
+  if (val) {
+    uploadedImage.value = val
+    uploadedImageMime.value = 'image/png'
+    tags.value = ''
+    recommendation.value = null
+    error.value = ''
+    clearMask()
+    mode.value = 'img2img'
+    emit('clear-dropped')
+  }
+})
 
 const uploadedImage = ref('')
 const uploadedImageMime = ref('image/png')
@@ -13,7 +32,7 @@ const selectedTypeId = ref(null)
 const selectedPresetId = ref(null)
 const selectedCompoundPresetId = ref(null)
 const genMode = ref('preset')
-const mode = ref('txt2img')
+const mode = ref('img2img')
 const denoisingStrength = ref(0.5)
 const extraNegativePrompt = ref('')
 
@@ -36,12 +55,10 @@ let analyzeTimer = null
 const recommending = ref(false)
 const recommendation = ref(null)
 
-const llmAvailable = ref(false)
-const llmModel = ref('')
-const sdAvailable = ref(false)
-const sdModel = ref('')
 const kidsModeActive = ref(false)
-let statusInterval = null
+const showViewer = ref(false)
+
+const shared = inject('sharedGenState', null)
 
 const isDragOver = ref(false)
 
@@ -71,13 +88,8 @@ const formattedGenInfo = computed(() => {
 
 const hasMask = computed(() => maskHistory.value.length > 0)
 
-async function checkServices() {
+async function loadKidsMode() {
   try {
-    const status = await api.checkServices()
-    llmAvailable.value = status.llm?.available || false
-    llmModel.value = status.llm?.model || ''
-    sdAvailable.value = status.sd?.available || false
-    sdModel.value = status.sd?.model || ''
     kidsModeActive.value = await api.isKidsModeActive()
   } catch {}
 }
@@ -468,20 +480,67 @@ function applyRecommendation() {
 
 onMounted(async () => {
   loadPresets()
-  checkServices()
-  statusInterval = setInterval(checkServices, 30000)
+  loadKidsMode()
   document.addEventListener('paste', handlePaste)
+  document.addEventListener('keydown', onKeydown)
   EventsOn("analyze:step", (step, total) => {
     chainStep.value = step
     chainTotal.value = total
   })
+  try {
+    const s = await api.getSettings()
+    if (s.fi_mode) mode.value = s.fi_mode
+    if (s.fi_preset_id) selectedPresetId.value = Number(s.fi_preset_id)
+    if (s.fi_compound_preset_id) selectedCompoundPresetId.value = Number(s.fi_compound_preset_id)
+    if (s.fi_gen_mode) genMode.value = s.fi_gen_mode
+    if (s.fi_denoising) denoisingStrength.value = Number(s.fi_denoising)
+    if (s.fi_extra_negative) extraNegativePrompt.value = s.fi_extra_negative
+    if (s.fi_analyze_mode) analyzeMode.value = s.fi_analyze_mode
+  } catch {}
+  if (shared) {
+    if (shared.selectedPresetId) selectedPresetId.value = shared.selectedPresetId
+    if (shared.selectedCompoundPresetId) selectedCompoundPresetId.value = shared.selectedCompoundPresetId
+    if (shared.genMode) genMode.value = shared.genMode
+  }
 })
 
 onUnmounted(() => {
-  if (statusInterval) clearInterval(statusInterval)
   document.removeEventListener('paste', handlePaste)
+  document.removeEventListener('keydown', onKeydown)
   EventsOff("analyze:step")
+  saveFIState()
+  if (shared) {
+    shared.selectedPresetId = selectedPresetId.value
+    shared.selectedCompoundPresetId = selectedCompoundPresetId.value
+    shared.genMode = genMode.value
+  }
 })
+
+function saveFIState() {
+  api.updateSettings({
+    fi_mode: mode.value,
+    fi_preset_id: String(selectedPresetId.value || ''),
+    fi_compound_preset_id: String(selectedCompoundPresetId.value || ''),
+    fi_gen_mode: genMode.value,
+    fi_denoising: String(denoisingStrength.value || ''),
+    fi_extra_negative: extraNegativePrompt.value || '',
+    fi_analyze_mode: analyzeMode.value || '',
+  }).catch(() => {})
+}
+
+function copyPrompt() {
+  const parts = []
+  if (effectivePrompt.value) parts.push(effectivePrompt.value)
+  if (effectiveNegative.value) parts.push('Negative: ' + effectiveNegative.value)
+  if (parts.length) navigator.clipboard.writeText(parts.join('\n'))
+}
+
+function onKeydown(e) {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && !generatingImage.value) {
+    e.preventDefault()
+    generate()
+  }
+}
 </script>
 
 <template>
@@ -491,14 +550,8 @@ onUnmounted(() => {
       <button class="btn btn-primary" @click="loadPresets">&#8635; Refresh</button>
     </div>
 
-    <div class="service-status">
-      <div class="status-badge" :class="llmAvailable ? 'status-ok' : 'status-down'">
-        &#9679; LLM{{ llmModel ? ': ' + llmModel : '' }}
-      </div>
-      <div class="status-badge" :class="sdAvailable ? 'status-ok' : 'status-down'">
-        &#9679; SD{{ sdModel ? ': ' + sdModel : '' }}
-      </div>
-      <div v-if="kidsModeActive" class="status-badge status-ok">
+    <div v-if="kidsModeActive" class="service-status">
+      <div class="status-badge status-ok">
         &#9679; Kids Mode
       </div>
     </div>
@@ -550,9 +603,11 @@ onUnmounted(() => {
             <button class="btn btn-sm btn-secondary" @click="useLastImage">Last Generated</button>
             <button class="btn btn-sm btn-secondary" @click="clearImage">Clear</button>
           </div>
+          <div v-else class="fi-btn-row" style="margin-top: 8px;">
+            <button class="btn btn-sm btn-secondary" @click="useLastImage">Last Generated</button>
+          </div>
 
           <div style="display: flex; gap: 8px; margin-top: 16px; margin-bottom: 12px;">
-            <button class="btn btn-sm" :class="mode === 'txt2img' ? 'btn-primary' : 'btn-secondary'" @click="mode = 'txt2img'" :disabled="generatingImage">txt2img</button>
             <button class="btn btn-sm" :class="mode === 'img2img' ? 'btn-primary' : 'btn-secondary'" @click="mode = 'img2img'" :disabled="generatingImage">img2img</button>
             <button class="btn btn-sm" :class="mode === 'inpaint' ? 'btn-primary' : 'btn-secondary'" @click="mode = 'inpaint'" :disabled="generatingImage">inpaint</button>
           </div>
@@ -678,7 +733,7 @@ onUnmounted(() => {
             <textarea class="form-textarea" v-model="extraNegativePrompt" rows="2" placeholder="Additional negative prompt..." :disabled="generatingImage"></textarea>
           </div>
 
-          <button class="btn btn-primary" style="width: 100%; justify-content: center; padding: 12px;" @click="generate" :disabled="generatingImage || !uploadedImage || (mode === 'inpaint' && !hasMask) || (genMode === 'preset' ? !selectedPresetId : !selectedCompoundPresetId)">
+          <button class="btn btn-primary" :class="{ 'btn-generating': generatingImage }" style="width: 100%; justify-content: center; padding: 12px;" @click="generate" :disabled="generatingImage || !uploadedImage || (mode === 'inpaint' && !hasMask) || (genMode === 'preset' ? !selectedPresetId : !selectedCompoundPresetId)">
             <span v-if="generatingImage" style="display: inline-flex; align-items: center; gap: 6px;">
               <span class="spinner" style="width: 14px; height: 14px; border-width: 2px;"></span>
               {{ generationStage === 'analyzing' ? 'Analyzing image...' : 'Generating image...' }}
@@ -695,9 +750,10 @@ onUnmounted(() => {
             <p style="margin-top: 12px; color: var(--text-dim);">{{ generationStage === 'analyzing' ? 'Analyzing image...' : 'Generating image...' }}</p>
           </div>
           <div v-else-if="generatedImage" style="width: 100%; padding: 12px;">
-            <img :src="'data:image/png;base64,' + generatedImage" alt="Generated" style="border-radius: var(--radius-sm);" />
+            <img :src="'data:image/png;base64,' + generatedImage" alt="Generated" class="img-fade-in" style="border-radius: var(--radius-sm); cursor: zoom-in;" @click="showViewer = true" />
             <div style="display: flex; gap: 8px; margin-top: 12px; justify-content: center;">
               <button class="btn btn-secondary btn-sm" @click="downloadImage">Download</button>
+              <button class="btn btn-secondary btn-sm" @click="copyPrompt">Copy</button>
               <button class="btn btn-secondary btn-sm" @click="generate">Regenerate</button>
             </div>
           </div>
@@ -725,6 +781,8 @@ onUnmounted(() => {
         </details>
       </div>
     </div>
+
+    <ImageViewer v-if="showViewer" :image-base64="generatedImage" @close="showViewer = false" />
   </div>
 </template>
 

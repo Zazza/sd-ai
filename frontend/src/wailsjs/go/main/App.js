@@ -30,6 +30,10 @@ export function CreateDescription(arg1) {
   return window['go']['main']['App']['CreateDescription'](arg1);
 }
 
+export function CreateDescriptionFull(arg1) {
+  return window['go']['main']['App']['CreateDescriptionFull'](arg1);
+}
+
 export function CreatePreset(arg1) {
   return window['go']['main']['App']['CreatePreset'](arg1);
 }
@@ -236,6 +240,10 @@ export function TestGenerate(arg1) {
 
 export function UpdateCompoundPreset(arg1) {
   return window['go']['main']['App']['UpdateCompoundPreset'](arg1);
+}
+
+export function UpdateDescription(arg1) {
+  return window['go']['main']['App']['UpdateDescription'](arg1);
 }
 
 export function UpdatePreset(arg1) {

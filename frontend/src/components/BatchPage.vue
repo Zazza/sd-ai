@@ -1,8 +1,10 @@
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, watch, onMounted, onUnmounted, inject } from 'vue'
 import { EventsOn, EventsOff } from '../wailsjs/runtime/runtime'
 import { BatchGenerate, BatchCompoundGenerate, SelectFolder } from '../wailsjs/go/main/App.js'
 import { api } from '../api.js'
+
+const shared = inject('sharedGenState', null)
 
 const presets = ref([])
 const compoundPresets = ref([])
@@ -117,14 +119,50 @@ onMounted(async () => {
 
   try {
     const s = await api.getSettings()
+    if (!props.prefillPrompt && s.batch_prompt) prompt.value = s.batch_prompt
+    if (!props.prefillNegative && s.batch_negative) negativePrompt.value = s.batch_negative
+    if (!props.prefillPresetId && s.batch_preset_id) selectedPresetId.value = Number(s.batch_preset_id)
+    if (!props.prefillCompoundPresetId && s.batch_compound_preset_id) {
+      selectedCompoundPresetId.value = Number(s.batch_compound_preset_id)
+      batchMode.value = 'compound'
+    }
+    if (s.batch_mode) batchMode.value = s.batch_mode
     if (s.batch_output_folder) outputFolder.value = s.batch_output_folder
     if (s.batch_count) count.value = Number(s.batch_count) || 4
   } catch {}
+
+  if (shared) {
+    if (shared.selectedPresetId) selectedPresetId.value = shared.selectedPresetId
+    if (shared.selectedCompoundPresetId) selectedCompoundPresetId.value = shared.selectedCompoundPresetId
+    if (shared.genMode) batchMode.value = shared.genMode
+    if (shared.description) prompt.value = shared.description
+    if (shared.negative) negativePrompt.value = shared.negative
+  }
 })
 
 onUnmounted(() => {
   EventsOff('batch:progress')
+  saveBatchState()
+  if (shared) {
+    shared.selectedPresetId = selectedPresetId.value
+    shared.selectedCompoundPresetId = selectedCompoundPresetId.value
+    shared.genMode = batchMode.value
+    if (prompt.value) shared.description = prompt.value
+    if (negativePrompt.value) shared.negative = negativePrompt.value
+  }
 })
+
+function saveBatchState() {
+  api.updateSettings({
+    batch_preset_id: String(selectedPresetId.value || ''),
+    batch_compound_preset_id: String(selectedCompoundPresetId.value || ''),
+    batch_mode: batchMode.value,
+    batch_prompt: prompt.value || '',
+    batch_negative: negativePrompt.value || '',
+    batch_count: String(count.value || ''),
+    batch_output_folder: outputFolder.value || '',
+  }).catch(() => {})
+}
 </script>
 
 <template>

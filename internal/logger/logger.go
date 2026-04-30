@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"strings"
 	"sync"
 	"time"
@@ -53,6 +54,8 @@ func (l *Logger) emit(level Level, format string, args ...interface{}) {
 	l.mu.Lock()
 	ctx := l.ctx
 	l.mu.Unlock()
+
+	log.Printf("[%s] %s", level, e.Message)
 
 	if ctx != nil {
 		runtime.EventsEmit(ctx, "log:entry", string(data))

@@ -810,6 +810,9 @@ export namespace preset {
 	export class SavedDescription {
 	    id: number;
 	    text: string;
+	    name: string;
+	    negative_prompt: string;
+	    type: string;
 	    created_at: string;
 	
 	    static createFrom(source: any = {}) {
@@ -820,6 +823,9 @@ export namespace preset {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
 	        this.text = source["text"];
+	        this.name = source["name"];
+	        this.negative_prompt = source["negative_prompt"];
+	        this.type = source["type"];
 	        this.created_at = source["created_at"];
 	    }
 	}

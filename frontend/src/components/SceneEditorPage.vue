@@ -218,11 +218,6 @@ onMounted(() => {
 
     <div v-if="error" class="error">{{ error }}</div>
 
-    <div class="status-bar">
-      <span :class="{ online: llmAvailable, offline: !llmAvailable }">LLM</span>
-      <span :class="{ online: sdAvailable, offline: !sdAvailable }">SD</span>
-    </div>
-
     <!-- Step 1: Description + Preset -->
     <div class="section" v-if="!scene">
       <div class="form-group">

@@ -44,9 +44,12 @@ type LoRAEntry struct {
 }
 
 type SavedDescription struct {
-	ID        int64  `json:"id"`
-	Text      string `json:"text"`
-	CreatedAt string `json:"created_at"`
+	ID             int64  `json:"id"`
+	Text           string `json:"text"`
+	Name           string `json:"name"`
+	NegativePrompt string `json:"negative_prompt"`
+	Type           string `json:"type"`
+	CreatedAt      string `json:"created_at"`
 }
 
 type SavedPrompt struct {

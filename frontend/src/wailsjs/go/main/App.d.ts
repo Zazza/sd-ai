@@ -20,6 +20,8 @@ export function CreateCompoundPreset(arg1:preset.CompoundPreset):Promise<preset.
 
 export function CreateDescription(arg1:string):Promise<preset.SavedDescription>;
 
+export function CreateDescriptionFull(arg1:preset.SavedDescription):Promise<preset.SavedDescription>;
+
 export function CreatePreset(arg1:preset.Preset):Promise<preset.Preset>;
 
 export function CreatePresetType(arg1:preset.PresetType):Promise<preset.PresetType>;
@@ -123,6 +125,8 @@ export function TestCompoundGenerate(arg1:main.TestCompoundGenerateParams):Promi
 export function TestGenerate(arg1:main.TestGenerateParams):Promise<Array<main.TestGenerateResultItem>>;
 
 export function UpdateCompoundPreset(arg1:preset.CompoundPreset):Promise<preset.CompoundPreset>;
+
+export function UpdateDescription(arg1:preset.SavedDescription):Promise<void>;
 
 export function UpdatePreset(arg1:preset.Preset):Promise<preset.Preset>;
 

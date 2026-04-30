@@ -1,7 +1,9 @@
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, inject } from 'vue'
 import { EventsOn, EventsOff } from '../wailsjs/runtime/runtime'
 import { api } from '../api.js'
+
+const shared = inject('sharedGenState', null)
 
 const mode = ref('presets')
 const presets = ref([])
@@ -148,20 +150,57 @@ function onProgress(data) {
   progress.value = data
 }
 
-onMounted(() => {
+onMounted(async () => {
   loadData()
   EventsOn('test:progress', onProgress)
+  if (shared) {
+    if (!prompt.value) prompt.value = shared.description || ''
+    if (!negativePrompt.value) negativePrompt.value = shared.negative || ''
+  }
+  try {
+    const s = await api.getSettings()
+    if (s.test_mode) mode.value = s.test_mode
+    if (s.test_prompt) prompt.value = s.test_prompt
+    else if (shared?.description) prompt.value = shared.description
+    if (s.test_negative) negativePrompt.value = s.test_negative
+    else if (shared?.negative) negativePrompt.value = shared.negative
+    if (s.test_sampler) sampler.value = s.test_sampler
+    if (s.test_schedule_type) scheduleType.value = s.test_schedule_type
+    if (s.test_steps) steps.value = Number(s.test_steps)
+    if (s.test_cfg_scale) cfgScale.value = Number(s.test_cfg_scale)
+    if (s.test_width) width.value = Number(s.test_width)
+    if (s.test_height) height.value = Number(s.test_height)
+  } catch {}
 })
 
 onUnmounted(() => {
   EventsOff('test:progress')
+  saveTestState()
+  if (shared) {
+    if (prompt.value) shared.description = prompt.value
+    if (negativePrompt.value) shared.negative = negativePrompt.value
+  }
 })
+
+function saveTestState() {
+  api.updateSettings({
+    test_mode: mode.value,
+    test_prompt: prompt.value || '',
+    test_negative: negativePrompt.value || '',
+    test_sampler: sampler.value || '',
+    test_schedule_type: scheduleType.value || '',
+    test_steps: String(steps.value || ''),
+    test_cfg_scale: String(cfgScale.value || ''),
+    test_width: String(width.value || ''),
+    test_height: String(height.value || ''),
+  }).catch(() => {})
+}
 </script>
 
 <template>
   <div>
     <div class="page-header">
-      <h1 class="page-title">Test</h1>
+      <h1 class="page-title">Compare</h1>
     </div>
 
     <div v-if="error" class="status status-error">{{ error }}</div>

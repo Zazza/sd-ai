@@ -5,6 +5,7 @@ import PresetForm from './PresetForm.vue'
 import ImportModal from './ImportModal.vue'
 
 const presets = ref([])
+const presetTypes = ref([])
 const loading = ref(true)
 const showForm = ref(false)
 const editingPreset = ref(null)
@@ -13,6 +14,8 @@ const selectMode = ref(false)
 const selectedIds = ref(new Set())
 
 const showImport = ref(false)
+const filterSearch = ref('')
+const filterType = ref('')
 const importPresets = ref([])
 
 const pendingDeleteId = ref(null)
@@ -25,13 +28,35 @@ const selectedCount = computed(() => selectedIds.value.size)
 async function load() {
   loading.value = true
   try {
-    presets.value = await api.listPresets()
+    const [p, t] = await Promise.all([api.listPresets(), api.listPresetTypes()])
+    presets.value = p || []
+    presetTypes.value = t || []
   } catch (e) {
     console.error(e)
   } finally {
     loading.value = false
   }
 }
+
+const filteredPresets = computed(() => {
+  let list = presets.value
+  if (filterType.value) {
+    list = list.filter(p => {
+      const pt = presetTypes.value.find(t => t.name === filterType.value)
+      return pt && p.type_id === pt.id
+    })
+  }
+  if (filterSearch.value) {
+    const q = filterSearch.value.toLowerCase()
+    list = list.filter(p => p.name.toLowerCase().includes(q) || p.prompt.toLowerCase().includes(q))
+  }
+  return list
+})
+
+const availableTypes = computed(() => {
+  const types = new Set(presets.value.map(p => p.preset_type).filter(Boolean))
+  return [...types].sort()
+})
 
 function openCreate() {
   editingPreset.value = null
@@ -188,8 +213,21 @@ onMounted(load)
       <p>No presets yet. Create your first one!</p>
     </div>
 
-    <div v-else class="card-grid">
-      <div v-for="p in presets" :key="p.id" class="card preset-card" :class="{ 'preset-selected': selectedIds.has(p.id) }">
+    <template v-else>
+      <div style="display: flex; gap: 8px; margin-bottom: 16px; align-items: center;">
+        <input class="form-input" v-model="filterSearch" placeholder="Search presets..." style="flex: 1; max-width: 300px;" />
+        <select class="form-select" v-model="filterType" style="width: auto; min-width: 140px;">
+          <option value="">All types</option>
+          <option v-for="t in availableTypes" :key="t" :value="t">{{ t }}</option>
+        </select>
+      </div>
+
+      <div v-if="filteredPresets.length === 0" style="color: var(--text-dim); text-align: center; padding: 24px;">
+        No presets match the filter
+      </div>
+
+      <div v-else class="card-grid">
+        <div v-for="p in filteredPresets" :key="p.id" class="card preset-card" :class="{ 'preset-selected': selectedIds.has(p.id) }">
         <div class="preset-card-header">
           <div style="display: flex; align-items: center; gap: 8px;">
             <input v-if="selectMode" type="checkbox" :checked="selectedIds.has(p.id)" @change="togglePreset(p.id)" />
@@ -211,6 +249,7 @@ onMounted(load)
         </div>
       </div>
     </div>
+    </template>
 
     <PresetForm
       v-if="showForm"

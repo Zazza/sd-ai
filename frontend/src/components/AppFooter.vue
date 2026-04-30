@@ -9,8 +9,8 @@ const logContainer = ref(null)
 const filterLevel = ref('all')
 
 const services = reactive({
-  llm: { available: false, label: 'LLM' },
-  sd: { available: false, label: 'SD' },
+  llm: { available: false, label: 'LLM', model: '' },
+  sd: { available: false, label: 'SD', model: '' },
   rembg: { available: false, label: 'Rembg' },
 })
 
@@ -54,7 +54,9 @@ async function checkServices() {
   try {
     const status = await api.checkServices()
     services.llm.available = status.llm?.available || false
+    services.llm.model = status.llm?.model || ''
     services.sd.available = status.sd?.available || false
+    services.sd.model = status.sd?.model || ''
   } catch {
     services.llm.available = false
     services.sd.available = false
@@ -86,7 +88,8 @@ onMounted(() => {
         <span v-for="(svc, key) in services" :key="key"
               class="status-dot"
               :class="{ online: svc.available, offline: !svc.available }">
-          {{ svc.label }}
+          <span class="dot-indicator" :class="{ online: svc.available }"></span>
+          {{ svc.label }}{{ svc.model ? ': ' + svc.model : '' }}
         </span>
       </div>
       <span class="footer-toggle">{{ expanded ? 'Hide Log' : 'Show Log' }}</span>
@@ -162,6 +165,20 @@ export default { name: 'AppFooter' }
 
 .status-dot.offline {
   color: var(--text-dim);
+}
+
+.dot-indicator {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-dim);
+  margin-right: 2px;
+  vertical-align: middle;
+}
+
+.dot-indicator.online {
+  background: var(--success);
 }
 
 .footer-toggle {

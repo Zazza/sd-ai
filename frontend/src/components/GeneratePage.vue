@@ -1,7 +1,9 @@
 <script setup>
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, inject } from 'vue'
 import { EventsEmit } from '../wailsjs/runtime/runtime'
 import { api } from '../api.js'
+import SavedDescriptionsModal from './SavedDescriptionsModal.vue'
+import ImageViewer from './ImageViewer.vue'
 
 const presets = ref([])
 const presetTypes = ref([])
@@ -31,12 +33,9 @@ const generationStage = ref('')
 const error = ref('')
 let promptDirty = true
 
-const llmAvailable = ref(false)
-const llmModel = ref('')
-const sdAvailable = ref(false)
-const sdModel = ref('')
 const kidsModeActive = ref(false)
-let statusInterval = null
+
+const shared = inject('sharedGenState', null)
 
 const recommendDesc = ref('')
 const recommending = ref(false)
@@ -44,6 +43,7 @@ const recommendResult = ref(null)
 
 const savedDescs = ref([])
 const showSavedDescs = ref(false)
+const showViewer = ref(false)
 
 const filteredPresets = computed(() => {
   if (!selectedTypeId.value) return presets.value
@@ -72,13 +72,8 @@ watch(selectedTypeId, () => {
   api.updateSettings({ gen_type_id: String(selectedTypeId.value || '') }).catch(() => {})
 })
 
-async function checkServices() {
+async function loadKidsMode() {
   try {
-    const status = await api.checkServices()
-    llmAvailable.value = status.llm?.available || false
-    llmModel.value = status.llm?.model || ''
-    sdAvailable.value = status.sd?.available || false
-    sdModel.value = status.sd?.model || ''
     kidsModeActive.value = await api.isKidsModeActive()
   } catch {}
 }
@@ -334,7 +329,12 @@ async function loadSavedDescs() {
 async function saveDescription() {
   if (!description.value.trim()) return
   try {
-    await api.createDescription(description.value.trim())
+    await api.createDescriptionFull({
+      text: description.value.trim(),
+      name: '',
+      negative_prompt: negative.value || '',
+      type: '',
+    })
     await loadSavedDescs()
   } catch (e) {
     error.value = 'Save description failed: ' + String(e)
@@ -350,9 +350,28 @@ async function deleteDescription(id) {
   }
 }
 
-function useDescription(text) {
-  description.value = text
+function useDescription(desc) {
+  description.value = desc.text
+  if (desc.negative_prompt) negative.value = desc.negative_prompt
   showSavedDescs.value = false
+}
+
+async function handleCreateDesc(data) {
+  try {
+    await api.createDescriptionFull(data)
+    await loadSavedDescs()
+  } catch (e) {
+    error.value = 'Create failed: ' + String(e)
+  }
+}
+
+async function handleUpdateDesc(data) {
+  try {
+    await api.updateDescription(data)
+    await loadSavedDescs()
+  } catch (e) {
+    error.value = 'Update failed: ' + String(e)
+  }
 }
 
 async function downloadImage() {
@@ -366,6 +385,13 @@ async function downloadImage() {
   } catch (e) {
     error.value = 'Save failed: ' + String(e)
   }
+}
+
+function copyPrompt() {
+  const parts = []
+  if (effectivePrompt.value) parts.push(effectivePrompt.value)
+  if (effectiveNegative.value) parts.push('Negative: ' + effectiveNegative.value)
+  if (parts.length) navigator.clipboard.writeText(parts.join('\n'))
 }
 
 async function openBatchGeneration() {
@@ -407,21 +433,27 @@ async function openBatchGeneration() {
 
 onMounted(async () => {
   loadPresets()
-  checkServices()
+  loadKidsMode()
   loadSavedDescs()
-  statusInterval = setInterval(checkServices, 30000)
   try {
     const s = await api.getSettings()
     previewMode.value = s.preview_mode === 'true'
     if (s.gen_type_id) selectedTypeId.value = Number(s.gen_type_id) || null
+    if (s.gen_extra_prompt) extraPrompt.value = s.gen_extra_prompt
+    if (s.gen_extra_negative) extraNegativePrompt.value = s.gen_extra_negative
     if (s.gen_preset_id) selectedPresetId.value = Number(s.gen_preset_id)
     if (s.gen_description) description.value = s.gen_description
     if (s.gen_negative) negative.value = s.gen_negative
-    if (s.gen_extra_prompt) extraPrompt.value = s.gen_extra_prompt
-    if (s.gen_extra_negative) extraNegativePrompt.value = s.gen_extra_negative
     if (s.gen_mode) genMode.value = s.gen_mode
     if (s.gen_compound_preset_id) selectedCompoundPresetId.value = Number(s.gen_compound_preset_id)
   } catch {}
+  if (shared) {
+    if (shared.selectedPresetId) selectedPresetId.value = shared.selectedPresetId
+    if (shared.selectedCompoundPresetId) selectedCompoundPresetId.value = shared.selectedCompoundPresetId
+    if (shared.genMode) genMode.value = shared.genMode
+    if (shared.description) description.value = shared.description
+    if (shared.negative) negative.value = shared.negative
+  }
   try {
     const last = await api.getLastImage()
     if (last && last.image) {
@@ -432,11 +464,31 @@ onMounted(async () => {
       isPreview.value = last.is_preview || false
     }
   } catch {}
+
+  document.addEventListener('keydown', onKeydown)
 })
 
 onUnmounted(() => {
-  if (statusInterval) clearInterval(statusInterval)
+  document.removeEventListener('keydown', onKeydown)
+  if (shared) {
+    shared.selectedPresetId = selectedPresetId.value
+    shared.selectedCompoundPresetId = selectedCompoundPresetId.value
+    shared.genMode = genMode.value
+    shared.description = description.value
+    shared.negative = negative.value
+  }
 })
+
+function onKeydown(e) {
+  if (e.key === 'Escape' && showSavedDescs.value) {
+    showSavedDescs.value = false
+    return
+  }
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && !generatingImage.value) {
+    e.preventDefault()
+    generateImage()
+  }
+}
 </script>
 
 <template>
@@ -446,14 +498,8 @@ onUnmounted(() => {
       <button class="btn btn-primary" @click="loadPresets">&#8635; Refresh</button>
     </div>
 
-    <div class="service-status">
-      <div class="status-badge" :class="llmAvailable ? 'status-ok' : 'status-down'">
-        &#9679; LLM{{ llmModel ? ': ' + llmModel : '' }}
-      </div>
-      <div class="status-badge" :class="sdAvailable ? 'status-ok' : 'status-down'">
-        &#9679; SD{{ sdModel ? ': ' + sdModel : '' }}
-      </div>
-      <div v-if="kidsModeActive" class="status-badge status-ok">
+    <div v-if="kidsModeActive" class="service-status">
+      <div class="status-badge status-ok">
         &#9679; Kids Mode
       </div>
     </div>
@@ -518,13 +564,6 @@ onUnmounted(() => {
                 Saved {{ savedDescs.length ? '(' + savedDescs.length + ')' : '' }}
               </button>
             </div>
-            <div v-if="showSavedDescs && savedDescs.length" style="margin-top: 8px; max-height: 200px; overflow-y: auto;">
-              <div v-for="d in savedDescs" :key="d.id" style="display: flex; align-items: center; gap: 8px; padding: 6px 8px; background: var(--surface-2); border-radius: 6px; margin-bottom: 4px; cursor: pointer;" @click="useDescription(d.text)">
-                <span style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px;">{{ d.text }}</span>
-                <button class="btn btn-sm btn-secondary" style="padding: 2px 8px;" @click.stop="deleteDescription(d.id)">&times;</button>
-              </div>
-            </div>
-            <div v-if="showSavedDescs && !savedDescs.length" style="margin-top: 6px; color: var(--text-dim); font-size: 13px;">No saved descriptions yet</div>
           </div>
 
           <div class="form-group">
@@ -532,7 +571,7 @@ onUnmounted(() => {
             <textarea class="form-textarea" v-model="negative" rows="2" placeholder="What should NOT be in the image..." :disabled="generatingImage"></textarea>
           </div>
 
-          <button class="btn btn-primary" style="width: 100%; justify-content: center; padding: 12px;" @click="generateImage" :disabled="generatingImage || (genMode === 'preset' ? !selectedPresetId : !selectedCompoundPresetId)">
+          <button class="btn btn-primary" :class="{ 'btn-generating': generatingImage }" style="width: 100%; justify-content: center; padding: 12px;" @click="generateImage" :disabled="generatingImage || (genMode === 'preset' ? !selectedPresetId : !selectedCompoundPresetId)">
             <span v-if="generatingImage" style="display: inline-flex; align-items: center; gap: 6px;">
               <span class="spinner" style="width: 14px; height: 14px; border-width: 2px;"></span>
               {{ generationStage === 'prompt' ? 'Generating prompt...' : 'Generating image...' }}
@@ -575,13 +614,14 @@ onUnmounted(() => {
             <div v-if="isPreview && previewMode" class="status status-info" style="margin-bottom: 8px; text-align: center;">
               Preview &mdash; click Upscale for full resolution. Tip: switch preset before upscale for style transfer.
             </div>
-            <img :src="'data:image/png;base64,' + generatedImage" alt="Generated" style="border-radius: var(--radius-sm);" />
+            <img :src="'data:image/png;base64,' + generatedImage" alt="Generated" class="img-fade-in" style="border-radius: var(--radius-sm); cursor: zoom-in;" @click="showViewer = true" />
             <div style="display: flex; gap: 8px; margin-top: 12px; justify-content: center;">
               <button v-if="isPreview && previewMode" class="btn btn-primary btn-sm" @click="upscalePreview">Upscale to Full Size</button>
               <button v-if="!isPreview && savedPreview" class="btn btn-secondary btn-sm" @click="backToPreview">&larr; Back to Preview</button>
               <button v-if="generatedImage && !isPreview" class="btn btn-secondary btn-sm" @click="upscaleImageX2" :disabled="upscalingX2">Upscale x2</button>
-              <button class="btn btn-secondary btn-sm" @click="downloadImage">Download</button>
-              <button class="btn btn-secondary btn-sm" @click="generateImage">Regenerate</button>
+              <button class="btn btn-secondary btn-sm" @click="downloadImage" data-tooltip="Download">Download</button>
+              <button class="btn btn-secondary btn-sm" @click="copyPrompt" data-tooltip="Copy prompt">Copy</button>
+              <button class="btn btn-secondary btn-sm" @click="generateImage" data-tooltip="Regenerate">Regenerate</button>
             </div>
           </div>
           <div v-else class="generate-placeholder">
@@ -608,5 +648,17 @@ onUnmounted(() => {
         </details>
       </div>
     </div>
+
+    <SavedDescriptionsModal
+      :visible="showSavedDescs"
+      :descriptions="savedDescs"
+      @close="showSavedDescs = false"
+      @use="useDescription"
+      @create="handleCreateDesc"
+      @update="handleUpdateDesc"
+      @delete="deleteDescription"
+    />
+
+    <ImageViewer v-if="showViewer" :image-base64="generatedImage" @close="showViewer = false" />
   </div>
 </template>

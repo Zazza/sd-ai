@@ -1670,6 +1670,14 @@ func (a *App) UpdateSettings(data map[string]string) error {
 		"gen_environment": true, "gen_lighting": true, "gen_negative": true,
 		"gen_extra_prompt": true, "gen_extra_negative": true,
 		"gen_description": true, "gen_type_id": true,
+		"gen_mode": true, "gen_compound_preset_id": true,
+		"batch_preset_id": true, "batch_compound_preset_id": true, "batch_mode": true,
+		"batch_prompt": true, "batch_negative": true, "batch_count": true, "batch_output_folder": true,
+		"test_mode": true, "test_prompt": true, "test_negative": true,
+		"test_sampler": true, "test_schedule_type": true, "test_steps": true,
+		"test_cfg_scale": true, "test_width": true, "test_height": true,
+		"fi_mode": true, "fi_preset_id": true, "fi_compound_preset_id": true,
+		"fi_gen_mode": true, "fi_denoising": true, "fi_extra_negative": true, "fi_analyze_mode": true,
 	}
 
 	for k, v := range data {
@@ -1780,6 +1788,18 @@ func (a *App) CreateDescription(text string) (*preset.SavedDescription, error) {
 		return nil, nil
 	}
 	return a.presets.CreateDescription(text)
+}
+
+func (a *App) CreateDescriptionFull(s preset.SavedDescription) (*preset.SavedDescription, error) {
+	s.Text = strings.TrimSpace(s.Text)
+	if s.Text == "" {
+		return nil, nil
+	}
+	return a.presets.CreateDescriptionFull(&s)
+}
+
+func (a *App) UpdateDescription(s preset.SavedDescription) error {
+	return a.presets.UpdateDescription(&s)
 }
 
 func (a *App) DeleteDescription(id int64) error {

@@ -259,8 +259,8 @@ async function loadLLM() {
 
 function switchTab(tab) {
   activeTab.value = tab
-  if (tab === 'sd' && sdModels.value.length === 0 && !sdError.value) loadSD()
-  if (tab === 'llm' && llmModels.value.length === 0 && !llmError.value) loadLLM()
+  if (tab === 'advanced' && sdModels.value.length === 0 && !sdError.value) loadSD()
+  if (tab === 'connection' && llmModels.value.length === 0 && !llmError.value) loadLLM()
 }
 
 function onKidsToggle(val) {
@@ -384,13 +384,10 @@ onMounted(loadSettings)
 
     <div class="tabs">
       <button class="tab" :class="{ active: activeTab === 'connection' }" @click="switchTab('connection')">Connection</button>
-      <button class="tab" :class="{ active: activeTab === 'sd' }" @click="switchTab('sd')">Stable Diffusion</button>
-      <button class="tab" :class="{ active: activeTab === 'llm' }" @click="switchTab('llm')">LLM</button>
-      <button class="tab" :class="{ active: activeTab === 'safety' }" @click="switchTab('safety')">Safety</button>
       <button class="tab" :class="{ active: activeTab === 'generation' }" @click="switchTab('generation')">Generation</button>
-      <button class="tab" :class="{ active: activeTab === 'prompt' }" @click="switchTab('prompt')">Prompt</button>
       <button class="tab" :class="{ active: activeTab === 'analyze' }" @click="switchTab('analyze')">Analyze</button>
-      <button class="tab" :class="{ active: activeTab === 'rembg' }" @click="switchTab('rembg')">Rembg</button>
+      <button class="tab" :class="{ active: activeTab === 'safety' }" @click="switchTab('safety')">Safety</button>
+      <button class="tab" :class="{ active: activeTab === 'advanced' }" @click="switchTab('advanced')">Advanced</button>
     </div>
 
     <!-- Connection Tab -->
@@ -472,59 +469,20 @@ onMounted(loadSettings)
       </template>
 
       <button class="btn btn-primary" @click="saveConnection">Save Connection Settings</button>
-    </div>
 
-    <!-- SD Tab -->
-    <div v-if="activeTab === 'sd'">
-      <div v-if="sdError" class="status status-error">{{ sdError }}</div>
-
-      <div class="form-row-2" style="margin-top: 16px;">
-        <div class="card">
-          <h3 style="color: var(--text-bright); margin-bottom: 16px;">Available Models</h3>
-          <div v-if="sdLoading" style="text-align: center; padding: 20px;"><span class="spinner"></span></div>
-          <div v-else-if="sdModels.length === 0" style="color: var(--text-dim);">No models loaded</div>
-          <div v-for="m in sdModels" :key="m.model_name" style="padding: 8px 0; border-bottom: 1px solid var(--border);">
-            <div style="color: var(--text-bright); font-size: 13px;">{{ m.title }}</div>
-            <div style="color: var(--text-dim); font-size: 11px;">{{ m.model_name }}</div>
-          </div>
-        </div>
-
-        <div class="card">
-          <h3 style="color: var(--text-bright); margin-bottom: 16px;">Available LoRA</h3>
-          <div v-if="sdLoading" style="text-align: center; padding: 20px;"><span class="spinner"></span></div>
-          <div v-else-if="sdLoRAs.length === 0" style="color: var(--text-dim);">No LoRA models found</div>
-          <div v-else style="display: flex; flex-wrap: wrap; gap: 6px;">
-            <span v-for="l in sdLoRAs" :key="l.name"
-              style="padding: 4px 10px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 4px; font-size: 12px; color: var(--text);"
-              :title="l.path">
-              {{ l.name }}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      <button class="btn btn-secondary" style="margin-top: 16px;" @click="loadSD" :disabled="sdLoading">
-        {{ sdLoading ? 'Loading...' : 'Refresh' }}
-      </button>
-    </div>
-
-    <!-- LLM Tab -->
-    <div v-if="activeTab === 'llm'">
-      <div v-if="llmError" class="status status-error">{{ llmError }}</div>
-
-      <div class="card" style="margin-top: 16px;">
-        <h3 style="color: var(--text-bright); margin-bottom: 16px;">Available Models</h3>
+      <div class="card" style="margin-top: 24px;">
+        <h3 style="color: var(--text-bright); margin-bottom: 16px;">LLM Models</h3>
+        <div v-if="llmError" class="status status-error" style="margin-bottom: 8px;">{{ llmError }}</div>
         <div v-if="llmLoading" style="text-align: center; padding: 20px;"><span class="spinner"></span></div>
         <div v-else-if="llmModels.length === 0" style="color: var(--text-dim);">No models available</div>
         <div v-for="m in llmModels" :key="m.id" style="padding: 8px 0; border-bottom: 1px solid var(--border);">
           <div style="color: var(--text-bright); font-size: 13px;">{{ m.id }}</div>
           <div style="color: var(--text-dim); font-size: 11px;">{{ m.object }}</div>
         </div>
+        <button class="btn btn-secondary btn-sm" style="margin-top: 12px;" @click="loadLLM" :disabled="llmLoading">
+          {{ llmLoading ? 'Loading...' : 'Refresh Models' }}
+        </button>
       </div>
-
-      <button class="btn btn-secondary" style="margin-top: 16px;" @click="loadLLM" :disabled="llmLoading">
-        {{ llmLoading ? 'Loading...' : 'Refresh' }}
-      </button>
 
       <div class="card" style="margin-top: 16px;">
         <h3 style="color: var(--text-bright); margin-bottom: 16px;">LLM Parameters</h3>
@@ -591,80 +549,57 @@ onMounted(loadSettings)
       </div>
     </div>
 
-    <!-- Safety Tab -->
-    <div v-if="activeTab === 'safety'" class="card">
-      <h3 style="color: var(--text-bright); margin-bottom: 16px;">Kids Mode</h3>
-      <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 16px;">
-        <ToggleSwitch :modelValue="kidsMode" @update:modelValue="onKidsToggle" />
-        <div>
-          <div style="color: var(--text-bright); font-weight: 500;">{{ kidsMode ? 'Enabled' : 'Disabled' }}</div>
-          <div style="color: var(--text-dim); font-size: 12px; margin-top: 2px;">
-            Content filter for child-safe image generation
+    <!-- Generation Tab (merged: Generation + Prompt) -->
+    <div v-if="activeTab === 'generation'">
+      <div class="card">
+        <h3 style="color: var(--text-bright); margin-bottom: 16px;">Preview Generation</h3>
+        <div v-if="generationSaved" class="status status-success" style="margin-bottom: 16px;">Settings saved.</div>
+        <div v-if="generationError" class="status status-error" style="margin-bottom: 16px;">{{ generationError }}</div>
+
+        <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 16px;">
+          <ToggleSwitch v-model="generationForm.preview_mode" />
+          <div>
+            <div style="color: var(--text-bright); font-weight: 500;">{{ generationForm.preview_mode ? 'Enabled' : 'Disabled' }}</div>
+            <div style="color: var(--text-dim); font-size: 12px; margin-top: 2px;">
+              Generate a small preview first, then upscale to full resolution
+            </div>
           </div>
         </div>
+
+        <template v-if="generationForm.preview_mode">
+          <div class="form-row-2">
+            <div class="form-group">
+              <label class="form-label">Preview Width</label>
+              <input class="form-input" type="number" v-model.number="generationForm.preview_width" step="64" min="64" max="2048" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Preview Height</label>
+              <input class="form-input" type="number" v-model.number="generationForm.preview_height" step="64" min="64" max="2048" />
+            </div>
+          </div>
+        </template>
+
+        <button class="btn btn-primary" @click="saveGeneration">Save Generation Settings</button>
       </div>
-      <div style="color: var(--text-dim); font-size: 13px; line-height: 1.6;">
-        When enabled, Kids Mode applies multiple safety layers:
-        <ul style="margin: 8px 0 0 16px; padding: 0;">
-          <li>Filters user input for restricted content</li>
-          <li>Instructs the LLM to generate only safe prompts</li>
-          <li>Filters LLM output for inappropriate tags</li>
-          <li>Forces negative prompt safety tags</li>
-        </ul>
-        <div style="margin-top: 8px;">Protected by 4-digit PIN to prevent children from disabling it.</div>
+
+      <div class="card" style="margin-top: 16px;">
+        <h3 style="color: var(--text-bright); margin-bottom: 16px;">SD Prompt Instruction</h3>
+        <div v-if="promptInstructionSaved" class="status status-success" style="margin-bottom: 16px;">Instruction saved.</div>
+        <div v-if="promptInstructionError" class="status status-error" style="margin-bottom: 16px;">{{ promptInstructionError }}</div>
+        <div style="color: var(--text-dim); font-size: 13px; margin-bottom: 12px; line-height: 1.5;">
+          This instruction is sent to the LLM when generating SD prompts. It defines how the LLM should merge your preset with your description into a valid Stable Diffusion prompt.
+        </div>
+        <div class="form-group">
+          <textarea class="form-textarea" v-model="promptInstruction" rows="16" style="font-family: monospace; font-size: 12px; line-height: 1.5;"></textarea>
+        </div>
+        <div style="display: flex; gap: 8px;">
+          <button class="btn btn-primary" @click="savePromptInstruction">Save Instruction</button>
+          <button class="btn btn-secondary" @click="promptInstruction = defaultPromptInstruction">Reset to Default</button>
+        </div>
       </div>
     </div>
 
-    <!-- Generation Tab -->
-    <div v-if="activeTab === 'generation'" class="card">
-      <h3 style="color: var(--text-bright); margin-bottom: 16px;">Preview Generation</h3>
-      <div v-if="generationSaved" class="status status-success" style="margin-bottom: 16px;">Settings saved.</div>
-      <div v-if="generationError" class="status status-error" style="margin-bottom: 16px;">{{ generationError }}</div>
-
-      <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 16px;">
-        <ToggleSwitch v-model="generationForm.preview_mode" />
-        <div>
-          <div style="color: var(--text-bright); font-weight: 500;">{{ generationForm.preview_mode ? 'Enabled' : 'Disabled' }}</div>
-          <div style="color: var(--text-dim); font-size: 12px; margin-top: 2px;">
-            Generate a small preview first, then upscale to full resolution
-          </div>
-        </div>
-      </div>
-
-      <template v-if="generationForm.preview_mode">
-        <div class="form-row-2">
-          <div class="form-group">
-            <label class="form-label">Preview Width</label>
-            <input class="form-input" type="number" v-model.number="generationForm.preview_width" step="64" min="64" max="2048" />
-          </div>
-          <div class="form-group">
-            <label class="form-label">Preview Height</label>
-            <input class="form-input" type="number" v-model.number="generationForm.preview_height" step="64" min="64" max="2048" />
-          </div>
-        </div>
-      </template>
-
-      <button class="btn btn-primary" @click="saveGeneration">Save Generation Settings</button>
-    </div>
-
-    <!-- Prompt Tab -->
-    <div v-if="activeTab === 'prompt'" class="card">
-      <h3 style="color: var(--text-bright); margin-bottom: 16px;">SD Prompt Instruction</h3>
-      <div v-if="promptInstructionSaved" class="status status-success" style="margin-bottom: 16px;">Instruction saved.</div>
-      <div v-if="promptInstructionError" class="status status-error" style="margin-bottom: 16px;">{{ promptInstructionError }}</div>
-      <div style="color: var(--text-dim); font-size: 13px; margin-bottom: 12px; line-height: 1.5;">
-        This instruction is sent to the LLM when generating SD prompts. It defines how the LLM should merge your preset with your description into a valid Stable Diffusion prompt. Edit carefully.
-      </div>
-      <div class="form-group">
-        <textarea class="form-textarea" v-model="promptInstruction" rows="16" style="font-family: monospace; font-size: 12px; line-height: 1.5;"></textarea>
-      </div>
-      <div style="display: flex; gap: 8px;">
-        <button class="btn btn-primary" @click="savePromptInstruction">Save Instruction</button>
-        <button class="btn btn-secondary" @click="promptInstruction = defaultPromptInstruction">Reset to Default</button>
-      </div>
-    </div>
-
-    <!-- Analyze Tab -->
+    <!-- Analyze Tab (unchanged) -->
     <div v-if="activeTab === 'analyze'" class="card">
       <h3 style="color: var(--text-bright); margin-bottom: 16px;">Image Analysis Prompts</h3>
       <div v-if="analyzeSaved" class="status status-success" style="margin-bottom: 16px;">Prompts saved.</div>
@@ -717,40 +652,97 @@ onMounted(loadSettings)
       </div>
     </div>
 
-    <!-- Rembg Tab -->
-    <div v-if="activeTab === 'rembg'" class="card">
-      <h3 style="color: var(--text-bright); margin-bottom: 16px;">Rembg (Background Removal)</h3>
-      <div v-if="rembgSaved" class="status status-success" style="margin-bottom: 16px;">URL saved.</div>
-      <div v-if="rembgError" class="status status-error" style="margin-bottom: 16px;">{{ rembgError }}</div>
-
-      <div style="color: var(--text-dim); font-size: 13px; margin-bottom: 12px; line-height: 1.5;">
-        Rembg is an AI background removal service. Run it on any device with Python/CUDA:
-        <code style="background: var(--surface-2); padding: 2px 6px; border-radius: 4px; font-size: 12px;">rembg s --host 0.0.0.0 --port 7000</code>
-        <br>Then enter its URL below. Required for clean multi-character compositing.
+    <!-- Safety Tab -->
+    <div v-if="activeTab === 'safety'" class="card">
+      <h3 style="color: var(--text-bright); margin-bottom: 16px;">Kids Mode</h3>
+      <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 16px;">
+        <ToggleSwitch :modelValue="kidsMode" @update:modelValue="onKidsToggle" />
+        <div>
+          <div style="color: var(--text-bright); font-weight: 500;">{{ kidsMode ? 'Enabled' : 'Disabled' }}</div>
+          <div style="color: var(--text-dim); font-size: 12px; margin-top: 2px;">
+            Content filter for child-safe image generation
+          </div>
+        </div>
       </div>
+      <div style="color: var(--text-dim); font-size: 13px; line-height: 1.6;">
+        When enabled, Kids Mode applies multiple safety layers:
+        <ul style="margin: 8px 0 0 16px; padding: 0;">
+          <li>Filters user input for restricted content</li>
+          <li>Instructs the LLM to generate only safe prompts</li>
+          <li>Filters LLM output for inappropriate tags</li>
+          <li>Forces negative prompt safety tags</li>
+        </ul>
+        <div style="margin-top: 8px;">Protected by 4-digit PIN to prevent children from disabling it.</div>
+      </div>
+    </div>
 
-      <div class="form-group">
-        <label class="form-label">Rembg Server URL</label>
-        <div style="display: flex; gap: 8px;">
-          <input class="form-input" v-model="rembgForm.rembg_url" placeholder="http://192.168.1.100:7000" style="flex: 1;" />
-          <button class="btn btn-secondary btn-sm" @click="testRembg" :disabled="rembgTesting || !rembgForm.rembg_url">
-            {{ rembgTesting ? 'Testing...' : 'Test' }}
-          </button>
+    <!-- Advanced Tab (SD Models + Rembg) -->
+    <div v-if="activeTab === 'advanced'">
+      <div v-if="sdError" class="status status-error">{{ sdError }}</div>
+
+      <div class="form-row-2">
+        <div class="card">
+          <h3 style="color: var(--text-bright); margin-bottom: 16px;">SD Models</h3>
+          <div v-if="sdLoading" style="text-align: center; padding: 20px;"><span class="spinner"></span></div>
+          <div v-else-if="sdModels.length === 0" style="color: var(--text-dim);">No models loaded</div>
+          <div v-for="m in sdModels" :key="m.model_name" style="padding: 8px 0; border-bottom: 1px solid var(--border);">
+            <div style="color: var(--text-bright); font-size: 13px;">{{ m.title }}</div>
+            <div style="color: var(--text-dim); font-size: 11px;">{{ m.model_name }}</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3 style="color: var(--text-bright); margin-bottom: 16px;">SD LoRA</h3>
+          <div v-if="sdLoading" style="text-align: center; padding: 20px;"><span class="spinner"></span></div>
+          <div v-else-if="sdLoRAs.length === 0" style="color: var(--text-dim);">No LoRA models found</div>
+          <div v-else style="display: flex; flex-wrap: wrap; gap: 6px;">
+            <span v-for="l in sdLoRAs" :key="l.name"
+              style="padding: 4px 10px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 4px; font-size: 12px; color: var(--text);"
+              :title="l.path">
+              {{ l.name }}
+            </span>
+          </div>
         </div>
       </div>
 
-      <div v-if="rembgStatus === 'ok'" style="color: #4ade80; font-size: 13px; margin-bottom: 12px;">
-        Connection successful — rembg is running.
-      </div>
-      <div v-if="rembgStatus === 'error'" style="color: #f87171; font-size: 13px; margin-bottom: 12px;">
-        Connection failed — check URL and make sure rembg is running.
-      </div>
+      <button class="btn btn-secondary" style="margin-top: 16px;" @click="loadSD" :disabled="sdLoading">
+        {{ sdLoading ? 'Loading...' : 'Refresh' }}
+      </button>
 
-      <div v-if="!rembgForm.rembg_url" style="color: var(--text-dim); font-size: 12px; padding: 8px; background: var(--surface-2); border-radius: 6px; margin-bottom: 12px;">
-        Without rembg, Go-based white background removal will be used (lower quality, visible artifacts on edges).
-      </div>
+      <div class="card" style="margin-top: 24px;">
+        <h3 style="color: var(--text-bright); margin-bottom: 16px;">Rembg (Background Removal)</h3>
+        <div v-if="rembgSaved" class="status status-success" style="margin-bottom: 16px;">URL saved.</div>
+        <div v-if="rembgError" class="status status-error" style="margin-bottom: 16px;">{{ rembgError }}</div>
 
-      <button class="btn btn-primary" @click="saveRembg">Save Rembg URL</button>
+        <div style="color: var(--text-dim); font-size: 13px; margin-bottom: 12px; line-height: 1.5;">
+          Rembg is an AI background removal service. Run it on any device with Python/CUDA:
+          <code style="background: var(--surface-2); padding: 2px 6px; border-radius: 4px; font-size: 12px;">rembg s --host 0.0.0.0 --port 7000</code>
+          <br>Then enter its URL below. Required for clean multi-character compositing.
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Rembg Server URL</label>
+          <div style="display: flex; gap: 8px;">
+            <input class="form-input" v-model="rembgForm.rembg_url" placeholder="http://192.168.1.100:7000" style="flex: 1;" />
+            <button class="btn btn-secondary btn-sm" @click="testRembg" :disabled="rembgTesting || !rembgForm.rembg_url">
+              {{ rembgTesting ? 'Testing...' : 'Test' }}
+            </button>
+          </div>
+        </div>
+
+        <div v-if="rembgStatus === 'ok'" style="color: #4ade80; font-size: 13px; margin-bottom: 12px;">
+          Connection successful — rembg is running.
+        </div>
+        <div v-if="rembgStatus === 'error'" style="color: #f87171; font-size: 13px; margin-bottom: 12px;">
+          Connection failed — check URL and make sure rembg is running.
+        </div>
+
+        <div v-if="!rembgForm.rembg_url" style="color: var(--text-dim); font-size: 12px; padding: 8px; background: var(--surface-2); border-radius: 6px; margin-bottom: 12px;">
+          Without rembg, Go-based white background removal will be used (lower quality, visible artifacts on edges).
+        </div>
+
+        <button class="btn btn-primary" @click="saveRembg">Save Rembg URL</button>
+      </div>
     </div>
 
     <PinModal v-if="showPinModal" :mode="pinMode" :error="pinError" @confirm="onPinConfirm" @cancel="onPinCancel" />

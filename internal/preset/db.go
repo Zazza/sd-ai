@@ -54,6 +54,10 @@ func Open(dbPath string) (*DB, error) {
 		return nil, fmt.Errorf("migrate v7: %w", err)
 	}
 
+	if err := migrateV8(db); err != nil {
+		return nil, fmt.Errorf("migrate v8: %w", err)
+	}
+
 	return &DB{db: db}, nil
 }
 
@@ -376,7 +380,7 @@ func (d *DB) SetSetting(key, value string) error {
 }
 
 func (d *DB) ListDescriptions() ([]SavedDescription, error) {
-	rows, err := d.db.Query(`SELECT id, text, created_at FROM saved_descriptions ORDER BY created_at DESC`)
+	rows, err := d.db.Query(`SELECT id, text, name, negative_prompt, type, created_at FROM saved_descriptions ORDER BY created_at DESC`)
 	if err != nil {
 		return nil, err
 	}
@@ -385,7 +389,7 @@ func (d *DB) ListDescriptions() ([]SavedDescription, error) {
 	var items []SavedDescription
 	for rows.Next() {
 		var s SavedDescription
-		if err := rows.Scan(&s.ID, &s.Text, &s.CreatedAt); err != nil {
+		if err := rows.Scan(&s.ID, &s.Text, &s.Name, &s.NegativePrompt, &s.Type, &s.CreatedAt); err != nil {
 			return nil, err
 		}
 		items = append(items, s)
@@ -400,6 +404,22 @@ func (d *DB) CreateDescription(text string) (*SavedDescription, error) {
 	}
 	id, _ := result.LastInsertId()
 	return &SavedDescription{ID: id, Text: text}, nil
+}
+
+func (d *DB) CreateDescriptionFull(s *SavedDescription) (*SavedDescription, error) {
+	result, err := d.db.Exec(`INSERT INTO saved_descriptions (text, name, negative_prompt, type) VALUES (?, ?, ?, ?)`,
+		s.Text, s.Name, s.NegativePrompt, s.Type)
+	if err != nil {
+		return nil, err
+	}
+	s.ID, _ = result.LastInsertId()
+	return s, nil
+}
+
+func (d *DB) UpdateDescription(s *SavedDescription) error {
+	_, err := d.db.Exec(`UPDATE saved_descriptions SET text=?, name=?, negative_prompt=?, type=? WHERE id=?`,
+		s.Text, s.Name, s.NegativePrompt, s.Type, s.ID)
+	return err
 }
 
 func (d *DB) DeleteDescription(id int64) error {
@@ -728,6 +748,27 @@ func migrateV7(db *sql.DB) error {
 		)
 	`)
 	return err
+}
+
+func migrateV8(db *sql.DB) error {
+	newCols := []struct {
+		name string
+		typ  string
+	}{
+		{"name", "TEXT DEFAULT ''"},
+		{"negative_prompt", "TEXT DEFAULT ''"},
+		{"type", "TEXT DEFAULT ''"},
+	}
+	for _, col := range newCols {
+		_, err := db.Exec("ALTER TABLE saved_descriptions ADD COLUMN " + col.name + " " + col.typ)
+		if err != nil && strings.Contains(err.Error(), "duplicate column name") {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (d *DB) ListSavedScenes() ([]SavedScene, error) {
