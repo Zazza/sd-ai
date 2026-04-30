@@ -29,12 +29,20 @@ Both services must be reachable from the machine running SD Studio. If they run 
 - **Preset recommendation** — LLM analyzes your description and recommends the best matching preset from your library
 - **Editable SD prompt instruction** — customize how LLM formats SD prompts via Settings > Prompt tab
 - Generate images through Stable Diffusion WebUI API
+- **Batch generation** — generate N images to a specified folder with progress tracking
+- **Test page** — multi-select presets or models and generate images directly through SD for comparison
+- **Pipelines (Compound Presets)** — multi-step generation chains (txt2img → img2img → ...) for complex workflows
+- **Generate From Image** — upload image, analyze via vision LLM (quick or deep mode), generate with preset, inpaint with canvas mask drawing
+- **Multi-Scene Editor** — LLM decomposes scene into multiple characters, inpaint-based multi-pass compositing with rembg background removal
 - Manage presets (generation parameters: sampler, steps, cfg_scale, size, seed, LoRA)
 - Preset types with tags for organization
+- Import/Export presets with model validation
 - Configure LLM and SD API connections (URL, models, backend-specific params)
-- Save descriptions for reuse
-- Kids Mode with content filtering and PIN protection
-- Image analysis via vision LLM (extract SD tags from existing images)
+- Save descriptions and prompts for reuse
+- Saved scenes for re-running multi-scene compositions
+- Kids Mode with content filtering, PIN protection, and category toggles
+- NSFW preset section
+- Event logger with footer log viewer
 - Preview mode with upscale to full resolution
 
 ## Requirements
@@ -117,7 +125,13 @@ Settings are stored in SQLite (`data/presets.db`) and persist across reinstalls.
 │   └── src/
 │       ├── components/  # Vue components
 │       └── wailsjs/     # Auto-generated Wails bindings
-└── data/                # SQLite DB (runtime)
+└── data/                # Runtime data
+    ├── presets.db       # SQLite database
+    ├── models.json      # Available SD models catalog
+    ├── recommended-loras.json  # Recommended LoRAs with default weights
+    ├── SD-models.md     # Model descriptions reference
+    ├── SD-LORAS.md      # LoRA descriptions reference
+    └── presets/         # JSON preset files (import-ready)
 ```
 
 ## Improvement Roadmap
@@ -166,6 +180,7 @@ Prioritized findings from code review (2026-04-24).
 
 ## Generation Flow
 
+### Standard Generation
 ```
 User selects preset + writes description
          │
@@ -185,6 +200,28 @@ User selects preset + writes description
           │
           ▼
    Preview → Upscale → Download
+```
+
+### From Image
+```
+Upload image → Analyze (quick/deep via vision LLM)
+         │
+         ▼
+  Select preset (manual or LLM-recommended)
+         │
+         ▼
+  Generate (img2img) or Inpaint (canvas mask)
+```
+
+### Multi-Scene
+```
+Describe scene → LLM decomposes into characters
+         │
+         ▼
+  For each character: rembg → inpaint into scene
+         │
+         ▼
+  Save scene for re-use
 ```
 
 Preset recommendation: user describes what they want → LLM selects best preset from library + suggests additional tags.
