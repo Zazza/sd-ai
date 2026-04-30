@@ -17,6 +17,7 @@ const editingId = ref(null)
 const editName = ref('')
 const editType = ref('')
 const editNegative = ref('')
+const editText = ref('')
 const newText = ref('')
 const newNegative = ref('')
 const newName = ref('')
@@ -47,13 +48,14 @@ function useDesc(desc) {
 
 function startEdit(desc) {
   editingId.value = desc.id
+  editText.value = desc.text || ''
   editName.value = desc.name || ''
   editType.value = desc.type || ''
   editNegative.value = desc.negative_prompt || ''
 }
 
 function saveEdit(desc) {
-  emit('update', { ...desc, name: editName.value, type: editType.value, negative_prompt: editNegative.value })
+  emit('update', { ...desc, text: editText.value, name: editName.value, type: editType.value, negative_prompt: editNegative.value })
   editingId.value = null
 }
 
@@ -118,6 +120,7 @@ function handleDelete(id) {
             </div>
             <div v-if="editingId !== desc.id" class="saved-modal-text">{{ desc.text }}</div>
             <div v-else style="display: flex; flex-direction: column; gap: 6px;">
+              <textarea class="form-textarea" v-model="editText" placeholder="Description text" rows="3"></textarea>
               <input class="form-input" v-model="editName" placeholder="Name" />
               <input class="form-input" v-model="editType" placeholder="Type/tag" />
               <textarea class="form-textarea" v-model="editNegative" placeholder="Negative prompt" rows="2"></textarea>
