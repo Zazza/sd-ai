@@ -233,6 +233,32 @@ export namespace main {
 	        this.preset_id = source["preset_id"];
 	    }
 	}
+	export class ExportImageParams {
+	    image_base64: string;
+	    format: string;
+	    width: number;
+	    height: number;
+	    lock_ratio: boolean;
+	    quality: number;
+	    interpolation: string;
+	    filename: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ExportImageParams(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.image_base64 = source["image_base64"];
+	        this.format = source["format"];
+	        this.width = source["width"];
+	        this.height = source["height"];
+	        this.lock_ratio = source["lock_ratio"];
+	        this.quality = source["quality"];
+	        this.interpolation = source["interpolation"];
+	        this.filename = source["filename"];
+	    }
+	}
 	export class GenerateCompoundImageParams {
 	    compound_preset_id: number;
 	    extra_prompt: string;
@@ -262,6 +288,7 @@ export namespace main {
 	    mask_blur: number;
 	    inpaint_fill: number;
 	    inpaint_full_res: boolean;
+	    remove_object: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new GenerateFromImageParams(source);
@@ -281,6 +308,7 @@ export namespace main {
 	        this.mask_blur = source["mask_blur"];
 	        this.inpaint_fill = source["inpaint_fill"];
 	        this.inpaint_full_res = source["inpaint_full_res"];
+	        this.remove_object = source["remove_object"];
 	    }
 	}
 	export class GenerateImageParams {
@@ -804,6 +832,36 @@ export namespace preset {
 		}
 	}
 	
+	export class ExportPreset {
+	    id: number;
+	    name: string;
+	    format: string;
+	    width: number;
+	    height: number;
+	    lock_ratio: boolean;
+	    quality: number;
+	    interpolation: string;
+	    created_at: string;
+	    updated_at: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ExportPreset(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.format = source["format"];
+	        this.width = source["width"];
+	        this.height = source["height"];
+	        this.lock_ratio = source["lock_ratio"];
+	        this.quality = source["quality"];
+	        this.interpolation = source["interpolation"];
+	        this.created_at = source["created_at"];
+	        this.updated_at = source["updated_at"];
+	    }
+	}
 	
 	export class PresetType {
 	    id: number;

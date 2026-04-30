@@ -3,7 +3,9 @@ module go-sd
 go 1.25.0
 
 require (
+	github.com/chai2010/webp v1.4.0
 	github.com/wailsapp/wails/v2 v2.12.0
+	golang.org/x/image v0.39.0
 	modernc.org/sqlite v1.49.1
 )
 
@@ -38,7 +40,7 @@ require (
 	golang.org/x/crypto v0.33.0 // indirect
 	golang.org/x/net v0.35.0 // indirect
 	golang.org/x/sys v0.42.0 // indirect
-	golang.org/x/text v0.22.0 // indirect
+	golang.org/x/text v0.36.0 // indirect
 	modernc.org/libc v1.72.0 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect

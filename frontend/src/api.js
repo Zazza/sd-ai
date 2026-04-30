@@ -7,7 +7,7 @@ import {
   ListPrompts, CreatePrompt, DeletePrompt,
   SetKidsMode, IsKidsModeActive, GetKidsCategories, SetKidsCategory,
   ExportPresets, OpenImportFile, ImportPresets,
-  AnalyzeImage, ReadImageFile,
+  AnalyzeImage, ReadImageFile, ReadClipboardImage,
   ListPresetTypes, GetPresetType, CreatePresetType, UpdatePresetType, DeletePresetType,
   GetAllTags, GetSDLoRAs, ValidateImportModels,
   RecommendPreset, GetDefaultPromptInstruction, GetDefaultAnalyzePrompts,
@@ -20,6 +20,7 @@ import {
   ListSavedScenes, GetSavedScene, SaveScene, UpdateSavedScene, DeleteSavedScene,
   CheckRembg,
   ClearLastImage,
+  ListExportPresets, SaveExportPreset, DeleteExportPreset, ExportImage,
 } from './wailsjs/go/main/App.js'
 
 export const api = {
@@ -63,6 +64,7 @@ export const api = {
   importPresets: (items) => ImportPresets(items),
   analyzeImage: (imageBase64) => AnalyzeImage(imageBase64),
   readImageFile: () => ReadImageFile(),
+  readClipboardImage: () => ReadClipboardImage(),
   listPresetTypes: () => ListPresetTypes(),
   getPresetType: (id) => GetPresetType(id),
   createPresetType: (data) => CreatePresetType(data),
@@ -96,4 +98,8 @@ export const api = {
   deleteSavedScene: (id) => DeleteSavedScene(id),
   checkRembg: () => CheckRembg(),
   clearLastImage: () => ClearLastImage(),
+  listExportPresets: () => ListExportPresets(),
+  saveExportPreset: (data) => SaveExportPreset(data),
+  deleteExportPreset: (id) => DeleteExportPreset(id),
+  exportImage: (params) => ExportImage(params),
 }

@@ -1,10 +1,11 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { WindowSetSystemDefaultTheme, EventsOn, EventsOff } from './wailsjs/runtime/runtime'
-import { Diamond, Sparkles, LayoutGrid, Sliders, Settings, RotateCcw } from 'lucide-vue-next'
+import { Diamond, Sparkles, LayoutGrid, Sliders, Settings, RotateCcw, Download } from 'lucide-vue-next'
 import { api } from './api.js'
 import UnifiedPresetsPage from './components/UnifiedPresetsPage.vue'
 import UnifiedGeneratePage from './components/UnifiedGeneratePage.vue'
+import ExportPage from './components/ExportPage.vue'
 import SettingsPage from './components/SettingsPage.vue'
 import SceneEditorPage from './components/SceneEditorPage.vue'
 import AppFooter from './components/AppFooter.vue'
@@ -71,6 +72,7 @@ async function resetAll() {
 const currentPage = computed(() => {
   switch (page.value) {
     case 'generate': return UnifiedGeneratePage
+    case 'export': return ExportPage
     case 'scene': return SceneEditorPage
     case 'presets': return UnifiedPresetsPage
     case 'settings': return SettingsPage
@@ -100,6 +102,9 @@ onUnmounted(() => {
           <a class="sidebar-link" :class="{ active: page === 'generate' }" @click="page = 'generate'">
             <Sparkles :size="16" class="icon" /> Generate
           </a>
+          <a class="sidebar-link" :class="{ active: page === 'export' }" @click="page = 'export'">
+            <Download :size="16" class="icon" /> Export
+          </a>
           <a class="sidebar-link" :class="{ active: page === 'scene' }" @click="page = 'scene'">
             <LayoutGrid :size="16" class="icon" /> Multi-Scene
           </a>
@@ -122,6 +127,7 @@ onUnmounted(() => {
     </aside>
     <main class="main">
       <UnifiedGeneratePage v-if="page === 'generate'" :key="resetKey" />
+      <ExportPage v-else-if="page === 'export'" />
       <component v-else :is="currentPage" />
     </main>
     </div>

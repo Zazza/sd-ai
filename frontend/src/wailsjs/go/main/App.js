@@ -62,6 +62,10 @@ export function DeleteDescription(arg1) {
   return window['go']['main']['App']['DeleteDescription'](arg1);
 }
 
+export function DeleteExportPreset(arg1) {
+  return window['go']['main']['App']['DeleteExportPreset'](arg1);
+}
+
 export function DeletePreset(arg1) {
   return window['go']['main']['App']['DeletePreset'](arg1);
 }
@@ -76,6 +80,10 @@ export function DeletePrompt(arg1) {
 
 export function DeleteSavedScene(arg1) {
   return window['go']['main']['App']['DeleteSavedScene'](arg1);
+}
+
+export function ExportImage(arg1) {
+  return window['go']['main']['App']['ExportImage'](arg1);
 }
 
 export function ExportPresets(arg1) {
@@ -190,6 +198,10 @@ export function ListDescriptions() {
   return window['go']['main']['App']['ListDescriptions']();
 }
 
+export function ListExportPresets() {
+  return window['go']['main']['App']['ListExportPresets']();
+}
+
 export function ListPresetTypes() {
   return window['go']['main']['App']['ListPresetTypes']();
 }
@@ -214,12 +226,20 @@ export function OpenImportFile() {
   return window['go']['main']['App']['OpenImportFile']();
 }
 
+export function ReadClipboardImage() {
+  return window['go']['main']['App']['ReadClipboardImage']();
+}
+
 export function ReadImageFile() {
   return window['go']['main']['App']['ReadImageFile']();
 }
 
 export function RecommendPreset(arg1) {
   return window['go']['main']['App']['RecommendPreset'](arg1);
+}
+
+export function SaveExportPreset(arg1) {
+  return window['go']['main']['App']['SaveExportPreset'](arg1);
 }
 
 export function SaveImage(arg1, arg2) {

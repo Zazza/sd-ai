@@ -84,3 +84,16 @@ type SavedScene struct {
 	SceneJSON string `json:"scene_json"`
 	CreatedAt string `json:"created_at"`
 }
+
+type ExportPreset struct {
+	ID            int64  `json:"id"`
+	Name          string `json:"name"`
+	Format        string `json:"format"`
+	Width         int    `json:"width"`
+	Height        int    `json:"height"`
+	LockRatio     bool   `json:"lock_ratio"`
+	Quality       int    `json:"quality"`
+	Interpolation string `json:"interpolation"`
+	CreatedAt     string `json:"created_at"`
+	UpdatedAt     string `json:"updated_at"`
+}

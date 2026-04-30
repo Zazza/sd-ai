@@ -135,8 +135,8 @@ onMounted(async () => {
     if (shared.selectedPresetId) selectedPresetId.value = shared.selectedPresetId
     if (shared.selectedCompoundPresetId) selectedCompoundPresetId.value = shared.selectedCompoundPresetId
     if (shared.genMode) batchMode.value = shared.genMode
-    if (shared.description) prompt.value = shared.description
-    if (shared.negative) negativePrompt.value = shared.negative
+    if (!props.prefillPrompt && shared.description) prompt.value = shared.description
+    if (!props.prefillNegative && shared.negative) negativePrompt.value = shared.negative
   }
 })
 

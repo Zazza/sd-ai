@@ -73,6 +73,7 @@ type Txt2ImgRequest struct {
 	HiresUpscaler          string   `json:"hr_upscaler,omitempty"`
 	HiresResizeX           int      `json:"hr_resize_x"`
 	HiresResizeY           int      `json:"hr_resize_y"`
+	HiresSecondPassSteps   int      `json:"hr_second_pass_steps"`
 	DoNotSaveImages        bool     `json:"do_not_save_images"`
 	DoNotSaveGrid          bool     `json:"do_not_save_grid"`
 }

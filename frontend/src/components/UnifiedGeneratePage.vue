@@ -109,7 +109,7 @@ onUnmounted(() => {
     </div>
     <div class="unified-tab-content">
       <GeneratePage v-if="activeTab === 'generate'" />
-      <GenerateFromImagePage v-else-if="activeTab === 'from-image'" :dropped-image="droppedImage" @clear-dropped="droppedImage = null" />
+      <GenerateFromImagePage v-else-if="activeTab === 'from-image'" :dropped-image="droppedImage" @clear-dropped="droppedImage = null" @transfer-tags="activeTab = 'generate'" />
       <BatchPage v-else-if="activeTab === 'batch'" v-bind="batchProps" :key="batchKey" />
       <TestPage v-else-if="activeTab === 'test'" />
     </div>

@@ -395,39 +395,13 @@ function copyPrompt() {
 }
 
 async function openBatchGeneration() {
-  let batchPrompt = extraPrompt.value
-  let batchNegative = extraNegativePrompt.value
-
-  if (genMode.value === 'compound') {
-    EventsEmit('navigate:batch', {
-      prefillPrompt: batchPrompt || '',
-      prefillNegative: batchNegative || '',
-      prefillCompoundPresetId: selectedCompoundPresetId.value || null,
-    })
-    return
-  }
-
-  if (!batchPrompt && description.value.trim() && selectedPresetId.value) {
-    try {
-      const promptResult = await api.generateSdPrompt({
-        preset_id: selectedPresetId.value,
-        description: description.value,
-        negative: negative.value,
-      })
-      if (promptResult && promptResult.prompt) {
-        batchPrompt = promptResult.prompt
-        batchNegative = promptResult.negative_prompt || ''
-      }
-    } catch (e) {
-      error.value = 'Prompt generation failed: ' + String(e)
-      return
-    }
-  }
+  if (!extraPrompt.value) return
 
   EventsEmit('navigate:batch', {
-    prefillPrompt: batchPrompt || '',
-    prefillNegative: batchNegative || '',
-    prefillPresetId: selectedPresetId.value || null,
+    prefillPrompt: extraPrompt.value,
+    prefillNegative: extraNegativePrompt.value || '',
+    prefillPresetId: genMode.value === 'preset' ? selectedPresetId.value || null : null,
+    prefillCompoundPresetId: genMode.value === 'compound' ? selectedCompoundPresetId.value || null : null,
   })
 }
 
@@ -578,7 +552,7 @@ function onKeydown(e) {
             </span>
             <span v-else>Generate Image</span>
           </button>
-          <button class="btn btn-secondary" style="width: 100%; justify-content: center; padding: 8px; margin-top: 6px;" @click="openBatchGeneration" :disabled="generatingImage || (genMode === 'preset' ? !selectedPresetId : !selectedCompoundPresetId)">
+          <button class="btn btn-secondary" style="width: 100%; justify-content: center; padding: 8px; margin-top: 6px;" @click="openBatchGeneration" :disabled="generatingImage || !extraPrompt || (genMode === 'preset' ? !selectedPresetId : !selectedCompoundPresetId)">
             Batch Generation
           </button>
 

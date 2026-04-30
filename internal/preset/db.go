@@ -58,6 +58,10 @@ func Open(dbPath string) (*DB, error) {
 		return nil, fmt.Errorf("migrate v8: %w", err)
 	}
 
+	if err := migrateV9(db); err != nil {
+		return nil, fmt.Errorf("migrate v9: %w", err)
+	}
+
 	return &DB{db: db}, nil
 }
 
@@ -816,4 +820,49 @@ func (d *DB) UpdateSavedScene(s *SavedScene) error {
 func (d *DB) DeleteSavedScene(id int64) error {
 	_, err := d.db.Exec(`DELETE FROM saved_scenes WHERE id = ?`, id)
 	return err
+}
+
+func migrateV9(db *sql.DB) error {
+	_, err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS export_presets (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			name TEXT NOT NULL,
+			format TEXT NOT NULL DEFAULT 'png',
+			width INTEGER NOT NULL DEFAULT 0,
+			height INTEGER NOT NULL DEFAULT 0,
+			lock_ratio INTEGER NOT NULL DEFAULT 1,
+			quality INTEGER NOT NULL DEFAULT 90,
+			interpolation TEXT NOT NULL DEFAULT 'lanczos',
+			created_at TEXT NOT NULL DEFAULT (datetime('now')),
+			updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+		)
+	`)
+	if err != nil {
+		return err
+	}
+
+	var count int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM export_presets`).Scan(&count); err != nil {
+		return err
+	}
+	if count > 0 {
+		return nil
+	}
+
+	defaults := []ExportPreset{
+		{Name: "Quality Photo", Format: "png", Width: 0, Height: 0, LockRatio: true, Quality: 0, Interpolation: "lanczos"},
+		{Name: "Web Optimized", Format: "webp", Width: 1920, Height: 0, LockRatio: true, Quality: 85, Interpolation: "lanczos"},
+		{Name: "Social Media", Format: "jpeg", Width: 1080, Height: 1080, LockRatio: false, Quality: 90, Interpolation: "lanczos"},
+		{Name: "Thumbnail", Format: "webp", Width: 256, Height: 256, LockRatio: false, Quality: 75, Interpolation: "lanczos"},
+	}
+	for _, d := range defaults {
+		_, err := db.Exec(
+			`INSERT INTO export_presets (name, format, width, height, lock_ratio, quality, interpolation) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+			d.Name, d.Format, d.Width, d.Height, d.LockRatio, d.Quality, d.Interpolation,
+		)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }

@@ -11,10 +11,11 @@ import (
 	"image"
 	"image/color"
 	"image/draw"
-	_ "image/jpeg"
+	"image/jpeg"
 	"image/png"
 	"math"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -22,7 +23,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/chai2010/webp"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
+	xdraw "golang.org/x/image/draw"
 
 	"go-sd/internal/compositor"
 	"go-sd/internal/config"
@@ -740,6 +743,34 @@ func (a *App) ReadImageFile() (string, error) {
 	return base64.StdEncoding.EncodeToString(data), nil
 }
 
+func (a *App) ReadClipboardImage() (string, error) {
+	var data []byte
+	var err error
+
+	if os.Getenv("WAYLAND_DISPLAY") != "" {
+		data, err = exec.Command("wl-paste", "-t", "image/png").Output()
+	} else {
+		data, err = exec.Command("xclip", "-selection", "clipboard", "-t", "image/png", "-o").Output()
+	}
+
+	if err != nil {
+		if os.Getenv("WAYLAND_DISPLAY") != "" {
+			return "", fmt.Errorf("failed to read clipboard (install wl-clipboard)")
+		}
+		return "", fmt.Errorf("failed to read clipboard (install xclip)")
+	}
+
+	if len(data) == 0 {
+		return "", fmt.Errorf("no image in clipboard")
+	}
+
+	if len(data) > 16*1024*1024 {
+		return "", fmt.Errorf("image too large (max 16 MB)")
+	}
+
+	return base64.StdEncoding.EncodeToString(data), nil
+}
+
 type GenerateImageParams struct {
 	PresetID            int64  `json:"preset_id"`
 	ExtraPrompt         string `json:"extra_prompt"`
@@ -1022,6 +1053,13 @@ func (a *App) BatchGenerate(params BatchGenerateParams) error {
 	batchCount := 1
 
 	denoisingStrength := p.DenoisingStrength
+	if denoisingStrength == nil && p.HiresFix != nil && *p.HiresFix {
+		ds := 0.5
+		if p.HiresDenoisingStrength != nil {
+			ds = *p.HiresDenoisingStrength
+		}
+		denoisingStrength = &ds
+	}
 	var hiresFix *bool
 	if p.HiresFix != nil {
 		hiresFix = p.HiresFix
@@ -2744,6 +2782,7 @@ type GenerateFromImageParams struct {
 	MaskBlur            int     `json:"mask_blur"`
 	InpaintFill         int     `json:"inpaint_fill"`
 	InpaintFullRes      bool    `json:"inpaint_full_res"`
+	RemoveObject        bool    `json:"remove_object"`
 }
 
 func (a *App) GenerateFromImage(params GenerateFromImageParams) (*GenerateImageResult, error) {
@@ -2756,11 +2795,13 @@ func (a *App) GenerateFromImage(params GenerateFromImageParams) (*GenerateImageR
 	if params.GenMode != "preset" && params.GenMode != "compound" {
 		return nil, fmt.Errorf("gen_mode must be preset or compound")
 	}
-	if params.GenMode == "preset" && params.PresetID <= 0 {
-		return nil, fmt.Errorf("preset is required")
-	}
-	if params.GenMode == "compound" && params.CompoundPresetID <= 0 {
-		return nil, fmt.Errorf("compound preset is required")
+	if !params.RemoveObject {
+		if params.GenMode == "preset" && params.PresetID <= 0 {
+			return nil, fmt.Errorf("preset is required")
+		}
+		if params.GenMode == "compound" && params.CompoundPresetID <= 0 {
+			return nil, fmt.Errorf("compound preset is required")
+		}
 	}
 	if params.Mode != "txt2img" && params.Mode != "img2img" && params.Mode != "inpaint" {
 		return nil, fmt.Errorf("mode must be txt2img, img2img or inpaint")
@@ -2796,6 +2837,10 @@ func (a *App) GenerateFromImage(params GenerateFromImageParams) (*GenerateImageR
 
 	if params.GenMode == "compound" {
 		return a.generateFromImageCompound(params, tags)
+	}
+
+	if params.RemoveObject {
+		return a.generateRemoveObject(params, tags)
 	}
 
 	p, err := a.presets.Get(params.PresetID)
@@ -3036,6 +3081,145 @@ RESPONSE LENGTH: your response is limited to ~%d tokens. You MUST fit within thi
 		EffectiveNegativePrompt: negativePrompt,
 	}
 	a.saveLastImage(result.Images[0], result.Info, isPreview)
+	return img, nil
+}
+
+func (a *App) generateRemoveObject(params GenerateFromImageParams, removeDesc string) (*GenerateImageResult, error) {
+	removeNegative := "object, items, things, artifacts, distortion"
+	if params.ExtraNegativePrompt != "" {
+		removeNegative += ", " + params.ExtraNegativePrompt
+	}
+
+	var prompt, negativePrompt string
+	var samplerName string
+	var scheduler string
+	var steps int
+	var cfgScale float64
+	var width, height int
+	var seed *int64
+	var clipSkip int
+	var modelName, vae string
+	var loras string
+
+	if params.PresetID > 0 {
+		p, err := a.presets.Get(params.PresetID)
+		if err == nil {
+			if p.Prompt != "" {
+				prompt = p.Prompt + ", " + removeDesc + ", seamless background, clean, natural, consistent with surroundings"
+			} else {
+				prompt = removeDesc + ", seamless background, clean, natural, consistent with surroundings"
+			}
+			negativePrompt = p.NegativePrompt
+			if negativePrompt != "" {
+				negativePrompt += ", "
+			}
+			negativePrompt += removeNegative
+
+			samplerName = p.Sampler
+			if p.ScheduleType != "" {
+				st := strings.ToUpper(p.ScheduleType[:1]) + p.ScheduleType[1:]
+				samplerName = p.Sampler + " " + st
+			}
+			scheduler = p.ScheduleType
+			steps = p.Steps
+			cfgScale = p.CfgScale
+			width = p.Width
+			height = p.Height
+			seed = p.Seed
+			if p.ClipSkip != nil {
+				clipSkip = *p.ClipSkip
+			}
+			modelName = p.ModelName
+			vae = p.VAE
+			loras = p.Loras
+		}
+	}
+
+	if prompt == "" {
+		prompt = removeDesc + ", seamless background, clean, natural, consistent with surroundings"
+	}
+	if negativePrompt == "" {
+		negativePrompt = removeNegative
+	}
+
+	if loras != "" {
+		var loraList []preset.LoRAEntry
+		if json.Unmarshal([]byte(loras), &loraList) == nil {
+			for _, l := range loraList {
+				prompt += fmt.Sprintf(" <lora:%s:%g>", l.Name, l.Weight)
+			}
+		}
+	}
+
+	if steps == 0 {
+		steps = 20
+	}
+	if cfgScale == 0 {
+		cfgScale = 7
+	}
+	if width == 0 {
+		width = 512
+	}
+	if height == 0 {
+		height = 512
+	}
+
+	if modelName != "" {
+		_ = a.sd.SetModel(modelName)
+	}
+	if vae != "" {
+		_ = a.sd.SetVAE(vae)
+	}
+
+	denoising := params.DenoisingStrength
+	if denoising <= 0 {
+		denoising = 0.75
+	}
+	maskBlur := params.MaskBlur
+	if maskBlur <= 0 {
+		maskBlur = 8
+	}
+
+	batchSize := 1
+	batchCount := 1
+
+	result, err := a.sd.Img2Img(sd.Img2ImgRequest{
+		InitImages:            []string{params.ImageBase64},
+		Prompt:                prompt,
+		NegativePrompt:        negativePrompt,
+		SamplerName:           samplerName,
+		Scheduler:             scheduler,
+		Steps:                 steps,
+		CfgScale:              cfgScale,
+		Width:                 width,
+		Height:                height,
+		Seed:                  seed,
+		DenoisingStrength:     &denoising,
+		ClipSkip:              &clipSkip,
+		BatchSize:             &batchSize,
+		BatchCount:            &batchCount,
+		Mask:                  params.MaskBase64,
+		MaskBlur:              maskBlur,
+		InpaintingFill:        params.InpaintFill,
+		InpaintFullRes:        params.InpaintFullRes,
+		InpaintFullResPadding: 32,
+		DoNotSaveImages:       true,
+		DoNotSaveGrid:         true,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if len(result.Images) == 0 {
+		return nil, fmt.Errorf("no image generated (remove object)")
+	}
+
+	img := &GenerateImageResult{
+		Image:                   result.Images[0],
+		Info:                    result.Info,
+		EffectivePrompt:         prompt,
+		EffectiveNegativePrompt: negativePrompt,
+	}
+	a.saveLastImage(result.Images[0], result.Info, false)
 	return img, nil
 }
 
@@ -3840,4 +4024,201 @@ func truncate(s string, n int) string {
 		return s
 	}
 	return s[:n] + "..."
+}
+
+// --- Export ---
+
+type ExportImageParams struct {
+	ImageBase64   string `json:"image_base64"`
+	Format        string `json:"format"`
+	Width         int    `json:"width"`
+	Height        int    `json:"height"`
+	LockRatio     bool   `json:"lock_ratio"`
+	Quality       int    `json:"quality"`
+	Interpolation string `json:"interpolation"`
+	Filename      string `json:"filename"`
+}
+
+func (a *App) ExportImage(params ExportImageParams) (string, error) {
+	if params.ImageBase64 == "" {
+		return "", fmt.Errorf("no image provided")
+	}
+
+	switch params.Format {
+	case "png", "jpeg", "webp":
+	default:
+		return "", fmt.Errorf("unsupported format: %s", params.Format)
+	}
+	switch params.Interpolation {
+	case "nearest", "linear", "lanczos", "":
+	default:
+		return "", fmt.Errorf("unsupported interpolation: %s", params.Interpolation)
+	}
+
+	const maxBase64Len = 22 * 1024 * 1024 // ~16 MB decoded
+	if len(params.ImageBase64) > maxBase64Len {
+		return "", fmt.Errorf("image too large (max 16 MB)")
+	}
+
+	imgData, err := base64.StdEncoding.DecodeString(params.ImageBase64)
+	if err != nil {
+		return "", fmt.Errorf("decode base64: %w", err)
+	}
+
+	img, _, err := image.Decode(bytes.NewReader(imgData))
+	if err != nil {
+		return "", fmt.Errorf("decode image: %w", err)
+	}
+
+	const maxDim = 8192
+	origBounds := img.Bounds()
+	origW := origBounds.Dx()
+	origH := origBounds.Dy()
+	targetW := params.Width
+	targetH := params.Height
+
+	if targetW == 0 && targetH == 0 {
+		targetW = origW
+		targetH = origH
+	} else if params.LockRatio {
+		if targetW > 0 && targetH == 0 {
+			longSide := float64(targetW)
+			if origH > origW {
+				ratio := longSide / float64(origH)
+				targetW = int(float64(origW) * ratio)
+				targetH = int(longSide)
+			} else {
+				ratio := longSide / float64(origW)
+				targetH = int(float64(origH) * ratio)
+			}
+		} else if targetH > 0 && targetW == 0 {
+			longSide := float64(targetH)
+			if origW > origH {
+				ratio := longSide / float64(origW)
+				targetH = int(float64(origH) * ratio)
+				targetW = int(longSide)
+			} else {
+				ratio := longSide / float64(origH)
+				targetW = int(float64(origW) * ratio)
+			}
+		} else {
+			ratio := math.Min(float64(targetW)/float64(origW), float64(targetH)/float64(origH))
+			ratio = math.Min(ratio, 1.0)
+			targetW = int(float64(origW) * ratio)
+			targetH = int(float64(origH) * ratio)
+		}
+	}
+
+	if targetW > maxDim {
+		targetW = maxDim
+	}
+	if targetH > maxDim {
+		targetH = maxDim
+	}
+	if targetW < 1 {
+		targetW = 1
+	}
+	if targetH < 1 {
+		targetH = 1
+	}
+
+	var result image.Image
+	if targetW != origW || targetH != origH {
+		dst := image.NewRGBA(image.Rect(0, 0, targetW, targetH))
+		var scaler xdraw.Scaler
+		switch params.Interpolation {
+		case "nearest":
+			scaler = xdraw.NearestNeighbor
+		case "linear":
+			scaler = xdraw.BiLinear
+		case "lanczos", "":
+			scaler = xdraw.CatmullRom
+		default:
+			scaler = xdraw.CatmullRom
+		}
+		scaler.Scale(dst, dst.Bounds(), img, origBounds, xdraw.Over, nil)
+		result = dst
+	} else {
+		result = img
+	}
+
+	if params.Quality <= 0 {
+		params.Quality = 90
+	}
+
+	ext := "." + params.Format
+	if params.Filename == "" {
+		params.Filename = "export_" + time.Now().Format("20060102_150405") + ext
+	}
+	if !strings.HasSuffix(strings.ToLower(params.Filename), ext) {
+		params.Filename += ext
+	}
+
+	filterName := "PNG Image"
+	filterPattern := "*.png"
+	switch params.Format {
+	case "jpeg":
+		filterName = "JPEG Image"
+		filterPattern = "*.jpg"
+	case "webp":
+		filterName = "WebP Image"
+		filterPattern = "*.webp"
+	}
+
+	path, err := runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{
+		DefaultFilename: params.Filename,
+		Filters: []runtime.FileFilter{
+			{DisplayName: filterName, Pattern: filterPattern},
+		},
+	})
+	if err != nil || path == "" {
+		return "", err
+	}
+
+	var buf bytes.Buffer
+	switch params.Format {
+	case "jpeg":
+		err = jpeg.Encode(&buf, result, &jpeg.Options{Quality: params.Quality})
+	case "webp":
+		webpData, encErr := webp.EncodeRGBA(result, float32(params.Quality))
+		if encErr != nil {
+			return "", fmt.Errorf("encode webp: %w", encErr)
+		}
+		buf.Write(webpData)
+	default:
+		err = png.Encode(&buf, result)
+	}
+	if err != nil {
+		return "", fmt.Errorf("encode %s: %w", params.Format, err)
+	}
+
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return "", err
+	}
+	if err := os.WriteFile(path, buf.Bytes(), 0o644); err != nil {
+		return "", err
+	}
+
+	return path, nil
+}
+
+func (a *App) ListExportPresets() ([]preset.ExportPreset, error) {
+	return a.presets.ListExportPresets()
+}
+
+func (a *App) SaveExportPreset(ep preset.ExportPreset) (*preset.ExportPreset, error) {
+	if ep.ID > 0 {
+		if err := a.presets.UpdateExportPreset(&ep); err != nil {
+			return nil, err
+		}
+	} else {
+		if err := a.presets.CreateExportPreset(&ep); err != nil {
+			return nil, err
+		}
+	}
+	return &ep, nil
+}
+
+func (a *App) DeleteExportPreset(id int64) error {
+	return a.presets.DeleteExportPreset(id)
 }

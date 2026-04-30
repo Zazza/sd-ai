@@ -7,7 +7,7 @@ import ImageViewer from './ImageViewer.vue'
 const props = defineProps({
   droppedImage: { type: String, default: null }
 })
-const emit = defineEmits(['clear-dropped'])
+const emit = defineEmits(['clear-dropped', 'transfer-tags'])
 
 watch(() => props.droppedImage, (val) => {
   if (val) {
@@ -62,6 +62,7 @@ const shared = inject('sharedGenState', null)
 
 const isDragOver = ref(false)
 
+const removeDescription = ref('')
 const brushSize = ref(30)
 const maskBlur = ref(4)
 const inpaintFill = ref(1)
@@ -133,6 +134,22 @@ async function useLastImage() {
       clearMask()
     } else {
       error.value = 'No last generated image found'
+    }
+  } catch (e) {
+    error.value = String(e)
+  }
+}
+
+async function pasteFromClipboard() {
+  try {
+    const base64 = await api.readClipboardImage()
+    if (base64) {
+      uploadedImage.value = base64
+      uploadedImageMime.value = 'image/png'
+      tags.value = ''
+      recommendation.value = null
+      error.value = ''
+      clearMask()
     }
   } catch (e) {
     error.value = String(e)
@@ -370,7 +387,7 @@ function getMaskBase64() {
 }
 
 watch(mode, (newMode) => {
-  if (newMode === 'inpaint' && uploadedImage.value) {
+  if ((newMode === 'inpaint' || newMode === 'remove') && uploadedImage.value) {
     nextTick(() => {
       const img = imgEl.value
       if (img && img.complete) {
@@ -380,10 +397,16 @@ watch(mode, (newMode) => {
       }
     })
   }
+  if (newMode === 'remove') {
+    denoisingStrength.value = 0.75
+    maskBlur.value = 8
+    inpaintFill.value = 1
+    inpaintFullRes.value = true
+  }
 })
 
 watch(uploadedImage, () => {
-  if (mode.value === 'inpaint') {
+  if (mode.value === 'inpaint' || mode.value === 'remove') {
     nextTick(() => {
       const img = imgEl.value
       if (img && img.complete) {
@@ -400,15 +423,15 @@ async function generate() {
     error.value = 'Upload an image first'
     return
   }
-  if (genMode.value === 'preset' && !selectedPresetId.value) {
+  if (genMode.value === 'preset' && !selectedPresetId.value && mode.value !== 'remove') {
     error.value = 'Select a preset first'
     return
   }
-  if (genMode.value === 'compound' && !selectedCompoundPresetId.value) {
+  if (genMode.value === 'compound' && !selectedCompoundPresetId.value && mode.value !== 'remove') {
     error.value = 'Select a pipeline first'
     return
   }
-  if (mode.value === 'inpaint' && !hasMask.value) {
+  if ((mode.value === 'inpaint' || mode.value === 'remove') && !hasMask.value) {
     error.value = 'Draw a mask on the image first'
     return
   }
@@ -425,15 +448,16 @@ async function generate() {
     generationStage.value = 'generating'
     const params = {
       image_base64: uploadedImage.value,
-      mode: mode.value,
+      mode: mode.value === 'remove' ? 'inpaint' : mode.value,
       gen_mode: genMode.value,
       preset_id: selectedPresetId.value || 0,
       compound_preset_id: selectedCompoundPresetId.value || 0,
       denoising_strength: denoisingStrength.value,
-      tags: tags.value,
+      tags: mode.value === 'remove' ? removeDescription.value : tags.value,
       extra_negative_prompt: extraNegativePrompt.value,
+      remove_object: mode.value === 'remove',
     }
-    if (mode.value === 'inpaint') {
+    if (mode.value === 'inpaint' || mode.value === 'remove') {
       params.mask_base64 = getMaskBase64()
       params.mask_blur = maskBlur.value
       params.inpaint_fill = inpaintFill.value
@@ -464,6 +488,13 @@ async function downloadImage() {
   } catch (e) {
     error.value = 'Save failed: ' + String(e)
   }
+}
+
+function transferToGenerate() {
+  if (shared) {
+    shared.description = tags.value
+  }
+  emit('transfer-tags')
 }
 
 function applyRecommendation() {
@@ -580,10 +611,10 @@ function onKeydown(e) {
               :src="'data:' + uploadedImageMime + ';base64,' + uploadedImage"
               alt="Source"
               class="inpaint-source-img"
-              @load="mode === 'inpaint' && initMaskCanvas()"
+              @load="(mode === 'inpaint' || mode === 'remove') && initMaskCanvas()"
             />
             <canvas
-              v-if="mode === 'inpaint'"
+              v-if="mode === 'inpaint' || mode === 'remove'"
               ref="maskCanvasRef"
               class="inpaint-mask-canvas"
               :style="{ cursor: 'crosshair' }"
@@ -595,21 +626,24 @@ function onKeydown(e) {
               @touchmove="draw"
               @touchend="stopDraw"
             />
-            <div v-if="mode === 'inpaint'" class="inpaint-brush-indicator"></div>
+            <div v-if="mode === 'inpaint' || mode === 'remove'" class="inpaint-brush-indicator"></div>
           </div>
 
           <div v-if="uploadedImage" class="fi-btn-row">
             <button class="btn btn-sm btn-secondary" @click="uploadImage">Change</button>
             <button class="btn btn-sm btn-secondary" @click="useLastImage">Last Generated</button>
+            <button class="btn btn-sm btn-secondary" @click="pasteFromClipboard">Paste</button>
             <button class="btn btn-sm btn-secondary" @click="clearImage">Clear</button>
           </div>
           <div v-else class="fi-btn-row" style="margin-top: 8px;">
             <button class="btn btn-sm btn-secondary" @click="useLastImage">Last Generated</button>
+            <button class="btn btn-sm btn-secondary" @click="pasteFromClipboard">Paste</button>
           </div>
 
           <div style="display: flex; gap: 8px; margin-top: 16px; margin-bottom: 12px;">
             <button class="btn btn-sm" :class="mode === 'img2img' ? 'btn-primary' : 'btn-secondary'" @click="mode = 'img2img'" :disabled="generatingImage">img2img</button>
             <button class="btn btn-sm" :class="mode === 'inpaint' ? 'btn-primary' : 'btn-secondary'" @click="mode = 'inpaint'" :disabled="generatingImage">inpaint</button>
+            <button class="btn btn-sm" :class="mode === 'remove' ? 'btn-primary' : 'btn-secondary'" @click="mode = 'remove'" :disabled="generatingImage">remove</button>
           </div>
 
           <div v-if="mode === 'img2img' || mode === 'inpaint'" class="form-group">
@@ -621,7 +655,13 @@ function onKeydown(e) {
             </div>
           </div>
 
-          <div v-if="mode === 'inpaint'" class="inpaint-controls">
+          <div v-if="mode === 'remove'" class="form-group" style="margin-top: 4px;">
+            <div style="font-size: 11px; color: var(--text-dim);">
+              Denoising: {{ denoisingStrength.toFixed(2) }} | Mask Blur: {{ maskBlur }} | Fill: Original | Full Res: on
+            </div>
+          </div>
+
+          <div v-if="mode === 'inpaint' || mode === 'remove'" class="inpaint-controls">
             <div class="form-group">
               <label class="form-label">Brush Size: {{ brushSize }}px</label>
               <input type="range" class="form-range" v-model.number="brushSize" min="5" max="100" step="1" />
@@ -630,7 +670,7 @@ function onKeydown(e) {
               <button class="btn btn-sm btn-secondary" @click="clearMask" :disabled="!hasMask">Clear Mask</button>
               <button class="btn btn-sm btn-secondary" @click="undoMask" :disabled="!hasMask">Undo</button>
             </div>
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 8px;">
+            <div v-if="mode === 'inpaint'" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 8px;">
               <div class="form-group">
                 <label class="form-label">Mask Blur: {{ maskBlur }}</label>
                 <input type="range" class="form-range" v-model.number="maskBlur" min="0" max="64" step="1" />
@@ -644,7 +684,7 @@ function onKeydown(e) {
                 </select>
               </div>
             </div>
-            <div class="form-group" style="margin-top: 4px;">
+            <div v-if="mode === 'inpaint'" class="form-group" style="margin-top: 4px;">
               <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
                 <input type="checkbox" v-model="inpaintFullRes" style="accent-color: var(--accent);" />
                 <span style="font-size: 12px;">Inpaint Full Resolution</span>
@@ -688,7 +728,12 @@ function onKeydown(e) {
             </select>
           </div>
 
-          <div class="form-group" style="margin-top: 12px;">
+          <div v-if="mode === 'remove'" class="form-group" style="margin-top: 12px;">
+            <label class="form-label">Background Description</label>
+            <textarea class="form-textarea" v-model="removeDescription" rows="2" placeholder="What's behind the object? (e.g., clean wall, grass, sky)" :disabled="generatingImage"></textarea>
+          </div>
+
+          <div v-if="mode !== 'remove'" class="form-group" style="margin-top: 12px;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
               <label class="form-label" style="margin-bottom: 0;">Extracted Tags</label>
               <div style="display: flex; gap: 6px;">
@@ -705,14 +750,15 @@ function onKeydown(e) {
                 <span v-else>Analyze</span>
               </button>
               <button v-if="!kidsModeActive" class="btn btn-sm btn-secondary" @click="tags = ''" :disabled="!tags || generatingImage" title="Clear tags">&#10005;</button>
+              <button v-if="tags" class="btn btn-sm btn-secondary" @click="transferToGenerate" :disabled="generatingImage" title="Transfer tags to Generate tab">&#8594; Generate</button>
             </div>
-            <textarea class="form-textarea" v-model="tags" rows="4" placeholder="Tags extracted from image will appear here. Click Analyze or generate directly." :disabled="generatingImage || kidsModeActive"></textarea>
+            <textarea class="form-textarea" v-model="tags" rows="4" placeholder="Extracted tags appear here. You can also type your own description to guide generation." :disabled="generatingImage || kidsModeActive"></textarea>
             <div v-if="kidsModeActive" style="margin-top: 4px; padding: 6px; background: var(--bg-secondary); border-radius: 4px; text-align: center; font-size: 11px; color: var(--text-dim);">
               &#128274; Tags editing restricted in Kids Mode
             </div>
           </div>
 
-          <div v-if="recommendation" class="fi-recommendation">
+          <div v-if="mode !== 'remove' && recommendation" class="fi-recommendation">
             <div style="font-weight: 600; margin-bottom: 6px;">Recommended: {{ recommendation.preset_name }}</div>
             <div v-if="recommendation.reasoning" style="font-size: 12px; color: var(--text-dim); margin-bottom: 8px;">
               {{ recommendation.reasoning }}
@@ -726,7 +772,7 @@ function onKeydown(e) {
             </div>
           </div>
 
-          <div v-if="recommending" style="margin-top: 8px; display: flex; align-items: center; gap: 8px; color: var(--text-dim); font-size: 13px;">
+          <div v-if="mode !== 'remove' && recommending" style="margin-top: 8px; display: flex; align-items: center; gap: 8px; color: var(--text-dim); font-size: 13px;">
             <span class="spinner" style="width: 14px; height: 14px; border-width: 2px;"></span>
             Recommending preset...
           </div>
@@ -736,7 +782,7 @@ function onKeydown(e) {
             <textarea class="form-textarea" v-model="extraNegativePrompt" rows="2" placeholder="Additional negative prompt..." :disabled="generatingImage"></textarea>
           </div>
 
-          <button class="btn btn-primary" :class="{ 'btn-generating': generatingImage }" style="width: 100%; justify-content: center; padding: 12px;" @click="generate" :disabled="generatingImage || !uploadedImage || (mode === 'inpaint' && !hasMask) || (genMode === 'preset' ? !selectedPresetId : !selectedCompoundPresetId)">
+          <button class="btn btn-primary" :class="{ 'btn-generating': generatingImage }" style="width: 100%; justify-content: center; padding: 12px;" @click="generate" :disabled="generatingImage || !uploadedImage || ((mode === 'inpaint' || mode === 'remove') && !hasMask) || (mode !== 'remove' && (genMode === 'preset' ? !selectedPresetId : !selectedCompoundPresetId))">
             <span v-if="generatingImage" style="display: inline-flex; align-items: center; gap: 6px;">
               <span class="spinner" style="width: 14px; height: 14px; border-width: 2px;"></span>
               {{ generationStage === 'analyzing' ? 'Analyzing image...' : 'Generating image...' }}

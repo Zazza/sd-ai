@@ -36,6 +36,8 @@ export function DeleteCompoundPreset(arg1:number):Promise<void>;
 
 export function DeleteDescription(arg1:number):Promise<void>;
 
+export function DeleteExportPreset(arg1:number):Promise<void>;
+
 export function DeletePreset(arg1:number):Promise<void>;
 
 export function DeletePresetType(arg1:number):Promise<void>;
@@ -43,6 +45,8 @@ export function DeletePresetType(arg1:number):Promise<void>;
 export function DeletePrompt(arg1:number):Promise<void>;
 
 export function DeleteSavedScene(arg1:number):Promise<void>;
+
+export function ExportImage(arg1:main.ExportImageParams):Promise<string>;
 
 export function ExportPresets(arg1:Array<number>):Promise<string>;
 
@@ -100,6 +104,8 @@ export function ListCompoundPresets():Promise<Array<preset.CompoundPreset>>;
 
 export function ListDescriptions():Promise<Array<preset.SavedDescription>>;
 
+export function ListExportPresets():Promise<Array<preset.ExportPreset>>;
+
 export function ListPresetTypes():Promise<Array<preset.PresetType>>;
 
 export function ListPresets():Promise<Array<preset.Preset>>;
@@ -112,9 +118,13 @@ export function ListSavedScenes():Promise<Array<preset.SavedScene>>;
 
 export function OpenImportFile():Promise<main.ImportPreview>;
 
+export function ReadClipboardImage():Promise<string>;
+
 export function ReadImageFile():Promise<string>;
 
 export function RecommendPreset(arg1:string):Promise<main.RecommendPresetResult>;
+
+export function SaveExportPreset(arg1:preset.ExportPreset):Promise<preset.ExportPreset>;
 
 export function SaveImage(arg1:string,arg2:string):Promise<string>;
 
