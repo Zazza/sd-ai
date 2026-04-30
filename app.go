@@ -23,7 +23,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/chai2010/webp"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 	xdraw "golang.org/x/image/draw"
 
@@ -4181,7 +4180,7 @@ func (a *App) ExportImage(params ExportImageParams) (string, error) {
 	case "jpeg":
 		err = jpeg.Encode(&buf, result, &jpeg.Options{Quality: params.Quality})
 	case "webp":
-		webpData, encErr := webp.EncodeRGBA(result, float32(params.Quality))
+		webpData, encErr := encodeWebp(result, params.Quality)
 		if encErr != nil {
 			return "", fmt.Errorf("encode webp: %w", encErr)
 		}
@@ -4373,7 +4372,11 @@ func (a *App) ReadThumbnail(filePath string) (string, error) {
 	case ".jpg", ".jpeg":
 		err = jpeg.Encode(&buf, dst, &jpeg.Options{Quality: 80})
 	case ".webp":
-		err = webp.Encode(&buf, dst, &webp.Options{Quality: 80})
+		webpData, webpErr := encodeWebp(dst, 80)
+		if webpErr != nil {
+			return "", fmt.Errorf("encode thumbnail: %w", webpErr)
+		}
+		buf.Write(webpData)
 	default:
 		err = png.Encode(&buf, dst)
 	}
