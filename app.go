@@ -2816,6 +2816,16 @@ func (a *App) GenerateFromImage(params GenerateFromImageParams) (*GenerateImageR
 		params.DenoisingStrength = 1.0
 	}
 
+	var filterErr error
+	params.ExtraNegativePrompt, filterErr = a.filterKidsInput(params.ExtraNegativePrompt)
+	if filterErr != nil {
+		return nil, filterErr
+	}
+
+	if params.RemoveObject {
+		return a.generateRemoveObject(params, "")
+	}
+
 	tags := params.Tags
 	if tags == "" {
 		var err error
@@ -2825,22 +2835,13 @@ func (a *App) GenerateFromImage(params GenerateFromImageParams) (*GenerateImageR
 		}
 	}
 
-	var filterErr error
 	tags, filterErr = a.filterKidsInput(tags)
-	if filterErr != nil {
-		return nil, filterErr
-	}
-	params.ExtraNegativePrompt, filterErr = a.filterKidsInput(params.ExtraNegativePrompt)
 	if filterErr != nil {
 		return nil, filterErr
 	}
 
 	if params.GenMode == "compound" {
 		return a.generateFromImageCompound(params, tags)
-	}
-
-	if params.RemoveObject {
-		return a.generateRemoveObject(params, tags)
 	}
 
 	p, err := a.presets.Get(params.PresetID)
@@ -3084,7 +3085,102 @@ RESPONSE LENGTH: your response is limited to ~%d tokens. You MUST fit within thi
 	return img, nil
 }
 
+func (a *App) analyzeRemoveContext(imageBase64, maskBase64 string) (string, error) {
+	imgData, err := base64.StdEncoding.DecodeString(imageBase64)
+	if err != nil {
+		return "", fmt.Errorf("decode image: %w", err)
+	}
+	maskData, err := base64.StdEncoding.DecodeString(maskBase64)
+	if err != nil {
+		return "", fmt.Errorf("decode mask: %w", err)
+	}
+
+	img, _, err := image.Decode(bytes.NewReader(imgData))
+	if err != nil {
+		return "", fmt.Errorf("parse image: %w", err)
+	}
+	mask, _, err := image.Decode(bytes.NewReader(maskData))
+	if err != nil {
+		return "", fmt.Errorf("parse mask: %w", err)
+	}
+
+	bounds := img.Bounds()
+	overlay := image.NewRGBA(bounds)
+	draw.Draw(overlay, bounds, img, bounds.Min, draw.Src)
+
+	red := color.NRGBA{R: 255, G: 0, B: 0, A: 140}
+	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
+		for x := bounds.Min.X; x < bounds.Max.X; x++ {
+			_, _, _, ma := mask.At(x, y).RGBA()
+			if ma > 32768 {
+				draw.Draw(overlay, image.Rect(x, y, x+1, y+1), &image.Uniform{red}, image.Point{}, draw.Over)
+			}
+		}
+	}
+
+	maxDim := 1024
+	w, h := bounds.Dx(), bounds.Dy()
+	if w > maxDim || h > maxDim {
+		ratio := math.Min(float64(maxDim)/float64(w), float64(maxDim)/float64(h))
+		w = int(float64(w) * ratio)
+		h = int(float64(h) * ratio)
+		if w < 1 {
+			w = 1
+		}
+		if h < 1 {
+			h = 1
+		}
+		scaled := image.NewRGBA(image.Rect(0, 0, w, h))
+		xdraw.CatmullRom.Scale(scaled, scaled.Bounds(), overlay, bounds, draw.Over, nil)
+		overlay = scaled
+	}
+
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, overlay); err != nil {
+		return "", fmt.Errorf("encode overlay: %w", err)
+	}
+	overlayBase64 := base64.StdEncoding.EncodeToString(buf.Bytes())
+
+	model := a.config.VisionModel
+	if v, err := a.presets.GetSetting("llm_analyze_model"); err == nil && v != "" {
+		model = v
+	}
+	if model == "" {
+		model = a.config.SDPromptModel
+		if v, err := a.presets.GetSetting("llm_generate_model"); err == nil && v != "" {
+			model = v
+		}
+	}
+
+	a.applyLLMConfig("analyze")
+
+	systemPrompt := "You are a vision model analyzing images for inpainting. The red overlay marks the area to remove. Describe what should fill that area to match the surrounding context seamlessly. Output ONLY comma-separated Stable Diffusion tags for the background/content that should replace the red area. No explanation, no extra text."
+	userText := "Look at the red overlay area. What should fill this space to blend naturally with the surroundings? Output only SD tags."
+
+	result, err := a.llm.ChatVision(model, systemPrompt, userText, overlayBase64, 0.3, 128)
+	if err != nil {
+		return "", fmt.Errorf("vision analysis failed: %w", err)
+	}
+
+	result = strings.TrimSpace(result)
+	result = truncateRepetitive(result, 500)
+	return result, nil
+}
+
 func (a *App) generateRemoveObject(params GenerateFromImageParams, removeDesc string) (*GenerateImageResult, error) {
+	if a.ctx != nil {
+		runtime.EventsEmit(a.ctx, "remove:stage", "analyzing")
+	}
+
+	removeDesc, err := a.analyzeRemoveContext(params.ImageBase64, params.MaskBase64)
+	if err != nil {
+		return nil, fmt.Errorf("context analysis failed: %w", err)
+	}
+
+	if a.ctx != nil {
+		runtime.EventsEmit(a.ctx, "remove:stage", "generating")
+	}
+
 	removeNegative := "object, items, things, artifacts, distortion"
 	if params.ExtraNegativePrompt != "" {
 		removeNegative += ", " + params.ExtraNegativePrompt
@@ -3100,6 +3196,12 @@ func (a *App) generateRemoveObject(params GenerateFromImageParams, removeDesc st
 	var clipSkip int
 	var modelName, vae string
 	var loras string
+
+	imgData, _ := base64.StdEncoding.DecodeString(params.ImageBase64)
+	if imgCfg, _, err := image.DecodeConfig(bytes.NewReader(imgData)); err == nil {
+		width = imgCfg.Width
+		height = imgCfg.Height
+	}
 
 	if params.PresetID > 0 {
 		p, err := a.presets.Get(params.PresetID)
@@ -3123,8 +3225,12 @@ func (a *App) generateRemoveObject(params GenerateFromImageParams, removeDesc st
 			scheduler = p.ScheduleType
 			steps = p.Steps
 			cfgScale = p.CfgScale
-			width = p.Width
-			height = p.Height
+			if p.Width > 0 {
+				width = p.Width
+			}
+			if p.Height > 0 {
+				height = p.Height
+			}
 			seed = p.Seed
 			if p.ClipSkip != nil {
 				clipSkip = *p.ClipSkip
@@ -3151,6 +3257,9 @@ func (a *App) generateRemoveObject(params GenerateFromImageParams, removeDesc st
 		}
 	}
 
+	if samplerName == "" {
+		samplerName = "Euler a"
+	}
 	if steps == 0 {
 		steps = 20
 	}

@@ -62,7 +62,7 @@ const shared = inject('sharedGenState', null)
 
 const isDragOver = ref(false)
 
-const removeDescription = ref('')
+const removeStage = ref('')
 const brushSize = ref(30)
 const maskBlur = ref(4)
 const inpaintFill = ref(1)
@@ -453,7 +453,7 @@ async function generate() {
       preset_id: selectedPresetId.value || 0,
       compound_preset_id: selectedCompoundPresetId.value || 0,
       denoising_strength: denoisingStrength.value,
-      tags: mode.value === 'remove' ? removeDescription.value : tags.value,
+      tags: mode.value === 'remove' ? '' : tags.value,
       extra_negative_prompt: extraNegativePrompt.value,
       remove_object: mode.value === 'remove',
     }
@@ -477,6 +477,7 @@ async function generate() {
   } finally {
     generatingImage.value = false
     generationStage.value = ''
+    removeStage.value = ''
   }
 }
 
@@ -518,6 +519,9 @@ onMounted(async () => {
     chainStep.value = step
     chainTotal.value = total
   })
+  EventsOn("remove:stage", (stage) => {
+    removeStage.value = stage
+  })
   try {
     const s = await api.getSettings()
     if (s.fi_mode) mode.value = s.fi_mode
@@ -542,6 +546,7 @@ onUnmounted(() => {
   document.removeEventListener('paste', handlePaste)
   document.removeEventListener('keydown', onKeydown)
   EventsOff("analyze:step")
+  EventsOff("remove:stage")
   saveFIState()
   if (shared) {
     shared.selectedPresetId = selectedPresetId.value
@@ -731,11 +736,6 @@ function onKeydown(e) {
             </select>
           </div>
 
-          <div v-if="mode === 'remove'" class="form-group" style="margin-top: 12px;">
-            <label class="form-label">Background Description</label>
-            <textarea class="form-textarea" v-model="removeDescription" rows="2" placeholder="What's behind the object? (e.g., clean wall, grass, sky)" :disabled="generatingImage"></textarea>
-          </div>
-
           <div v-if="mode !== 'remove'" class="form-group" style="margin-top: 12px;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
               <label class="form-label" style="margin-bottom: 0;">Extracted Tags</label>
@@ -788,7 +788,7 @@ function onKeydown(e) {
           <button class="btn btn-primary" :class="{ 'btn-generating': generatingImage }" style="width: 100%; justify-content: center; padding: 12px;" @click="generate" :disabled="generatingImage || !uploadedImage || ((mode === 'inpaint' || mode === 'remove') && !hasMask) || (mode !== 'remove' && (genMode === 'preset' ? !selectedPresetId : !selectedCompoundPresetId))">
             <span v-if="generatingImage" style="display: inline-flex; align-items: center; gap: 6px;">
               <span class="spinner" style="width: 14px; height: 14px; border-width: 2px;"></span>
-              {{ generationStage === 'analyzing' ? 'Analyzing image...' : 'Generating image...' }}
+              {{ removeStage === 'analyzing' ? 'Analyzing context...' : generationStage === 'analyzing' ? 'Analyzing image...' : 'Generating image...' }}
             </span>
             <span v-else>Generate</span>
           </button>
@@ -799,7 +799,7 @@ function onKeydown(e) {
         <div class="generate-image-area">
           <div v-if="generatingImage" style="text-align: center;">
             <span class="spinner" style="width: 32px; height: 32px; border-width: 3px;"></span>
-            <p style="margin-top: 12px; color: var(--text-dim);">{{ generationStage === 'analyzing' ? 'Analyzing image...' : 'Generating image...' }}</p>
+            <p style="margin-top: 12px; color: var(--text-dim);">{{ removeStage === 'analyzing' ? 'Analyzing context...' : generationStage === 'analyzing' ? 'Analyzing image...' : 'Generating image...' }}</p>
           </div>
           <div v-else-if="generatedImage" style="width: 100%; padding: 12px;">
             <img :src="'data:image/png;base64,' + generatedImage" alt="Generated" class="img-fade-in" style="border-radius: var(--radius-sm); cursor: zoom-in;" @click="showViewer = true" />
