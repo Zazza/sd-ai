@@ -22,6 +22,9 @@ import {
   ClearLastImage,
   ListExportPresets, SaveExportPreset, DeleteExportPreset, ExportImage,
   BrowseDirectory, ReadFileAsBase64, ReadThumbnail, SelectBrowserFolder, SetLastImage,
+  CreateSession, ListSessions, SwitchSession, RenameSession, DeleteSession,
+  GetSessionItems, GetActiveSessionItem, SetActiveSessionItem, DeleteSessionItem,
+  ClearSession, GetSessionImage, GetSessionThumb, HasSessionItems, ConfirmClose,
 } from './wailsjs/go/main/App.js'
 
 export const api = {
@@ -108,4 +111,19 @@ export const api = {
   readThumbnail: (path) => ReadThumbnail(path),
   selectBrowserFolder: () => SelectBrowserFolder(),
   setLastImage: (base64) => SetLastImage(base64),
+
+  createSession: (name) => CreateSession(name),
+  listSessions: () => ListSessions(),
+  switchSession: (id) => SwitchSession(id),
+  renameSession: (id, name) => RenameSession(id, name),
+  deleteSession: (id) => DeleteSession(id),
+  getSessionItems: () => GetSessionItems(),
+  getActiveSessionItem: () => GetActiveSessionItem(),
+  setActiveSessionItem: (id) => SetActiveSessionItem(id),
+  deleteSessionItem: (id) => DeleteSessionItem(id),
+  clearSession: () => ClearSession(),
+  getSessionImage: (id) => GetSessionImage(id),
+  getSessionThumb: (id) => GetSessionThumb(id),
+  hasSessionItems: () => HasSessionItems(),
+  confirmClose: (action) => ConfirmClose(action),
 }

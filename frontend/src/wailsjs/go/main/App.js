@@ -30,6 +30,14 @@ export function ClearLastImage() {
   return window['go']['main']['App']['ClearLastImage']();
 }
 
+export function ClearSession() {
+  return window['go']['main']['App']['ClearSession']();
+}
+
+export function ConfirmClose(arg1) {
+  return window['go']['main']['App']['ConfirmClose'](arg1);
+}
+
 export function CreateCompoundPreset(arg1) {
   return window['go']['main']['App']['CreateCompoundPreset'](arg1);
 }
@@ -52,6 +60,10 @@ export function CreatePresetType(arg1) {
 
 export function CreatePrompt(arg1) {
   return window['go']['main']['App']['CreatePrompt'](arg1);
+}
+
+export function CreateSession(arg1) {
+  return window['go']['main']['App']['CreateSession'](arg1);
 }
 
 export function DecomposeScene(arg1) {
@@ -86,6 +98,14 @@ export function DeleteSavedScene(arg1) {
   return window['go']['main']['App']['DeleteSavedScene'](arg1);
 }
 
+export function DeleteSession(arg1) {
+  return window['go']['main']['App']['DeleteSession'](arg1);
+}
+
+export function DeleteSessionItem(arg1) {
+  return window['go']['main']['App']['DeleteSessionItem'](arg1);
+}
+
 export function ExportImage(arg1) {
   return window['go']['main']['App']['ExportImage'](arg1);
 }
@@ -112,6 +132,10 @@ export function GenerateMultiPass(arg1) {
 
 export function GenerateSDPrompt(arg1) {
   return window['go']['main']['App']['GenerateSDPrompt'](arg1);
+}
+
+export function GetActiveSessionItem() {
+  return window['go']['main']['App']['GetActiveSessionItem']();
 }
 
 export function GetAllTags() {
@@ -182,8 +206,24 @@ export function GetSavedScene(arg1) {
   return window['go']['main']['App']['GetSavedScene'](arg1);
 }
 
+export function GetSessionImage(arg1) {
+  return window['go']['main']['App']['GetSessionImage'](arg1);
+}
+
+export function GetSessionItems() {
+  return window['go']['main']['App']['GetSessionItems']();
+}
+
+export function GetSessionThumb(arg1) {
+  return window['go']['main']['App']['GetSessionThumb'](arg1);
+}
+
 export function GetSettings() {
   return window['go']['main']['App']['GetSettings']();
+}
+
+export function HasSessionItems() {
+  return window['go']['main']['App']['HasSessionItems']();
 }
 
 export function ImportPresets(arg1) {
@@ -226,6 +266,10 @@ export function ListSavedScenes() {
   return window['go']['main']['App']['ListSavedScenes']();
 }
 
+export function ListSessions() {
+  return window['go']['main']['App']['ListSessions']();
+}
+
 export function OpenImportFile() {
   return window['go']['main']['App']['OpenImportFile']();
 }
@@ -250,6 +294,10 @@ export function RecommendPreset(arg1) {
   return window['go']['main']['App']['RecommendPreset'](arg1);
 }
 
+export function RenameSession(arg1, arg2) {
+  return window['go']['main']['App']['RenameSession'](arg1, arg2);
+}
+
 export function SaveExportPreset(arg1) {
   return window['go']['main']['App']['SaveExportPreset'](arg1);
 }
@@ -270,6 +318,10 @@ export function SelectFolder() {
   return window['go']['main']['App']['SelectFolder']();
 }
 
+export function SetActiveSessionItem(arg1) {
+  return window['go']['main']['App']['SetActiveSessionItem'](arg1);
+}
+
 export function SetKidsCategory(arg1, arg2, arg3) {
   return window['go']['main']['App']['SetKidsCategory'](arg1, arg2, arg3);
 }
@@ -280,6 +332,10 @@ export function SetKidsMode(arg1, arg2) {
 
 export function SetLastImage(arg1) {
   return window['go']['main']['App']['SetLastImage'](arg1);
+}
+
+export function SwitchSession(arg1) {
+  return window['go']['main']['App']['SwitchSession'](arg1);
 }
 
 export function TestCompoundGenerate(arg1) {

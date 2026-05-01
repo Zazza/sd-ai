@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { WindowSetSystemDefaultTheme, EventsOn, EventsOff } from './wailsjs/runtime/runtime'
+import { WindowSetSystemDefaultTheme } from './wailsjs/runtime/runtime'
 import { Diamond, Sparkles, LayoutGrid, Sliders, Settings, RotateCcw, Download, FolderOpen, Sun, Moon } from 'lucide-vue-next'
 import { api } from './api.js'
 import UnifiedPresetsPage from './components/UnifiedPresetsPage.vue'
@@ -169,6 +169,6 @@ onUnmounted(() => {
       <component v-else :is="currentPage" />
     </main>
     </div>
-    <AppFooter />
+    <AppFooter @navigate="onBrowserNavigate" />
   </div>
 </template>

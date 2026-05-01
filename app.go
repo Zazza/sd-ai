@@ -13,6 +13,7 @@ import (
 	"image/draw"
 	"image/jpeg"
 	"image/png"
+	"io"
 	"math"
 	"os"
 	"os/exec"
@@ -939,7 +940,7 @@ func (a *App) GenerateImage(params GenerateImageParams) (*GenerateImageResult, e
 		EffectivePrompt:         prompt,
 		EffectiveNegativePrompt: negativePrompt,
 	}
-	a.saveLastImage(result.Images[0], result.Info, isPreview)
+	a.addToSession(result.Images[0], result.Info, "generate", isPreview, nil)
 	return img, nil
 }
 
@@ -1549,7 +1550,7 @@ func (a *App) UpscaleImage(params UpscaleImageParams) (*GenerateImageResult, err
 		Info:       result.Info,
 		IsPreview:  false,
 	}
-	a.saveLastImage(result.Images[0], result.Info, false)
+	a.addToSession(result.Images[0], result.Info, "upscale", false, nil)
 	return img, nil
 }
 
@@ -1690,7 +1691,7 @@ func (a *App) UpscalePreview(params UpscalePreviewParams) (*GenerateImageResult,
 		Info:       result.Info,
 		IsPreview:  false,
 	}
-	a.saveLastImage(result.Images[0], result.Info, false)
+	a.addToSession(result.Images[0], result.Info, "upscale-preview", false, nil)
 	return img, nil
 }
 
@@ -2764,7 +2765,7 @@ func (a *App) GenerateCompoundImage(params GenerateCompoundImageParams) (*Genera
 		EffectivePrompt:         "",
 		EffectiveNegativePrompt: "",
 	}
-	a.saveLastImage(lastImage, lastInfo, false)
+	a.addToSession(lastImage, lastInfo, "compound", false, nil)
 	return img, nil
 }
 
@@ -2879,6 +2880,14 @@ RESPONSE LENGTH: your response is limited to ~%d tokens. You MUST fit within thi
 		"BASE NEGATIVE PROMPT: " + p.NegativePrompt,
 		"USER DESCRIPTION (extracted from image): " + tags,
 	}
+	if params.Mode == "inpaint" {
+		userParts = []string{
+			"MODE: inpaint — user wants to REPLACE the masked area with what they describe below.",
+			"BASE POSITIVE PROMPT (style/quality reference only): " + p.Prompt,
+			"BASE NEGATIVE PROMPT: " + p.NegativePrompt,
+			"USER INSTRUCTION FOR MASKED AREA (THIS IS THE PRIMARY PROMPT): " + tags,
+		}
+	}
 	if params.ExtraNegativePrompt != "" {
 		userParts = append(userParts, "USER NEGATIVE: "+params.ExtraNegativePrompt)
 	}
@@ -2951,6 +2960,14 @@ RESPONSE LENGTH: your response is limited to ~%d tokens. You MUST fit within thi
 	batchCount := 1
 
 	if params.Mode == "img2img" || params.Mode == "inpaint" {
+		imgW, imgH := decodeImageSize(params.ImageBase64)
+		if imgW > 0 && imgH > 0 {
+			imgW = imgW / 8 * 8
+			imgH = imgH / 8 * 8
+		} else {
+			imgW = p.Width
+			imgH = p.Height
+		}
 		denoising := params.DenoisingStrength
 		if denoising <= 0 {
 			denoising = 0.5
@@ -2967,8 +2984,8 @@ RESPONSE LENGTH: your response is limited to ~%d tokens. You MUST fit within thi
 			Scheduler:             p.ScheduleType,
 			Steps:                 p.Steps,
 			CfgScale:              p.CfgScale,
-			Width:                 p.Width,
-			Height:                p.Height,
+			Width:                 imgW,
+			Height:                imgH,
 			Seed:                  p.Seed,
 			DenoisingStrength:     &denoising,
 			ClipSkip:              &clipSkip,
@@ -2994,7 +3011,7 @@ RESPONSE LENGTH: your response is limited to ~%d tokens. You MUST fit within thi
 			EffectivePrompt:         prompt,
 			EffectiveNegativePrompt: negativePrompt,
 		}
-		a.saveLastImage(result.Images[0], result.Info, false)
+		a.addToSession(result.Images[0], result.Info, "from-image", false, nil)
 		return img, nil
 	}
 
@@ -3081,7 +3098,7 @@ RESPONSE LENGTH: your response is limited to ~%d tokens. You MUST fit within thi
 		EffectivePrompt:         prompt,
 		EffectiveNegativePrompt: negativePrompt,
 	}
-	a.saveLastImage(result.Images[0], result.Info, isPreview)
+	a.addToSession(result.Images[0], result.Info, "generate", isPreview, nil)
 	return img, nil
 }
 
@@ -3311,7 +3328,7 @@ func (a *App) generateRemoveObject(params GenerateFromImageParams, removeDesc st
 		MaskBlur:              maskBlur,
 		InpaintingFill:        params.InpaintFill,
 		InpaintFullRes:        params.InpaintFullRes,
-		InpaintFullResPadding: 32,
+		InpaintFullResPadding: 64,
 		DoNotSaveImages:       true,
 		DoNotSaveGrid:         true,
 	})
@@ -3328,7 +3345,7 @@ func (a *App) generateRemoveObject(params GenerateFromImageParams, removeDesc st
 		EffectivePrompt:         prompt,
 		EffectiveNegativePrompt: negativePrompt,
 	}
-	a.saveLastImage(result.Images[0], result.Info, false)
+	a.addToSession(result.Images[0], result.Info, "compound", false, nil)
 	return img, nil
 }
 
@@ -3410,6 +3427,12 @@ RESPONSE LENGTH: your response is limited to ~%d tokens. You MUST fit within thi
 	var lastImage string
 	var lastInfo json.RawMessage
 
+	imgW, imgH := decodeImageSize(params.ImageBase64)
+	if imgW > 0 && imgH > 0 {
+		imgW = imgW / 8 * 8
+		imgH = imgH / 8 * 8
+	}
+
 	for stepIdx, step := range cp.Steps {
 		p, err := a.presets.Get(step.PresetID)
 		if err != nil {
@@ -3475,6 +3498,10 @@ RESPONSE LENGTH: your response is limited to ~%d tokens. You MUST fit within thi
 			if denoising <= 0 {
 				denoising = 0.5
 			}
+			w, h := imgW, imgH
+			if w == 0 || h == 0 {
+				w, h = width, height
+			}
 			result, err := a.sd.Img2Img(sd.Img2ImgRequest{
 				InitImages:        []string{params.ImageBase64},
 				Prompt:            prompt,
@@ -3483,8 +3510,8 @@ RESPONSE LENGTH: your response is limited to ~%d tokens. You MUST fit within thi
 				Scheduler:         p.ScheduleType,
 				Steps:             p.Steps,
 				CfgScale:          p.CfgScale,
-				Width:             width,
-				Height:            height,
+				Width:             w,
+				Height:            h,
 				Seed:              p.Seed,
 				DenoisingStrength: &denoising,
 				ClipSkip:          &clipSkip,
@@ -3531,6 +3558,10 @@ RESPONSE LENGTH: your response is limited to ~%d tokens. You MUST fit within thi
 			if denoising <= 0 {
 				denoising = 0.5
 			}
+			w, h := width, height
+			if imgW > 0 && imgH > 0 && params.Mode == "img2img" {
+				w, h = imgW, imgH
+			}
 			result, err := a.sd.Img2Img(sd.Img2ImgRequest{
 				InitImages:        []string{lastImage},
 				Prompt:            prompt,
@@ -3539,8 +3570,8 @@ RESPONSE LENGTH: your response is limited to ~%d tokens. You MUST fit within thi
 				Scheduler:         p.ScheduleType,
 				Steps:             p.Steps,
 				CfgScale:          p.CfgScale,
-				Width:             width,
-				Height:            height,
+				Width:             w,
+				Height:            h,
 				Seed:              p.Seed,
 				DenoisingStrength: &denoising,
 				ClipSkip:          &clipSkip,
@@ -3572,7 +3603,7 @@ RESPONSE LENGTH: your response is limited to ~%d tokens. You MUST fit within thi
 		EffectivePrompt:         promptResult.Prompt,
 		EffectiveNegativePrompt: promptResult.NegativePrompt,
 	}
-	a.saveLastImage(lastImage, lastInfo, false)
+	a.addToSession(lastImage, lastInfo, "compound-from-image", false, nil)
 	return img, nil
 }
 
@@ -4065,7 +4096,7 @@ func (a *App) GenerateMultiPass(scene compositor.Scene) (*compositor.MultiPassRe
 	}
 
 	if result.Image != "" {
-		a.saveLastImage(result.Image, nil, false)
+		a.addToSession(result.Image, nil, "scene", false, nil)
 	}
 
 	return result, nil
@@ -4340,6 +4371,18 @@ type FileEntry struct {
 	ModTime string `json:"mod_time"`
 }
 
+func decodeImageSize(b64 string) (int, int) {
+	data, err := base64.StdEncoding.DecodeString(b64)
+	if err != nil {
+		return 0, 0
+	}
+	cfg, _, err := image.DecodeConfig(bytes.NewReader(data))
+	if err != nil {
+		return 0, 0
+	}
+	return cfg.Width, cfg.Height
+}
+
 var imageExts = map[string]bool{
 	".png":  true,
 	".jpg":  true,
@@ -4427,7 +4470,7 @@ func (a *App) SetLastImage(base64Data string) error {
 	if len(base64Data) > 22*1024*1024 {
 		return fmt.Errorf("image too large (max 16 MB)")
 	}
-	a.saveLastImage(base64Data, nil, false)
+	a.addToSession(base64Data, nil, "file-browser", false, nil)
 	return nil
 }
 
@@ -4494,4 +4537,327 @@ func (a *App) ReadThumbnail(filePath string) (string, error) {
 	}
 
 	return base64.StdEncoding.EncodeToString(buf.Bytes()), nil
+}
+
+// --- Session management ---
+
+type sdInfo struct {
+	Prompt         string  `json:"prompt"`
+	NegativePrompt string  `json:"negative_prompt"`
+	SamplerName    string  `json:"sampler_name"`
+	Steps          int     `json:"steps"`
+	CfgScale       float64 `json:"cfg_scale"`
+	Seed           int64   `json:"seed"`
+	Width          int     `json:"width"`
+	Height         int     `json:"height"`
+	Denoising      float64 `json:"denoising_strength"`
+}
+
+func (a *App) addToSession(imageBase64 string, info json.RawMessage, source string, isPreview bool, presetID *int64) int64 {
+	if len(imageBase64) > 50*1024*1024 {
+		return 0
+	}
+
+	sessionID, err := a.presets.GetActiveSessionID()
+	if err != nil || sessionID == 0 {
+		return 0
+	}
+
+	imgData, err := base64.StdEncoding.DecodeString(imageBase64)
+	if err != nil {
+		return 0
+	}
+
+	img, _, err := image.Decode(bytes.NewReader(imgData))
+	if err != nil {
+		return 0
+	}
+
+	item := &preset.SessionItem{
+		SessionID: sessionID,
+		Source:    source,
+		IsPreview: isPreview,
+		PresetID:  presetID,
+		Width:     img.Bounds().Dx(),
+		Height:    img.Bounds().Dy(),
+	}
+
+	if info != nil {
+		var sd sdInfo
+		if json.Unmarshal(info, &sd) == nil {
+			item.Prompt = sd.Prompt
+			item.NegativePrompt = sd.NegativePrompt
+			item.Sampler = sd.SamplerName
+			item.Steps = sd.Steps
+			item.CfgScale = sd.CfgScale
+			item.Seed = &sd.Seed
+			item.Denoising = sd.Denoising
+			if sd.Width > 0 {
+				item.Width = sd.Width
+			}
+			if sd.Height > 0 {
+				item.Height = sd.Height
+			}
+		}
+	}
+
+	itemID, err := a.presets.AddSessionItem(item)
+	if err != nil {
+		return 0
+	}
+
+	sessionDir := filepath.Join(a.dataDir, "sessions", strconv.FormatInt(sessionID, 10))
+	thumbDir := filepath.Join(a.dataDir, "thumbs", strconv.FormatInt(sessionID, 10))
+	os.MkdirAll(sessionDir, 0o755)
+	os.MkdirAll(thumbDir, 0o755)
+
+	fileName := strconv.FormatInt(itemID, 10) + ".jpg"
+	filePath := filepath.Join(sessionDir, fileName)
+
+	f, err := os.Create(filePath)
+	if err == nil {
+		jpeg.Encode(f, img, &jpeg.Options{Quality: 95})
+		f.Close()
+	}
+
+	thumbName := fileName
+	thumbPath := filepath.Join(thumbDir, thumbName)
+	const thumbSize = 128
+	origW := img.Bounds().Dx()
+	origH := img.Bounds().Dy()
+	if origW > thumbSize || origH > thumbSize {
+		ratio := math.Min(float64(thumbSize)/float64(origW), float64(thumbSize)/float64(origH))
+		tw := int(float64(origW) * ratio)
+		th := int(float64(origH) * ratio)
+		if tw < 1 {
+			tw = 1
+		}
+		if th < 1 {
+			th = 1
+		}
+		dst := image.NewRGBA(image.Rect(0, 0, tw, th))
+		xdraw.CatmullRom.Scale(dst, dst.Bounds(), img, img.Bounds(), xdraw.Over, nil)
+		tf, err := os.Create(thumbPath)
+		if err == nil {
+			jpeg.Encode(tf, dst, &jpeg.Options{Quality: 80})
+			tf.Close()
+		}
+	} else {
+		srcF, _ := os.Open(filePath)
+		dstF, _ := os.Create(thumbPath)
+		if srcF != nil && dstF != nil {
+			io.Copy(dstF, srcF)
+		}
+		if srcF != nil {
+			srcF.Close()
+		}
+		if dstF != nil {
+			dstF.Close()
+		}
+	}
+
+	a.presets.UpdateSessionItemPaths(itemID, fileName, thumbName)
+
+	if a.ctx != nil {
+		runtime.EventsEmit(a.ctx, "session:added", map[string]int64{"id": itemID})
+	}
+
+	return itemID
+}
+
+func (a *App) CreateSession(name string) (*preset.SessionInfo, error) {
+	s, err := a.presets.CreateSession(name)
+	if err != nil {
+		return nil, err
+	}
+	if err := a.presets.SetActiveSession(s.ID); err != nil {
+		return nil, err
+	}
+	if a.ctx != nil {
+		runtime.EventsEmit(a.ctx, "session:created", map[string]any{"session_id": s.ID, "name": s.Name})
+		runtime.EventsEmit(a.ctx, "session:switched", map[string]int64{"session_id": s.ID})
+	}
+	return s, nil
+}
+
+func (a *App) ListSessions() ([]preset.SessionInfo, error) {
+	return a.presets.ListSessions()
+}
+
+func (a *App) SwitchSession(id int64) error {
+	if err := a.presets.SetActiveSession(id); err != nil {
+		return err
+	}
+	if a.ctx != nil {
+		runtime.EventsEmit(a.ctx, "session:switched", map[string]int64{"session_id": id})
+	}
+	return nil
+}
+
+func (a *App) RenameSession(id int64, name string) error {
+	return a.presets.RenameSession(id, name)
+}
+
+func (a *App) DeleteSession(id int64) error {
+	sessions, err := a.presets.ListSessions()
+	if err != nil {
+		return err
+	}
+	if len(sessions) <= 1 {
+		return fmt.Errorf("cannot delete the last session")
+	}
+
+	activeID, _ := a.presets.GetActiveSessionID()
+	if err := a.presets.DeleteSession(id); err != nil {
+		return err
+	}
+
+	sessionDir := filepath.Join(a.dataDir, "sessions", strconv.FormatInt(id, 10))
+	thumbDir := filepath.Join(a.dataDir, "thumbs", strconv.FormatInt(id, 10))
+	os.RemoveAll(sessionDir)
+	os.RemoveAll(thumbDir)
+
+	if activeID == id {
+		for _, s := range sessions {
+			if s.ID != id {
+				a.presets.SetActiveSession(s.ID)
+				break
+			}
+		}
+	}
+
+	if a.ctx != nil {
+		runtime.EventsEmit(a.ctx, "session:deleted", map[string]int64{"session_id": id})
+	}
+	return nil
+}
+
+func (a *App) GetSessionItems() ([]preset.SessionItem, error) {
+	sessionID, err := a.presets.GetActiveSessionID()
+	if err != nil {
+		return nil, err
+	}
+	if sessionID == 0 {
+		return []preset.SessionItem{}, nil
+	}
+	return a.presets.GetSessionItems(sessionID)
+}
+
+func (a *App) GetActiveSessionItem() (*preset.SessionItem, error) {
+	sessionID, err := a.presets.GetActiveSessionID()
+	if err != nil {
+		return nil, err
+	}
+	if sessionID == 0 {
+		return nil, nil
+	}
+	return a.presets.GetActiveItem(sessionID)
+}
+
+func (a *App) SetActiveSessionItem(id int64) error {
+	sessionID, err := a.presets.GetActiveSessionID()
+	if err != nil {
+		return err
+	}
+	if err := a.presets.SetActiveItem(id, sessionID); err != nil {
+		return err
+	}
+	if a.ctx != nil {
+		runtime.EventsEmit(a.ctx, "session:active", map[string]int64{"id": id})
+	}
+	return nil
+}
+
+func (a *App) DeleteSessionItem(id int64) error {
+	item, err := a.presets.GetSessionItem(id)
+	if err != nil {
+		return err
+	}
+	if item == nil {
+		return nil
+	}
+	sessionDir := filepath.Join(a.dataDir, "sessions", strconv.FormatInt(item.SessionID, 10))
+	thumbDir := filepath.Join(a.dataDir, "thumbs", strconv.FormatInt(item.SessionID, 10))
+	if item.FileName != "" {
+		os.Remove(filepath.Join(sessionDir, item.FileName))
+	}
+	if item.ThumbName != "" {
+		os.Remove(filepath.Join(thumbDir, item.ThumbName))
+	}
+	if err := a.presets.DeleteSessionItem(id); err != nil {
+		return err
+	}
+	if a.ctx != nil {
+		runtime.EventsEmit(a.ctx, "session:removed", map[string]int64{"id": id})
+	}
+	return nil
+}
+
+func (a *App) ClearSession() error {
+	sessionID, err := a.presets.GetActiveSessionID()
+	if err != nil {
+		return err
+	}
+	if sessionID == 0 {
+		return nil
+	}
+	sessionDir := filepath.Join(a.dataDir, "sessions", strconv.FormatInt(sessionID, 10))
+	thumbDir := filepath.Join(a.dataDir, "thumbs", strconv.FormatInt(sessionID, 10))
+	os.RemoveAll(sessionDir)
+	os.RemoveAll(thumbDir)
+	os.MkdirAll(sessionDir, 0o755)
+	os.MkdirAll(thumbDir, 0o755)
+	if err := a.presets.ClearSessionItems(sessionID); err != nil {
+		return err
+	}
+	if a.ctx != nil {
+		runtime.EventsEmit(a.ctx, "session:cleared")
+	}
+	return nil
+}
+
+func (a *App) GetSessionImage(id int64) (string, error) {
+	item, err := a.presets.GetSessionItem(id)
+	if err != nil || item == nil {
+		return "", fmt.Errorf("session item not found")
+	}
+	sessionDir := filepath.Join(a.dataDir, "sessions", strconv.FormatInt(item.SessionID, 10))
+	data, err := os.ReadFile(filepath.Join(sessionDir, item.FileName))
+	if err != nil {
+		return "", fmt.Errorf("read image: %w", err)
+	}
+	return base64.StdEncoding.EncodeToString(data), nil
+}
+
+func (a *App) GetSessionThumb(id int64) (string, error) {
+	item, err := a.presets.GetSessionItem(id)
+	if err != nil || item == nil {
+		return "", fmt.Errorf("session item not found")
+	}
+	thumbDir := filepath.Join(a.dataDir, "thumbs", strconv.FormatInt(item.SessionID, 10))
+	data, err := os.ReadFile(filepath.Join(thumbDir, item.ThumbName))
+	if err != nil {
+		return "", fmt.Errorf("read thumbnail: %w", err)
+	}
+	return base64.StdEncoding.EncodeToString(data), nil
+}
+
+func (a *App) HasSessionItems() (bool, error) {
+	return a.presets.HasAnyItems()
+}
+
+func (a *App) ConfirmClose(action string) {
+	if action == "discard" {
+		sessions, _ := a.presets.ListSessions()
+		for _, s := range sessions {
+			sessionDir := filepath.Join(a.dataDir, "sessions", strconv.FormatInt(s.ID, 10))
+			thumbDir := filepath.Join(a.dataDir, "thumbs", strconv.FormatInt(s.ID, 10))
+			os.RemoveAll(sessionDir)
+			os.RemoveAll(thumbDir)
+		}
+		a.presets.DeleteAllSessions()
+	}
+	if a.ctx != nil {
+		runtime.Quit(a.ctx)
+	}
 }

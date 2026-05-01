@@ -1,5 +1,5 @@
 <script setup>
-import { ref, reactive, computed, onMounted, onUnmounted, provide } from 'vue'
+import { ref, reactive, computed, watch, onMounted, onUnmounted, provide } from 'vue'
 import { EventsOn, EventsOff } from '../wailsjs/runtime/runtime'
 import { api } from '../api.js'
 import GeneratePage from './GeneratePage.vue'
@@ -10,6 +10,8 @@ import TestPage from './TestPage.vue'
 const props = defineProps({
   initialTab: { type: String, default: '' },
 })
+
+const emit = defineEmits([])
 
 const activeTab = ref(props.initialTab || 'generate')
 const batchProps = ref({})

@@ -959,6 +959,72 @@ export namespace preset {
 	        this.created_at = source["created_at"];
 	    }
 	}
+	export class SessionInfo {
+	    id: number;
+	    name: string;
+	    item_count: number;
+	    created_at: string;
+	    updated_at: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new SessionInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.item_count = source["item_count"];
+	        this.created_at = source["created_at"];
+	        this.updated_at = source["updated_at"];
+	    }
+	}
+	export class SessionItem {
+	    id: number;
+	    session_id: number;
+	    file_name: string;
+	    thumb_name: string;
+	    source: string;
+	    prompt: string;
+	    negative_prompt: string;
+	    sampler: string;
+	    steps: number;
+	    cfg_scale: number;
+	    seed?: number;
+	    denoising: number;
+	    width: number;
+	    height: number;
+	    is_preview: boolean;
+	    preset_id?: number;
+	    is_active: boolean;
+	    created_at: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new SessionItem(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.session_id = source["session_id"];
+	        this.file_name = source["file_name"];
+	        this.thumb_name = source["thumb_name"];
+	        this.source = source["source"];
+	        this.prompt = source["prompt"];
+	        this.negative_prompt = source["negative_prompt"];
+	        this.sampler = source["sampler"];
+	        this.steps = source["steps"];
+	        this.cfg_scale = source["cfg_scale"];
+	        this.seed = source["seed"];
+	        this.denoising = source["denoising"];
+	        this.width = source["width"];
+	        this.height = source["height"];
+	        this.is_preview = source["is_preview"];
+	        this.preset_id = source["preset_id"];
+	        this.is_active = source["is_active"];
+	        this.created_at = source["created_at"];
+	    }
+	}
 
 }
 

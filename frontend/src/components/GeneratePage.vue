@@ -429,13 +429,16 @@ onMounted(async () => {
     if (shared.negative) negative.value = shared.negative
   }
   try {
-    const last = await api.getLastImage()
-    if (last && last.image) {
-      generatedImage.value = last.image
-      genInfo.value = last.info
-      sourceImage.value = last.image
-      sourceGenInfo.value = last.info
-      isPreview.value = last.is_preview || false
+    const item = await api.getActiveSessionItem()
+    if (item) {
+      const image = await api.getSessionImage(item.id)
+      if (image) {
+        generatedImage.value = image
+        genInfo.value = item.info || null
+        sourceImage.value = image
+        sourceGenInfo.value = item.info || null
+        isPreview.value = item.is_preview || false
+      }
     }
   } catch {}
 

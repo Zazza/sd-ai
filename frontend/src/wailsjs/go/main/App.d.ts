@@ -20,6 +20,10 @@ export function CheckServices():Promise<main.ServiceStatus>;
 
 export function ClearLastImage():Promise<void>;
 
+export function ClearSession():Promise<void>;
+
+export function ConfirmClose(arg1:string):Promise<void>;
+
 export function CreateCompoundPreset(arg1:preset.CompoundPreset):Promise<preset.CompoundPreset>;
 
 export function CreateDescription(arg1:string):Promise<preset.SavedDescription>;
@@ -31,6 +35,8 @@ export function CreatePreset(arg1:preset.Preset):Promise<preset.Preset>;
 export function CreatePresetType(arg1:preset.PresetType):Promise<preset.PresetType>;
 
 export function CreatePrompt(arg1:string):Promise<preset.SavedPrompt>;
+
+export function CreateSession(arg1:string):Promise<preset.SessionInfo>;
 
 export function DecomposeScene(arg1:main.DecomposeSceneParams):Promise<compositor.Scene>;
 
@@ -48,6 +54,10 @@ export function DeletePrompt(arg1:number):Promise<void>;
 
 export function DeleteSavedScene(arg1:number):Promise<void>;
 
+export function DeleteSession(arg1:number):Promise<void>;
+
+export function DeleteSessionItem(arg1:number):Promise<void>;
+
 export function ExportImage(arg1:main.ExportImageParams):Promise<string>;
 
 export function ExportPresets(arg1:Array<number>):Promise<string>;
@@ -61,6 +71,8 @@ export function GenerateImage(arg1:main.GenerateImageParams):Promise<main.Genera
 export function GenerateMultiPass(arg1:compositor.Scene):Promise<compositor.MultiPassResult>;
 
 export function GenerateSDPrompt(arg1:main.GenerateSDPromptParams):Promise<main.GenerateSDPromptResult>;
+
+export function GetActiveSessionItem():Promise<preset.SessionItem>;
 
 export function GetAllTags():Promise<Array<string>>;
 
@@ -96,7 +108,15 @@ export function GetSDVAEs():Promise<Array<sd.VAE>>;
 
 export function GetSavedScene(arg1:number):Promise<preset.SavedScene>;
 
+export function GetSessionImage(arg1:number):Promise<string>;
+
+export function GetSessionItems():Promise<Array<preset.SessionItem>>;
+
+export function GetSessionThumb(arg1:number):Promise<string>;
+
 export function GetSettings():Promise<Record<string, string>>;
+
+export function HasSessionItems():Promise<boolean>;
 
 export function ImportPresets(arg1:Array<main.PresetData>):Promise<Array<preset.Preset>>;
 
@@ -118,6 +138,8 @@ export function ListPrompts():Promise<Array<preset.SavedPrompt>>;
 
 export function ListSavedScenes():Promise<Array<preset.SavedScene>>;
 
+export function ListSessions():Promise<Array<preset.SessionInfo>>;
+
 export function OpenImportFile():Promise<main.ImportPreview>;
 
 export function ReadClipboardImage():Promise<string>;
@@ -130,6 +152,8 @@ export function ReadThumbnail(arg1:string):Promise<string>;
 
 export function RecommendPreset(arg1:string):Promise<main.RecommendPresetResult>;
 
+export function RenameSession(arg1:number,arg2:string):Promise<void>;
+
 export function SaveExportPreset(arg1:preset.ExportPreset):Promise<preset.ExportPreset>;
 
 export function SaveImage(arg1:string,arg2:string):Promise<string>;
@@ -140,11 +164,15 @@ export function SelectBrowserFolder():Promise<string>;
 
 export function SelectFolder():Promise<string>;
 
+export function SetActiveSessionItem(arg1:number):Promise<void>;
+
 export function SetKidsCategory(arg1:string,arg2:boolean,arg3:string):Promise<void>;
 
 export function SetKidsMode(arg1:boolean,arg2:string):Promise<void>;
 
 export function SetLastImage(arg1:string):Promise<void>;
+
+export function SwitchSession(arg1:number):Promise<void>;
 
 export function TestCompoundGenerate(arg1:main.TestCompoundGenerateParams):Promise<Array<main.TestGenerateResultItem>>;
 

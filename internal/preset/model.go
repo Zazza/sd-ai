@@ -85,6 +85,35 @@ type SavedScene struct {
 	CreatedAt string `json:"created_at"`
 }
 
+type SessionInfo struct {
+	ID        int64 `json:"id"`
+	Name      string `json:"name"`
+	ItemCount int    `json:"item_count"`
+	CreatedAt string `json:"created_at"`
+	UpdatedAt string `json:"updated_at"`
+}
+
+type SessionItem struct {
+	ID             int64   `json:"id"`
+	SessionID      int64   `json:"session_id"`
+	FileName       string  `json:"file_name"`
+	ThumbName      string  `json:"thumb_name"`
+	Source         string  `json:"source"`
+	Prompt         string  `json:"prompt"`
+	NegativePrompt string  `json:"negative_prompt"`
+	Sampler        string  `json:"sampler"`
+	Steps          int     `json:"steps"`
+	CfgScale       float64 `json:"cfg_scale"`
+	Seed           *int64  `json:"seed"`
+	Denoising      float64 `json:"denoising"`
+	Width          int     `json:"width"`
+	Height         int     `json:"height"`
+	IsPreview      bool    `json:"is_preview"`
+	PresetID       *int64  `json:"preset_id"`
+	IsActive       bool    `json:"is_active"`
+	CreatedAt      string  `json:"created_at"`
+}
+
 type ExportPreset struct {
 	ID            int64  `json:"id"`
 	Name          string `json:"name"`

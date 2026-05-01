@@ -1,6 +1,7 @@
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { api } from '../api.js'
+import { EventsOn, EventsOff } from '../wailsjs/runtime/runtime'
 
 const exportPresets = ref([])
 const selectedPresetId = ref(null)
@@ -66,12 +67,15 @@ function updateFilename() {
 
 async function loadLastImage() {
   try {
-    const result = await api.getLastImage()
-    if (result?.image) {
-      sourceImage.value = result.image
-      loadImageDimensions(result.image)
-      sourceName.value = 'generated_image'
-      updateFilename()
+    const item = await api.getActiveSessionItem()
+    if (item) {
+      const image = await api.getSessionImage(item.id)
+      if (image) {
+        sourceImage.value = image
+        loadImageDimensions(image)
+        sourceName.value = item.file_name || 'generated_image'
+        updateFilename()
+      }
     }
   } catch {}
 }
@@ -216,6 +220,13 @@ function openSavePreset() {
 onMounted(async () => {
   await loadPresets()
   await loadLastImage()
+  EventsOn('session:active', () => {
+    loadLastImage()
+  })
+})
+
+onUnmounted(() => {
+  EventsOff('session:active')
 })
 </script>
 

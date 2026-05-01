@@ -16,7 +16,7 @@ const loadedSet = new Set()
 let loadGeneration = 0
 
 const viewerIndex = ref(-1)
-const imageEntries = computed(() => entries.value.filter(e => !e.isDir))
+const imageEntries = computed(() => entries.value.filter(e => !e.is_dir))
 const imageIndexMap = computed(() => {
   const map = new Map()
   imageEntries.value.forEach((e, i) => map.set(e.path, i))
@@ -186,6 +186,17 @@ function getEntryIndex(entry) {
   return imageIndexMap.value.get(entry.path) ?? -1
 }
 
+let lastClickTime = 0
+let lastClickPath = ''
+
+function handleCardClick(entry) {
+  if (entry.is_dir) {
+    openDir(entry)
+  } else {
+    openViewer(getEntryIndex(entry))
+  }
+}
+
 onMounted(async () => {
   setupObserver()
   try {
@@ -232,10 +243,10 @@ onUnmounted(() => {
         v-for="entry in entries"
         :key="entry.path"
         class="fb-card"
-        :class="{ 'fb-card-dir': entry.isDir }"
-        @click="entry.isDir ? openDir(entry) : openViewer(getEntryIndex(entry))"
+        :class="{ 'fb-card-dir': entry.is_dir }"
+        @click="handleCardClick(entry)"
       >
-        <template v-if="entry.isDir">
+        <template v-if="entry.is_dir">
           <div class="fb-thumb fb-thumb-dir">
             <Folder :size="32" />
           </div>

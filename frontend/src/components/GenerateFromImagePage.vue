@@ -67,10 +67,15 @@ const brushSize = ref(30)
 const maskBlur = ref(4)
 const inpaintFill = ref(1)
 const inpaintFullRes = ref(true)
+const invertMask = ref(false)
 const isDrawing = ref(false)
 const maskCanvasRef = ref(null)
 const maskHistory = ref([])
 const imgEl = ref(null)
+
+const fullscreenMask = ref(false)
+const fsCanvasRef = ref(null)
+const fsDrawing = ref(false)
 
 const filteredPresets = computed(() => {
   if (!selectedTypeId.value) return presets.value
@@ -124,16 +129,21 @@ async function uploadImage() {
 
 async function useLastImage() {
   try {
-    const last = await api.getLastImage()
-    if (last && last.image) {
-      uploadedImage.value = last.image
-      uploadedImageMime.value = 'image/png'
-      tags.value = ''
-      recommendation.value = null
-      error.value = ''
-      clearMask()
+    const item = await api.getActiveSessionItem()
+    if (item) {
+      const b64 = await api.getSessionImage(item.id)
+      if (b64) {
+        uploadedImage.value = b64
+        uploadedImageMime.value = 'image/png'
+        tags.value = ''
+        recommendation.value = null
+        error.value = ''
+        clearMask()
+      } else {
+        error.value = 'No image found for active session item'
+      }
     } else {
-      error.value = 'No last generated image found'
+      error.value = 'No active session item found'
     }
   } catch (e) {
     error.value = String(e)
@@ -373,7 +383,9 @@ function getMaskBase64() {
 
   for (let i = 0; i < src.data.length; i += 4) {
     const alpha = src.data[i + 3]
-    if (alpha > 10) {
+    const isMasked = alpha > 10
+    const fill = invertMask.value ? !isMasked : isMasked
+    if (fill) {
       maskData.data[i] = 255
       maskData.data[i + 1] = 255
       maskData.data[i + 2] = 255
@@ -398,9 +410,9 @@ watch(mode, (newMode) => {
     })
   }
   if (newMode === 'remove') {
-    denoisingStrength.value = 0.75
-    maskBlur.value = 8
-    inpaintFill.value = 1
+    denoisingStrength.value = 0.6
+    maskBlur.value = 4
+    inpaintFill.value = 0
     inpaintFullRes.value = true
   }
 })
@@ -522,6 +534,9 @@ onMounted(async () => {
   EventsOn("remove:stage", (stage) => {
     removeStage.value = stage
   })
+  EventsOn("session:active", () => {
+    useLastImage()
+  })
   try {
     const s = await api.getSettings()
     if (s.fi_mode) mode.value = s.fi_mode
@@ -547,6 +562,7 @@ onUnmounted(() => {
   document.removeEventListener('keydown', onKeydown)
   EventsOff("analyze:step")
   EventsOff("remove:stage")
+  EventsOff("session:active")
   saveFIState()
   if (shared) {
     shared.selectedPresetId = selectedPresetId.value
@@ -574,7 +590,79 @@ function copyPrompt() {
   if (parts.length) navigator.clipboard.writeText(parts.join('\n'))
 }
 
+function openFullscreenMask() {
+  fullscreenMask.value = true
+  nextTick(() => {
+    const canvas = fsCanvasRef.value
+    if (!canvas) return
+    canvas.width = maskCanvasRef.value?.width || imgEl.value?.naturalWidth || 512
+    canvas.height = maskCanvasRef.value?.height || imgEl.value?.naturalHeight || 512
+    const ctx = canvas.getContext('2d')
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
+    if (maskCanvasRef.value) {
+      ctx.drawImage(maskCanvasRef.value, 0, 0)
+    }
+  })
+}
+
+function closeFullscreenMask() {
+  if (fsCanvasRef.value && maskCanvasRef.value) {
+    const ctx = maskCanvasRef.value.getContext('2d')
+    ctx.clearRect(0, 0, maskCanvasRef.value.width, maskCanvasRef.value.height)
+    ctx.drawImage(fsCanvasRef.value, 0, 0)
+    if (maskHistory.value.length === 0) {
+      maskHistory.value.push(ctx.getImageData(0, 0, maskCanvasRef.value.width, maskCanvasRef.value.height))
+    }
+  }
+  fullscreenMask.value = false
+}
+
+function getFsCoords(e) {
+  const canvas = fsCanvasRef.value
+  if (!canvas) return { x: 0, y: 0 }
+  const rect = canvas.getBoundingClientRect()
+  const scaleX = canvas.width / rect.width
+  const scaleY = canvas.height / rect.height
+  const clientX = e.touches ? e.touches[0].clientX : e.clientX
+  const clientY = e.touches ? e.touches[0].clientY : e.clientY
+  return { x: (clientX - rect.left) * scaleX, y: (clientY - rect.top) * scaleY }
+}
+
+function fsStartDraw(e) {
+  e.preventDefault()
+  fsDrawing.value = true
+  fsDraw(e)
+}
+
+function fsDraw(e) {
+  if (!fsDrawing.value) return
+  e.preventDefault()
+  const canvas = fsCanvasRef.value
+  if (!canvas) return
+  const ctx = canvas.getContext('2d')
+  const { x, y } = getFsCoords(e)
+  const scaledBrush = brushSize.value * (canvas.width / canvas.getBoundingClientRect().width)
+  ctx.globalCompositeOperation = 'source-over'
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.6)'
+  ctx.beginPath()
+  ctx.arc(x, y, scaledBrush / 2, 0, Math.PI * 2)
+  ctx.fill()
+}
+
+function fsStopDraw() { fsDrawing.value = false }
+
+function fsClearMask() {
+  const canvas = fsCanvasRef.value
+  if (!canvas) return
+  canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height)
+}
+
 function onKeydown(e) {
+  if (e.key === 'Escape' && fullscreenMask.value) {
+    e.preventDefault()
+    closeFullscreenMask()
+    return
+  }
   if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && !generatingImage.value) {
     e.preventDefault()
     generate()
@@ -665,7 +753,7 @@ function onKeydown(e) {
 
           <div v-if="mode === 'remove'" class="form-group" style="margin-top: 4px;">
             <div style="font-size: 11px; color: var(--text-dim);">
-              Denoising: {{ denoisingStrength.toFixed(2) }} | Mask Blur: {{ maskBlur }} | Fill: Original | Full Res: on
+              Denoising: {{ denoisingStrength.toFixed(2) }} | Mask Blur: {{ maskBlur }} | Fill: Fill | Full Res: on
             </div>
           </div>
 
@@ -677,6 +765,7 @@ function onKeydown(e) {
             <div class="fi-btn-row">
               <button class="btn btn-sm btn-secondary" @click="clearMask" :disabled="!hasMask">Clear Mask</button>
               <button class="btn btn-sm btn-secondary" @click="undoMask" :disabled="!hasMask">Undo</button>
+              <button class="btn btn-sm btn-secondary" @click="openFullscreenMask" title="Open fullscreen mask editor">&#x26F6; Fullscreen</button>
             </div>
             <div v-if="mode === 'inpaint'" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 8px;">
               <div class="form-group">
@@ -697,9 +786,13 @@ function onKeydown(e) {
                 <input type="checkbox" v-model="inpaintFullRes" style="accent-color: var(--accent);" />
                 <span style="font-size: 12px;">Inpaint Full Resolution</span>
               </label>
+              <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; margin-top: 4px;">
+                <input type="checkbox" v-model="invertMask" style="accent-color: var(--accent);" />
+                <span style="font-size: 12px;">Invert Mask (change everything except selection)</span>
+              </label>
             </div>
             <div v-if="hasMask" style="font-size: 11px; color: var(--accent); margin-top: 4px;">
-              Mask drawn ({{ maskHistory.length }} strokes)
+              Mask drawn ({{ maskHistory.length }} strokes){{ invertMask ? ' [inverted]' : '' }}
             </div>
             <div v-else style="font-size: 11px; color: var(--text-dim); margin-top: 4px;">
               Paint over areas to regenerate
@@ -835,6 +928,32 @@ function onKeydown(e) {
     </div>
 
     <ImageViewer v-if="showViewer" :image-base64="generatedImage" @close="showViewer = false" />
+
+    <div v-if="fullscreenMask" class="fs-mask-overlay">
+      <div class="fs-mask-toolbar">
+        <span style="font-weight: 600;">Mask Editor</span>
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <label class="form-label" style="margin: 0; font-size: 12px;">Brush: {{ brushSize }}px</label>
+          <input type="range" v-model.number="brushSize" min="5" max="100" step="1" style="width: 120px; accent-color: var(--accent);" />
+          <button class="btn btn-sm btn-secondary" @click="fsClearMask">Clear</button>
+          <button class="btn btn-sm btn-primary" @click="closeFullscreenMask">Done (Esc)</button>
+        </div>
+      </div>
+      <div class="fs-mask-canvas-wrap">
+        <img :src="'data:' + uploadedImageMime + ';base64,' + uploadedImage" class="fs-mask-img" />
+        <canvas
+          ref="fsCanvasRef"
+          class="fs-mask-canvas"
+          @mousedown="fsStartDraw"
+          @mousemove="fsDraw"
+          @mouseup="fsStopDraw"
+          @mouseleave="fsStopDraw"
+          @touchstart="fsStartDraw"
+          @touchmove="fsDraw"
+          @touchend="fsStopDraw"
+        />
+      </div>
+    </div>
   </div>
 </template>
 
@@ -907,5 +1026,44 @@ function onKeydown(e) {
   background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
+}
+.fs-mask-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  z-index: 9999;
+  background: rgba(0, 0, 0, 0.95);
+  display: flex;
+  flex-direction: column;
+}
+.fs-mask-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 16px;
+  background: var(--bg-primary, #1a1a2e);
+  color: var(--text-primary, #e0e0e0);
+  border-bottom: 1px solid var(--border, #333);
+  flex-shrink: 0;
+}
+.fs-mask-canvas-wrap {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  position: relative;
+  overflow: hidden;
+}
+.fs-mask-img {
+  max-width: 95vw;
+  max-height: calc(100vh - 60px);
+  object-fit: contain;
+  display: block;
+}
+.fs-mask-canvas {
+  position: absolute;
+  cursor: crosshair;
+  max-width: 95vw;
+  max-height: calc(100vh - 60px);
+  object-fit: contain;
 }
 </style>

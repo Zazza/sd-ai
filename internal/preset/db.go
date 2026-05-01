@@ -62,6 +62,10 @@ func Open(dbPath string) (*DB, error) {
 		return nil, fmt.Errorf("migrate v9: %w", err)
 	}
 
+	if err := migrateV10(db); err != nil {
+		return nil, fmt.Errorf("migrate v10: %w", err)
+	}
+
 	return &DB{db: db}, nil
 }
 
@@ -160,6 +164,10 @@ func migrateV4(db *sql.DB) error {
 
 func (d *DB) Close() error {
 	return d.db.Close()
+}
+
+func (d *DB) DB() *sql.DB {
+	return d.db
 }
 
 const presetColumns = `id, name, preset_type, prompt, negative_prompt, sampler, schedule_type, steps, cfg_scale, width, height, model_name, seed, denoising_strength, clip_skip, batch_size, batch_count, hires_fix, hires_upscale, hires_denoising_strength, hires_upscaler, vae, type_id, tags, loras, created_at, updated_at`
@@ -865,4 +873,58 @@ func migrateV9(db *sql.DB) error {
 		}
 	}
 	return nil
+}
+
+func migrateV10(db *sql.DB) error {
+	_, err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS sessions (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			name TEXT NOT NULL,
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		);
+		CREATE TABLE IF NOT EXISTS session_items (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			session_id INTEGER NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+			file_name TEXT NOT NULL DEFAULT '',
+			thumb_name TEXT NOT NULL DEFAULT '',
+			source TEXT NOT NULL DEFAULT '',
+			prompt TEXT NOT NULL DEFAULT '',
+			negative_prompt TEXT NOT NULL DEFAULT '',
+			sampler TEXT NOT NULL DEFAULT '',
+			steps INTEGER NOT NULL DEFAULT 0,
+			cfg_scale REAL NOT NULL DEFAULT 0,
+			seed INTEGER,
+			denoising REAL NOT NULL DEFAULT 0,
+			width INTEGER NOT NULL DEFAULT 0,
+			height INTEGER NOT NULL DEFAULT 0,
+			is_preview INTEGER NOT NULL DEFAULT 0,
+			preset_id INTEGER,
+			is_active INTEGER NOT NULL DEFAULT 0,
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		);
+		CREATE TABLE IF NOT EXISTS session_active (
+			id INTEGER PRIMARY KEY CHECK (id = 1),
+			session_id INTEGER REFERENCES sessions(id)
+		)
+	`)
+	if err != nil {
+		return err
+	}
+
+	var count int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM sessions`).Scan(&count); err != nil {
+		return err
+	}
+	if count > 0 {
+		return nil
+	}
+
+	result, err := db.Exec(`INSERT INTO sessions (name) VALUES ('Default')`)
+	if err != nil {
+		return err
+	}
+	sessionID, _ := result.LastInsertId()
+	_, err = db.Exec(`INSERT INTO session_active (id, session_id) VALUES (1, ?)`, sessionID)
+	return err
 }
