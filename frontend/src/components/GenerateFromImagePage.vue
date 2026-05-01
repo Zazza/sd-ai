@@ -76,6 +76,7 @@ const imgEl = ref(null)
 const fullscreenMask = ref(false)
 const fsCanvasRef = ref(null)
 const fsDrawing = ref(false)
+const fsHistory = ref([])
 
 const filteredPresets = computed(() => {
   if (!selectedTypeId.value) return presets.value
@@ -534,8 +535,8 @@ onMounted(async () => {
   EventsOn("remove:stage", (stage) => {
     removeStage.value = stage
   })
-  EventsOn("session:active", () => {
-    useLastImage()
+  EventsOn("session:added", () => {
+    // Don't auto-load — user picks when to load via Last Generated
   })
   try {
     const s = await api.getSettings()
@@ -562,7 +563,7 @@ onUnmounted(() => {
   document.removeEventListener('keydown', onKeydown)
   EventsOff("analyze:step")
   EventsOff("remove:stage")
-  EventsOff("session:active")
+  EventsOff("session:added")
   saveFIState()
   if (shared) {
     shared.selectedPresetId = selectedPresetId.value
@@ -630,6 +631,12 @@ function getFsCoords(e) {
 
 function fsStartDraw(e) {
   e.preventDefault()
+  const canvas = fsCanvasRef.value
+  if (canvas) {
+    const ctx = canvas.getContext('2d')
+    fsHistory.value.push(ctx.getImageData(0, 0, canvas.width, canvas.height))
+    if (fsHistory.value.length > 30) fsHistory.value.shift()
+  }
   fsDrawing.value = true
   fsDraw(e)
 }
@@ -655,6 +662,15 @@ function fsClearMask() {
   const canvas = fsCanvasRef.value
   if (!canvas) return
   canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height)
+  fsHistory.value = []
+}
+
+function fsUndoMask() {
+  if (fsHistory.value.length === 0) return
+  const canvas = fsCanvasRef.value
+  if (!canvas) return
+  const prev = fsHistory.value.pop()
+  canvas.getContext('2d').putImageData(prev, 0, 0)
 }
 
 function onKeydown(e) {
@@ -936,6 +952,7 @@ function onKeydown(e) {
           <label class="form-label" style="margin: 0; font-size: 12px;">Brush: {{ brushSize }}px</label>
           <input type="range" v-model.number="brushSize" min="5" max="100" step="1" style="width: 120px; accent-color: var(--accent);" />
           <button class="btn btn-sm btn-secondary" @click="fsClearMask">Clear</button>
+          <button class="btn btn-sm btn-secondary" @click="fsUndoMask" :disabled="fsHistory.length === 0">Undo</button>
           <button class="btn btn-sm btn-primary" @click="closeFullscreenMask">Done (Esc)</button>
         </div>
       </div>

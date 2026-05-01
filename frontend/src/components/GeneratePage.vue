@@ -406,7 +406,7 @@ async function openBatchGeneration() {
 }
 
 onMounted(async () => {
-  loadPresets()
+  await loadPresets()
   loadKidsMode()
   loadSavedDescs()
   try {

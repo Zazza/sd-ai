@@ -290,8 +290,16 @@ onMounted(async () => {
   EventsOn('session:created', () => { loadSessions(); loadItems() })
 
   await loadSessions()
-  const active = sessions.value[0]
-  if (active) activeSessionId.value = active.id
+  try {
+    const item = await api.getActiveSessionItem()
+    if (item && item.session_id) {
+      activeSessionId.value = item.session_id
+    } else if (sessions.value.length > 0) {
+      activeSessionId.value = sessions.value[0].id
+    }
+  } catch {
+    if (sessions.value.length > 0) activeSessionId.value = sessions.value[0].id
+  }
   await loadItems()
 
   onUnmounted(() => {

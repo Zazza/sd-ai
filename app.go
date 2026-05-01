@@ -2888,6 +2888,14 @@ RESPONSE LENGTH: your response is limited to ~%d tokens. You MUST fit within thi
 			"USER INSTRUCTION FOR MASKED AREA (THIS IS THE PRIMARY PROMPT): " + tags,
 		}
 	}
+	if params.Mode == "img2img" {
+		userParts = []string{
+			"MODE: img2img — user wants to TRANSFORM the image into the scene described below. Ignore what is currently in the image. Generate a NEW scene based on the user's description.",
+			"BASE POSITIVE PROMPT (style/quality reference): " + p.Prompt,
+			"BASE NEGATIVE PROMPT: " + p.NegativePrompt,
+			"USER SCENE DESCRIPTION (THIS IS THE PRIMARY PROMPT — generate exactly this scene): " + tags,
+		}
+	}
 	if params.ExtraNegativePrompt != "" {
 		userParts = append(userParts, "USER NEGATIVE: "+params.ExtraNegativePrompt)
 	}
@@ -2924,6 +2932,9 @@ RESPONSE LENGTH: your response is limited to ~%d tokens. You MUST fit within thi
 	promptResult.NegativePrompt = a.filterKidsOutput(promptResult.NegativePrompt)
 
 	prompt := promptResult.Prompt
+	if params.Mode == "inpaint" && tags != "" {
+		prompt += ", " + tags
+	}
 	if p.Loras != "" {
 		var loras []preset.LoRAEntry
 		if json.Unmarshal([]byte(p.Loras), &loras) == nil {
@@ -4657,9 +4668,11 @@ func (a *App) addToSession(imageBase64 string, info json.RawMessage, source stri
 	}
 
 	a.presets.UpdateSessionItemPaths(itemID, fileName, thumbName)
+	a.presets.SetActiveItem(itemID, sessionID)
 
 	if a.ctx != nil {
 		runtime.EventsEmit(a.ctx, "session:added", map[string]int64{"id": itemID})
+		runtime.EventsEmit(a.ctx, "session:active", map[string]int64{"id": itemID})
 	}
 
 	return itemID
