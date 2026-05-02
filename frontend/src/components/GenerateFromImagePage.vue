@@ -65,6 +65,8 @@ const isDragOver = ref(false)
 const removeStage = ref('')
 const brushSize = ref(30)
 const maskBlur = ref(4)
+const maskPadding = ref(8)
+const maskFeather = ref(8)
 const inpaintFill = ref(1)
 const inpaintFullRes = ref(true)
 const invertMask = ref(false)
@@ -395,6 +397,42 @@ function getMaskBase64() {
   }
   maskCtx.putImageData(maskData, 0, 0)
 
+  if (maskPadding.value > 0) {
+    const dilated = document.createElement('canvas')
+    dilated.width = w
+    dilated.height = h
+    const dCtx = dilated.getContext('2d')
+    dCtx.filter = `blur(${maskPadding.value}px)`
+    dCtx.drawImage(maskCanvas, 0, 0)
+    dCtx.filter = 'none'
+
+    const dData = dCtx.getImageData(0, 0, w, h)
+    for (let i = 0; i < dData.data.length; i += 4) {
+      if (dData.data[i + 3] > 0) {
+        dData.data[i] = 255
+        dData.data[i + 1] = 255
+        dData.data[i + 2] = 255
+        dData.data[i + 3] = 255
+      }
+    }
+    dCtx.putImageData(dData, 0, 0)
+
+    maskCtx.clearRect(0, 0, w, h)
+    maskCtx.drawImage(dilated, 0, 0)
+  }
+
+  if (maskFeather.value > 0) {
+    const feathered = document.createElement('canvas')
+    feathered.width = w
+    feathered.height = h
+    const fCtx = feathered.getContext('2d')
+    fCtx.filter = `blur(${maskFeather.value}px)`
+    fCtx.drawImage(maskCanvas, 0, 0)
+
+    maskCtx.clearRect(0, 0, w, h)
+    maskCtx.drawImage(feathered, 0, 0)
+  }
+
   const dataUrl = maskCanvas.toDataURL('image/png')
   return dataUrl.split(',')[1] || ''
 }
@@ -547,6 +585,8 @@ onMounted(async () => {
     if (s.fi_denoising) denoisingStrength.value = Number(s.fi_denoising)
     if (s.fi_extra_negative) extraNegativePrompt.value = s.fi_extra_negative
     if (s.fi_analyze_mode) analyzeMode.value = s.fi_analyze_mode
+    if (s.fi_mask_padding) maskPadding.value = Number(s.fi_mask_padding)
+    if (s.fi_mask_feather) maskFeather.value = Number(s.fi_mask_feather)
   } catch {}
   if (shared) {
     if (shared.selectedPresetId) selectedPresetId.value = shared.selectedPresetId
@@ -581,6 +621,8 @@ function saveFIState() {
     fi_denoising: String(denoisingStrength.value || ''),
     fi_extra_negative: extraNegativePrompt.value || '',
     fi_analyze_mode: analyzeMode.value || '',
+    fi_mask_padding: String(maskPadding.value || ''),
+    fi_mask_feather: String(maskFeather.value || ''),
   }).catch(() => {})
 }
 
@@ -752,7 +794,7 @@ function onKeydown(e) {
             <button class="btn btn-sm btn-secondary" @click="pasteFromClipboard">Paste</button>
           </div>
 
-          <div style="display: flex; gap: 8px; margin-top: 16px; margin-bottom: 12px;">
+          <div style="display: flex; gap: 8px; margin-top: 16px; margin-bottom: 12px; flex-wrap: wrap;">
             <button class="btn btn-sm" :class="mode === 'img2img' ? 'btn-primary' : 'btn-secondary'" @click="mode = 'img2img'" :disabled="generatingImage">img2img</button>
             <button class="btn btn-sm" :class="mode === 'inpaint' ? 'btn-primary' : 'btn-secondary'" @click="mode = 'inpaint'" :disabled="generatingImage">inpaint</button>
             <button class="btn btn-sm" :class="mode === 'remove' ? 'btn-primary' : 'btn-secondary'" @click="mode = 'remove'" :disabled="generatingImage">remove</button>
@@ -795,6 +837,16 @@ function onKeydown(e) {
                   <option :value="1">Original</option>
                   <option :value="2">Latent Noise</option>
                 </select>
+              </div>
+            </div>
+            <div v-if="mode === 'inpaint'" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 4px;">
+              <div class="form-group">
+                <label class="form-label">Mask Padding: {{ maskPadding }}px</label>
+                <input type="range" class="form-range" v-model.number="maskPadding" min="0" max="64" step="1" />
+              </div>
+              <div class="form-group">
+                <label class="form-label">Mask Feather: {{ maskFeather }}px</label>
+                <input type="range" class="form-range" v-model.number="maskFeather" min="0" max="64" step="1" />
               </div>
             </div>
             <div v-if="mode === 'inpaint'" class="form-group" style="margin-top: 4px;">

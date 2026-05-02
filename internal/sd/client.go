@@ -3,10 +3,17 @@ package sd
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"time"
+)
+
+const (
+	retryMaxAttempts  = 3
+	retryInitialDelay = 2 * time.Second
 )
 
 type Client struct {
@@ -122,17 +129,70 @@ func (c *Client) SetModel(modelName string) error {
 	return nil
 }
 
-func (c *Client) Txt2Img(req Txt2ImgRequest) (*Txt2ImgResponse, error) {
-	body, err := json.Marshal(req)
-	if err != nil {
-		return nil, fmt.Errorf("marshal request: %w", err)
+func isRetryableError(err error, statusCode int) bool {
+	if statusCode == http.StatusServiceUnavailable || statusCode == http.StatusBadGateway || statusCode == http.StatusInternalServerError || statusCode == http.StatusGatewayTimeout {
+		return true
+	}
+	if err == nil {
+		return false
+	}
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) {
+		return urlErr.Timeout() || errors.Is(urlErr, io.EOF)
+	}
+	return false
+}
+
+func (c *Client) doWithRetry(fn func() (*http.Response, error)) (*http.Response, error) {
+	var resp *http.Response
+	var err error
+	var lastErr error
+	delay := retryInitialDelay
+
+	for attempt := 0; attempt < retryMaxAttempts; attempt++ {
+		resp, err = fn()
+		if err == nil && resp.StatusCode < 500 {
+			return resp, nil
+		}
+		if err != nil {
+			lastErr = err
+			if !isRetryableError(err, 0) {
+				return nil, err
+			}
+		} else {
+			lastErr = fmt.Errorf("status %d", resp.StatusCode)
+			if !isRetryableError(nil, resp.StatusCode) {
+				return resp, lastErr
+			}
+		}
+		if resp != nil && attempt < retryMaxAttempts-1 {
+			resp.Body.Close()
+			resp = nil
+		}
+		if attempt < retryMaxAttempts-1 {
+			time.Sleep(delay)
+			delay *= 2
+		}
 	}
 
-	resp, err := c.httpClient.Post(c.baseURL+"/sdapi/v1/txt2img", "application/json", bytes.NewReader(body))
-	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
+	return resp, fmt.Errorf("request failed after %d attempts: %w", retryMaxAttempts, lastErr)
+}
+
+func (c *Client) doPost(url string, body []byte) (*Txt2ImgResponse, error) {
+	resp, err := c.doWithRetry(func() (*http.Response, error) {
+		return c.httpClient.Post(url, "application/json", bytes.NewReader(body))
+	})
+	if resp != nil {
+		defer resp.Body.Close()
 	}
-	defer resp.Body.Close()
+	if err != nil {
+		if resp != nil {
+			if respBody, readErr := io.ReadAll(resp.Body); readErr == nil && len(respBody) > 0 {
+				return nil, fmt.Errorf("%w\nSD response: %s", err, string(respBody))
+			}
+		}
+		return nil, err
+	}
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -153,6 +213,14 @@ func (c *Client) Txt2Img(req Txt2ImgRequest) (*Txt2ImgResponse, error) {
 	}
 
 	return &result, nil
+}
+
+func (c *Client) Txt2Img(req Txt2ImgRequest) (*Txt2ImgResponse, error) {
+	body, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("marshal request: %w", err)
+	}
+	return c.doPost(c.baseURL+"/sdapi/v1/txt2img", body)
 }
 
 func (c *Client) GetModels() ([]SDModel, error) {
@@ -254,32 +322,7 @@ func (c *Client) Img2Img(req Img2ImgRequest) (*Txt2ImgResponse, error) {
 	if err != nil {
 		return nil, fmt.Errorf("marshal request: %w", err)
 	}
-
-	resp, err := c.httpClient.Post(c.baseURL+"/sdapi/v1/img2img", "application/json", bytes.NewReader(body))
-	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("read response: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("API error %d: %s\nRequest: %s", resp.StatusCode, string(respBody), string(body))
-	}
-
-	var result Txt2ImgResponse
-	if err := json.Unmarshal(respBody, &result); err != nil {
-		return nil, fmt.Errorf("decode response: %w", err)
-	}
-
-	if result.Error != "" {
-		return &result, fmt.Errorf("SD error: %s", result.Error)
-	}
-
-	return &result, nil
+	return c.doPost(c.baseURL+"/sdapi/v1/img2img", body)
 }
 
 func (c *Client) SetVAE(vaeName string) error {

@@ -32,7 +32,7 @@ Both services must be reachable from the machine running SD Studio. If they run 
 - **Batch generation** — generate N images to a specified folder with progress tracking
 - **Test page** — multi-select presets or models and generate images directly through SD for comparison
 - **Pipelines (Compound Presets)** — multi-step generation chains (txt2img → img2img → ...) for complex workflows
-- **Generate From Image** — upload image, analyze via vision LLM (quick or deep mode), generate with preset, inpaint with canvas mask drawing
+- **Generate From Image** — upload image, analyze via vision LLM (quick or deep mode), generate with preset, inpaint with canvas mask drawing, mask dilation + feathering for seamless edge blending
 - **Multi-Scene Editor** — LLM decomposes scene into multiple characters, inpaint-based multi-pass compositing with rembg background removal
 - Manage presets (generation parameters: sampler, steps, cfg_scale, size, seed, LoRA)
 - Preset types with tags for organization
