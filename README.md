@@ -164,10 +164,10 @@ Prioritized findings from code review (2026-04-24).
 
 | # | Issue | Effort |
 |---|-------|--------|
-| 1 | Kids Mode PIN: SHA-256 without salt (rainbow tables), `!=` hash comparison (timing attack), silent error on hash read | 1h |
+| 1 | ~~Kids Mode PIN: SHA-256 without salt, `!=` hash comparison~~ Fixed: 16-byte random salt + `subtle.ConstantTimeCompare` | 1h |
 | 2 | Kids Mode filter: false positives (`"class"` matches `"ass"`, `"dismissing"` matches `"smoking"`) — bare `strings.Contains` | 1h |
-| 3 | `CheckServices` race condition — goroutines write shared `status` without mutex | 30m |
-| 4 | `CheckServices` writes `SDPromptModel` into LLM status field (bug) | 10m |
+| 3 | ~~`CheckServices` race condition — goroutines write shared `status` without mutex~~ Fixed: local `ServiceInfo` + `sync.Mutex` | 30m |
+| 4 | ~~`CheckServices` writes `SDPromptModel` into LLM status field~~ Fixed: uses `config.LLMModel` | 10m |
 | 5 | No input validation on user-provided URLs and numeric fields | 1h |
 
 ### Important — Architecture & Reliability

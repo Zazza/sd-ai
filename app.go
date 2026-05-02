@@ -3,7 +3,9 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -81,14 +83,46 @@ func (a *App) IsKidsModeActive() bool {
 	return a.isKidsMode()
 }
 
+func hashPin(pin, salt string) string {
+	h := sha256.Sum256([]byte(salt + pin))
+	return hex.EncodeToString(h[:])
+}
+
+func (a *App) verifyPin(pin string) (bool, error) {
+	storedHash, _ := a.presets.GetSetting("kids_pin_hash")
+	salt, _ := a.presets.GetSetting("kids_pin_salt")
+	if storedHash == "" || salt == "" {
+		return false, fmt.Errorf("PIN not set")
+	}
+	computed := hashPin(pin, salt)
+	return subtle.ConstantTimeCompare([]byte(computed), []byte(storedHash)) == 1, nil
+}
+
+func (a *App) storePin(pin string) error {
+	if len(pin) != 4 {
+		return fmt.Errorf("PIN must be 4 digits")
+	}
+	for _, c := range pin {
+		if c < '0' || c > '9' {
+			return fmt.Errorf("PIN must be 4 digits")
+		}
+	}
+	saltBytes := make([]byte, 16)
+	if _, err := rand.Read(saltBytes); err != nil {
+		return fmt.Errorf("failed to generate salt: %w", err)
+	}
+	salt := hex.EncodeToString(saltBytes)
+	hash := hashPin(pin, salt)
+	if err := a.presets.SetSetting("kids_pin_salt", salt); err != nil {
+		return err
+	}
+	return a.presets.SetSetting("kids_pin_hash", hash)
+}
+
 func (a *App) SetKidsMode(enabled bool, pin string) error {
 	if enabled {
 		if pin != "" {
-			if len(pin) != 4 {
-				return fmt.Errorf("PIN must be 4 digits")
-			}
-			hash := sha256.Sum256([]byte(pin))
-			if err := a.presets.SetSetting("kids_pin_hash", hex.EncodeToString(hash[:])); err != nil {
+			if err := a.storePin(pin); err != nil {
 				return err
 			}
 		}
@@ -105,8 +139,11 @@ func (a *App) SetKidsMode(enabled bool, pin string) error {
 		if pin == "" {
 			return fmt.Errorf("PIN required")
 		}
-		hash := sha256.Sum256([]byte(pin))
-		if hex.EncodeToString(hash[:]) != storedHash {
+		ok, err := a.verifyPin(pin)
+		if err != nil {
+			return err
+		}
+		if !ok {
 			a.recordFailedPinAttempt()
 			return fmt.Errorf("incorrect PIN")
 		}
@@ -163,8 +200,11 @@ func (a *App) SetKidsCategory(name string, enabled bool, pin string) error {
 		if pin == "" {
 			return fmt.Errorf("PIN required")
 		}
-		hash := sha256.Sum256([]byte(pin))
-		if hex.EncodeToString(hash[:]) != storedHash {
+		ok, err := a.verifyPin(pin)
+		if err != nil {
+			return err
+		}
+		if !ok {
 			a.recordFailedPinAttempt()
 			return fmt.Errorf("incorrect PIN")
 		}
@@ -273,34 +313,43 @@ type ServiceStatus struct {
 
 func (a *App) CheckServices() ServiceStatus {
 	var status ServiceStatus
+	var mu sync.Mutex
 	var wg sync.WaitGroup
 	wg.Add(2)
 
 	go func() {
 		defer wg.Done()
+		var info ServiceInfo
 		if err := a.llm.HealthCheck(); err != nil {
-			status.LLM.Available = false
+			info.Available = false
 			a.log.Warn("LLM unavailable: %s", err)
-			return
+		} else {
+			info.Available = true
+			info.Model = a.config.LLMModel
 		}
-		status.LLM.Available = true
-		status.LLM.Model = a.config.SDPromptModel
+		mu.Lock()
+		status.LLM = info
+		mu.Unlock()
 	}()
 
 	go func() {
 		defer wg.Done()
+		var info ServiceInfo
 		if err := a.sd.HealthCheck(); err != nil {
-			status.SD.Available = false
+			info.Available = false
 			a.log.Warn("SD unavailable: %s", err)
-			return
-		}
-		status.SD.Available = true
-		opts, err := a.sd.GetOptions()
-		if err == nil {
-			if m, ok := opts["sd_model_checkpoint"].(string); ok {
-				status.SD.Model = m
+		} else {
+			info.Available = true
+			opts, err := a.sd.GetOptions()
+			if err == nil {
+				if m, ok := opts["sd_model_checkpoint"].(string); ok {
+					info.Model = m
+				}
 			}
 		}
+		mu.Lock()
+		status.SD = info
+		mu.Unlock()
 	}()
 
 	wg.Wait()
@@ -1783,7 +1832,7 @@ func (a *App) UpdateSettings(data map[string]string) error {
 		"llm_generate_top_p": true, "llm_generate_num_thread": true,
 		"llm_analyze_temperature": true, "llm_analyze_num_ctx": true, "llm_analyze_num_predict": true,
 		"llm_analyze_top_p": true, "llm_analyze_num_thread": true,
-		"kids_mode": true, "kids_pin_hash": true,
+		"kids_mode": true, "kids_pin_hash": true, "kids_pin_salt": true,
 		"kids_cat_violence": true, "kids_cat_horror": true, "kids_cat_weapons": true,
 		"kids_cat_substances": true, "kids_cat_mature": true,
 		"rembg_url": true,

@@ -1,0 +1,147 @@
+package main
+
+import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"go-sd/internal/config"
+	"go-sd/internal/llm"
+	"go-sd/internal/preset"
+	"go-sd/internal/sd"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func newTestApp(t *testing.T) (*App, *preset.DB) {
+	t.Helper()
+	db, err := preset.Open(":memory:")
+	require.NoError(t, err)
+	t.Cleanup(func() { db.Close() })
+	cfg := &config.Config{LLMModel: "test-llm-model", SDPromptModel: "test-sd-model"}
+	app := NewApp(db, llm.New("http://localhost:1234", "lmstudio"), sd.New("http://localhost:7860"), cfg)
+	return app, db
+}
+
+func TestStorePin_Valid(t *testing.T) {
+	app, _ := newTestApp(t)
+	err := app.storePin("1234")
+	assert.NoError(t, err)
+	hash, _ := app.presets.GetSetting("kids_pin_hash")
+	assert.NotEmpty(t, hash)
+	salt, _ := app.presets.GetSetting("kids_pin_salt")
+	assert.NotEmpty(t, salt)
+}
+
+func TestStorePin_InvalidLength(t *testing.T) {
+	app, _ := newTestApp(t)
+	err := app.storePin("12")
+	assert.Error(t, err)
+}
+
+func TestVerifyPin_Correct(t *testing.T) {
+	app, _ := newTestApp(t)
+	require.NoError(t, app.storePin("1234"))
+	ok, err := app.verifyPin("1234")
+	assert.NoError(t, err)
+	assert.True(t, ok)
+}
+
+func TestVerifyPin_Incorrect(t *testing.T) {
+	app, _ := newTestApp(t)
+	require.NoError(t, app.storePin("1234"))
+	ok, err := app.verifyPin("0000")
+	assert.NoError(t, err)
+	assert.False(t, ok)
+}
+
+func TestVerifyPin_NotSet(t *testing.T) {
+	app, _ := newTestApp(t)
+	_, err := app.verifyPin("1234")
+	assert.Error(t, err)
+}
+
+func TestHashPin_UsesSalt(t *testing.T) {
+	h1 := hashPin("1234", "salt1")
+	h2 := hashPin("1234", "salt2")
+	assert.NotEqual(t, h1, h2, "same PIN with different salts must produce different hashes")
+}
+
+func TestSetKidsMode_EnableWithPin(t *testing.T) {
+	app, _ := newTestApp(t)
+	err := app.SetKidsMode(true, "1234")
+	assert.NoError(t, err)
+	v, _ := app.presets.GetSetting("kids_mode")
+	assert.Equal(t, "true", v)
+}
+
+func TestSetKidsMode_DisableWithCorrectPin(t *testing.T) {
+	app, _ := newTestApp(t)
+	require.NoError(t, app.SetKidsMode(true, "1234"))
+	err := app.SetKidsMode(false, "1234")
+	assert.NoError(t, err)
+	v, _ := app.presets.GetSetting("kids_mode")
+	assert.Equal(t, "false", v)
+}
+
+func TestSetKidsMode_DisableWithWrongPin(t *testing.T) {
+	app, _ := newTestApp(t)
+	require.NoError(t, app.SetKidsMode(true, "1234"))
+	err := app.SetKidsMode(false, "0000")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "incorrect PIN")
+}
+
+func TestSetKidsMode_DisableWithoutPin(t *testing.T) {
+	app, _ := newTestApp(t)
+	require.NoError(t, app.SetKidsMode(true, "1234"))
+	err := app.SetKidsMode(false, "")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "PIN required")
+}
+
+func TestSetKidsMode_EnableBadPin(t *testing.T) {
+	app, _ := newTestApp(t)
+	err := app.SetKidsMode(true, "12")
+	assert.Error(t, err)
+}
+
+func TestSetKidsCategory_RejectsWrongPin(t *testing.T) {
+	app, _ := newTestApp(t)
+	require.NoError(t, app.SetKidsMode(true, "1234"))
+	err := app.SetKidsCategory("violence", false, "0000")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "incorrect PIN")
+}
+
+func TestCheckServices_LLMModelField(t *testing.T) {
+	llmSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]interface{}{"status": "ok"})
+	}))
+	defer llmSrv.Close()
+
+	sdSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/sdapi/v1/options" {
+			json.NewEncoder(w).Encode(map[string]interface{}{"sd_model_checkpoint": "sd-1.5"})
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer sdSrv.Close()
+
+	db, err := preset.Open(":memory:")
+	require.NoError(t, err)
+	defer db.Close()
+
+	cfg := &config.Config{LLMModel: "my-llm-model", SDPromptModel: "my-sd-model"}
+	app := NewApp(db, llm.New(llmSrv.URL, "lmstudio"), sd.New(sdSrv.URL), cfg)
+
+	status := app.CheckServices()
+	assert.True(t, status.LLM.Available)
+	assert.Equal(t, "my-llm-model", status.LLM.Model, "LLM model should use config.LLMModel, not SDPromptModel")
+	assert.NotEqual(t, "my-sd-model", status.LLM.Model)
+	assert.True(t, status.SD.Available)
+	assert.Equal(t, "sd-1.5", status.SD.Model)
+}
