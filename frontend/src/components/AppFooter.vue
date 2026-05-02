@@ -511,16 +511,17 @@ export default { name: 'AppFooter' }
   background: var(--surface-2);
 }
 
-.status-dot.online { color: var(--success); }
-.status-dot.offline { color: var(--text-dim); }
+.status-dot {
+  color: var(--text);
+}
 
 .dot-indicator {
   display: inline-block;
-  width: 6px;
-  height: 6px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
-  background: var(--text-dim);
-  margin-right: 2px;
+  background: var(--danger);
+  margin-right: 4px;
   vertical-align: middle;
 }
 
