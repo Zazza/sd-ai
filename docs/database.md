@@ -170,6 +170,8 @@ Key-value хранилище настроек.
 | steps | INTEGER | Шаги |
 | cfg_scale | REAL | CFG |
 | seed | INTEGER | Seed |
+| is_active | BOOLEAN | Активный элемент сессии (только один на session_id) |
+| preset_id | INTEGER FK | Ссылка на presets.id |
 | created_at | TEXT | |
 
 Файлы хранятся в:

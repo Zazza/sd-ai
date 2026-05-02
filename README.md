@@ -132,18 +132,19 @@ Settings are stored in SQLite (`data/presets.db`) and persist across reinstalls.
 ├── main.go              # Entrypoint
 ├── app.go               # Wails RPC bindings
 ├── internal/
-│   ├── config/          # Configuration
-│   ├── llm/             # LLM client
-│   ├── preset/          # SQLite CRUD (presets, settings)
-│   ├── sd/              # Stable Diffusion client
+│   ├── config/          # Configuration (6 tests)
+│   ├── llm/             # LLM client (~52 tests)
+│   ├── preset/          # SQLite CRUD (~50 tests)
+│   ├── sd/              # Stable Diffusion client (~30 tests)
 │   ├── compositor/      # Multi-scene compositing
-│   ├── kids/            # Kids mode filtering
+│   ├── kids/            # Kids mode filtering (~11 tests)
 │   ├── rembg/           # Background removal client
 │   ├── logger/          # Event logger
 │   └── api/             # HTTP API
 ├── frontend/
 │   └── src/
 │       ├── components/  # Vue components
+│       ├── __tests__/   # Test setup & mocks (vitest)
 │       └── wailsjs/     # Auto-generated Wails bindings
 └── data/                # Runtime data
     ├── presets.db       # SQLite database
@@ -173,7 +174,7 @@ Prioritized findings from code review (2026-04-24).
 | # | Issue | Effort |
 |---|-------|--------|
 | 6 | No interfaces for LLM/SD clients — `app.go` depends on concrete types, untestable | 2–3h |
-| 7 | No tests at all (no `*_test.go`, no frontend tests) | 2–3d |
+| 7 | ~~No tests~~ Go tests added (116 tests across 5 packages), frontend test infra ready | partial |
 | 8 | Duplicated settings validation in `app.go` and `api/handler.go`; whitelist missing newer fields (`llm_backend`, `llm_keep_alive`) | 1h |
 | 9 | No `context.Context` in HTTP calls — requests can hang on app exit | 2h |
 | 10 | SQLite `SetMaxOpenConns(1)` — potential bottleneck | varies |
@@ -195,7 +196,7 @@ Prioritized findings from code review (2026-04-24).
 |----------|-------|-------------|
 | **P0** | 1, 3, 4 | Security fixes and bugs |
 | **P1** | 5, 6, 8, 9 | Architecture improvements |
-| **P2** | 7, 11, 12, 13 | Tests, UX, migrations |
+| **P2** | 11, 12, 13 | UX, migrations |
 | **P3** | 10, 14, 15, 16 | Ops, quality tooling |
 
 ## Generation Flow

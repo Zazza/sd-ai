@@ -218,9 +218,12 @@ sessions                     session_items
 └── updated_at               ├── source (preset/compound/remove/...)
                               ├── prompt, negative_prompt
                               ├── model, sampler, steps, cfg, seed
+                              ├── is_active (только 1 на сессию)
                               └── created_at
 ```
 
+- `AddSessionItem` деактивирует все предыдущие элементы в сессии перед вставкой нового
+- `SetActiveItem(id, sessionID)` переключает активный элемент через `CASE WHEN`
 - Изображения хранятся в `data/sessions/{session_id}/`
 - Thumbnails в `data/sessions/{session_id}/thumb/`
 - Frontend: сессия → grid изображений → zoom через ImageViewer

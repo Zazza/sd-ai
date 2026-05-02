@@ -70,6 +70,10 @@ func (d *DB) SetActiveSession(id int64) error {
 }
 
 func (d *DB) AddSessionItem(item *SessionItem) (int64, error) {
+	_, err := d.db.Exec(`UPDATE session_items SET is_active = 0 WHERE session_id = ?`, item.SessionID)
+	if err != nil {
+		return 0, err
+	}
 	result, err := d.db.Exec(`
 		INSERT INTO session_items (session_id, file_name, thumb_name, source, prompt, negative_prompt, sampler, steps, cfg_scale, seed, denoising, width, height, is_preview, preset_id, is_active)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,

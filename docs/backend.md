@@ -81,7 +81,12 @@ type BackendConfig struct {
 HTTP-клиент для SD WebUI API с retry.
 
 ```go
-type Client struct { ... }
+type Client struct {
+    baseURL           string
+    httpClient        *http.Client
+    retryMaxAttempts  int
+    retryDelay        time.Duration
+}
 
 func New(baseURL string) *Client
 func (c *Client) Txt2Img(req Txt2ImgRequest) (*Txt2ImgResponse, error)    // с retry
@@ -167,6 +172,7 @@ Descriptions: `ListDescriptions`, `CreateDescription`, `UpdateDescription`, `Del
 Prompts: `ListPrompts`, `CreatePrompt`, `DeletePrompt`
 Scenes: `ListSavedScenes`, `GetSavedScene`, `SaveScene`, `UpdateSavedScene`, `DeleteSavedScene`
 Sessions: `CreateSession`, `ListSessions`, `SwitchSession`, `DeleteSession`, etc.
+- `AddSessionItem` деактивирует предыдущие элементы (`is_active=0`) перед вставкой нового
 Export: `ListExportPresets`, `SaveExportPreset`, `DeleteExportPreset`
 
 ### Миграции

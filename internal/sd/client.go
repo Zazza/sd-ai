@@ -19,6 +19,9 @@ const (
 type Client struct {
 	baseURL    string
 	httpClient *http.Client
+
+	retryMaxAttempts int
+	retryDelay       time.Duration
 }
 
 func New(baseURL string) *Client {
@@ -27,6 +30,8 @@ func New(baseURL string) *Client {
 		httpClient: &http.Client{
 			Timeout: 300 * time.Second,
 		},
+		retryMaxAttempts: retryMaxAttempts,
+		retryDelay:       retryInitialDelay,
 	}
 }
 
@@ -147,9 +152,9 @@ func (c *Client) doWithRetry(fn func() (*http.Response, error)) (*http.Response,
 	var resp *http.Response
 	var err error
 	var lastErr error
-	delay := retryInitialDelay
+	delay := c.retryDelay
 
-	for attempt := 0; attempt < retryMaxAttempts; attempt++ {
+	for attempt := 0; attempt < c.retryMaxAttempts; attempt++ {
 		resp, err = fn()
 		if err == nil && resp.StatusCode < 500 {
 			return resp, nil
@@ -175,7 +180,7 @@ func (c *Client) doWithRetry(fn func() (*http.Response, error)) (*http.Response,
 		}
 	}
 
-	return resp, fmt.Errorf("request failed after %d attempts: %w", retryMaxAttempts, lastErr)
+	return resp, fmt.Errorf("request failed after %d attempts: %w", c.retryMaxAttempts, lastErr)
 }
 
 func (c *Client) doPost(url string, body []byte) (*Txt2ImgResponse, error) {

@@ -37,6 +37,18 @@ sd-ai/
 └── docs/                      # Документация
 ```
 
+## Testing
+
+| Пакет | Фреймворк | Тестов | Покрытие |
+|-------|-----------|--------|----------|
+| `internal/config` | Go testing | 6 | env, defaults |
+| `internal/llm` | Go testing + httptest | ~52 | Chat, GetModels, HealthCheck, CleanTags, StripThinkTags |
+| `internal/sd` | Go testing + httptest | ~30 | Retry, Txt2Img, Img2Img, HealthCheck, Get* |
+| `internal/preset` | Go testing + :memory: SQLite + testify | ~50 | CRUD, sessions, compound presets, settings, tags |
+| `internal/kids` | Go testing + testify | ~11 | Filter false positives, blocked/safe content |
+| Frontend | Vitest + @vue/test-utils | — | infra ready (mocks, setup) |
+```
+
 ## Архитектурные принципы
 
 ### Facade (app.go)

@@ -192,7 +192,34 @@ Fullscreen просмотр изображений (зум, навигация).
 | `Ctrl+Enter` | Generate | GeneratePage, GenerateFromImagePage |
 | `Escape` | Close fullscreen mask editor | GenerateFromImagePage |
 
-## Паттерны
+## Testing
+
+### Инфраструктура
+- **Vitest** + `@vue/test-utils` + `happy-dom`
+- Запуск: `npm test` (или `npm run test:watch`)
+- Конфиг: `vitest.config.js`
+
+### Mocks
+Все Wails bindings мокаются в `src/__tests__/setup.js` через `vi.mock()`. Компоненты не обращаются к реальному бэкенду.
+
+**Runtime mocks** (`src/__tests__/mocks/runtime.js`):
+- `EventsOn`, `EventsOff`, `EventsEmit` — можно emit'ить события в тестах
+- `clearEventMocks()` — очистка между тестами
+
+**Wails binding mocks** (`src/__tests__/mocks/wails.js`):
+- `mockWailsBinding(name, fn)` — переопределение мока для конкретного теста
+- `clearWailsMocks()` — очистка
+
+### Написание тестов
+```javascript
+import { mount } from '@vue/test-utils'
+import MyComponent from '../MyComponent.vue'
+
+test('renders correctly', () => {
+  const wrapper = mount(MyComponent, { props: { ... } })
+  expect(wrapper.text()).toContain('expected text')
+})
+```
 
 ### Формат base64 изображений
 Все изображения передаются как чистый base64 (без `data:image/...;base64,` префикса). Преобразование для `<img>`:
