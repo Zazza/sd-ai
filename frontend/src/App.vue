@@ -19,6 +19,8 @@ let resetTimer = null
 
 const generateTab = ref('')
 const generateKey = ref(0)
+const settingsTab = ref('')
+const settingsKey = ref(0)
 const theme = ref('dark')
 
 function toggleTheme() {
@@ -80,12 +82,18 @@ async function resetAll() {
   }
 }
 
-function onBrowserNavigate(target) {
-  if (target.tab) {
+function onNavigate(target) {
+  if (target.page === 'settings' && target.tab) {
+    settingsTab.value = target.tab
+    settingsKey.value++
+  } else if (target.tab) {
     generateTab.value = target.tab
     generateKey.value++
   }
   page.value = target.page
+  if (target.page === 'settings') {
+    setTimeout(() => { settingsTab.value = '' }, 100)
+  }
 }
 
 const currentPage = computed(() => {
@@ -165,10 +173,11 @@ onUnmounted(() => {
     <main class="main">
       <UnifiedGeneratePage v-if="page === 'generate'" :key="resetKey + '-' + generateKey" :initial-tab="generateTab" />
       <ExportPage v-else-if="page === 'export'" />
-      <FileBrowserPage v-else-if="page === 'browser'" @navigate="onBrowserNavigate" />
+      <FileBrowserPage v-else-if="page === 'browser'" @navigate="onNavigate" />
+      <SettingsPage v-else-if="page === 'settings'" :key="settingsKey" :initial-tab="settingsTab" />
       <component v-else :is="currentPage" />
     </main>
     </div>
-    <AppFooter @navigate="onBrowserNavigate" />
+    <AppFooter @navigate="onNavigate" />
   </div>
 </template>

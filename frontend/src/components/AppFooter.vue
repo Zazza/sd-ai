@@ -29,9 +29,9 @@ let confirmDeleteTimer = null
 let observer = null
 
 const services = reactive({
-  llm: { available: false, label: 'LLM', model: '' },
-  sd: { available: false, label: 'SD', model: '' },
-  rembg: { available: false, label: 'Rembg' },
+  llm: { available: false, label: 'LLM', model: '', tab: 'connection' },
+  sd: { available: false, label: 'SD', model: '', tab: 'connection' },
+  rembg: { available: false, label: 'Rembg', tab: 'connection' },
 })
 
 const activeSessions = computed(() => (sessions.value || []).find(s => s.id === activeSessionId.value))
@@ -103,6 +103,12 @@ function levelClass(level) {
 const filteredLogs = () => {
   if (filterLevel.value === 'all') return logs
   return logs.filter(l => l.level === filterLevel.value)
+}
+
+function goToService(key) {
+  const svc = services[key]
+  if (!svc) return
+  emit('navigate', { page: 'settings', tab: svc.tab || 'connection' })
 }
 
 async function checkServices() {
@@ -323,7 +329,8 @@ onMounted(async () => {
       <div class="footer-status">
         <span v-for="(svc, key) in services" :key="key"
               class="status-dot"
-              :class="{ online: svc.available, offline: !svc.available }">
+              :class="{ online: svc.available, offline: !svc.available }"
+              @click="goToService(key)" :title="'Go to ' + svc.label + ' settings'">
           <span class="dot-indicator" :class="{ online: svc.available }"></span>
           {{ svc.label }}{{ svc.model ? ': ' + svc.model : '' }}
         </span>
@@ -495,6 +502,12 @@ export default { name: 'AppFooter' }
   font-weight: 500;
   padding: 1px 6px;
   border-radius: 3px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.status-dot:hover {
+  background: var(--surface-2);
 }
 
 .status-dot.online { color: var(--success); }

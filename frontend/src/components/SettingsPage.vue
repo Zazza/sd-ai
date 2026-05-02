@@ -4,7 +4,11 @@ import { api } from '../api.js'
 import ToggleSwitch from './ToggleSwitch.vue'
 import PinModal from './PinModal.vue'
 
-const activeTab = ref('connection')
+const props = defineProps({
+  initialTab: { type: String, default: 'connection' }
+})
+
+const activeTab = ref(props.initialTab || 'connection')
 
 const defaultURLs = {
   lmstudio: 'http://localhost:1234',
@@ -510,6 +514,41 @@ onMounted(loadSettings)
       <button class="btn btn-primary" @click="saveConnection">Save Connection Settings</button>
 
       <div class="card" style="margin-top: 24px;">
+        <h3 style="color: var(--text-bright); margin-bottom: 16px;">Rembg (Background Removal)</h3>
+        <div v-if="rembgSaved" class="status status-success" style="margin-bottom: 16px;">URL saved.</div>
+        <div v-if="rembgError" class="status status-error" style="margin-bottom: 16px;">{{ rembgError }}</div>
+
+        <div style="color: var(--text-dim); font-size: 13px; margin-bottom: 12px; line-height: 1.5;">
+          Rembg is an AI background removal service. Run it on any device with Python/CUDA:
+          <code style="background: var(--surface-2); padding: 2px 6px; border-radius: 4px; font-size: 12px;">rembg s --host 0.0.0.0 --port 7000</code>
+          <br>Then enter its URL below. Required for clean multi-character compositing.
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Rembg Server URL</label>
+          <div style="display: flex; gap: 8px;">
+            <input class="form-input" v-model="rembgForm.rembg_url" placeholder="http://192.168.1.100:7000" style="flex: 1;" />
+            <button class="btn btn-secondary btn-sm" @click="testRembg" :disabled="rembgTesting || !rembgForm.rembg_url">
+              {{ rembgTesting ? 'Testing...' : 'Test' }}
+            </button>
+          </div>
+        </div>
+
+        <div v-if="rembgStatus === 'ok'" style="color: #4ade80; font-size: 13px; margin-bottom: 12px;">
+          Connection successful — rembg is running.
+        </div>
+        <div v-if="rembgStatus === 'error'" style="color: #f87171; font-size: 13px; margin-bottom: 12px;">
+          Connection failed — check URL and make sure rembg is running.
+        </div>
+
+        <div v-if="!rembgForm.rembg_url" style="color: var(--text-dim); font-size: 12px; padding: 8px; background: var(--surface-2); border-radius: 6px; margin-bottom: 12px;">
+          Without rembg, Go-based white background removal will be used (lower quality, visible artifacts on edges).
+        </div>
+
+        <button class="btn btn-primary" @click="saveRembg">Save Rembg URL</button>
+      </div>
+
+      <div class="card" style="margin-top: 24px;">
         <h3 style="color: var(--text-bright); margin-bottom: 16px;">LLM Models</h3>
         <div v-if="llmError" class="status status-error" style="margin-bottom: 8px;">{{ llmError }}</div>
         <div v-if="llmLoading" style="text-align: center; padding: 20px;"><span class="spinner"></span></div>
@@ -762,41 +801,6 @@ onMounted(loadSettings)
       <button class="btn btn-secondary" style="margin-top: 16px;" @click="loadSD" :disabled="sdLoading">
         {{ sdLoading ? 'Loading...' : 'Refresh' }}
       </button>
-
-      <div class="card" style="margin-top: 24px;">
-        <h3 style="color: var(--text-bright); margin-bottom: 16px;">Rembg (Background Removal)</h3>
-        <div v-if="rembgSaved" class="status status-success" style="margin-bottom: 16px;">URL saved.</div>
-        <div v-if="rembgError" class="status status-error" style="margin-bottom: 16px;">{{ rembgError }}</div>
-
-        <div style="color: var(--text-dim); font-size: 13px; margin-bottom: 12px; line-height: 1.5;">
-          Rembg is an AI background removal service. Run it on any device with Python/CUDA:
-          <code style="background: var(--surface-2); padding: 2px 6px; border-radius: 4px; font-size: 12px;">rembg s --host 0.0.0.0 --port 7000</code>
-          <br>Then enter its URL below. Required for clean multi-character compositing.
-        </div>
-
-        <div class="form-group">
-          <label class="form-label">Rembg Server URL</label>
-          <div style="display: flex; gap: 8px;">
-            <input class="form-input" v-model="rembgForm.rembg_url" placeholder="http://192.168.1.100:7000" style="flex: 1;" />
-            <button class="btn btn-secondary btn-sm" @click="testRembg" :disabled="rembgTesting || !rembgForm.rembg_url">
-              {{ rembgTesting ? 'Testing...' : 'Test' }}
-            </button>
-          </div>
-        </div>
-
-        <div v-if="rembgStatus === 'ok'" style="color: #4ade80; font-size: 13px; margin-bottom: 12px;">
-          Connection successful — rembg is running.
-        </div>
-        <div v-if="rembgStatus === 'error'" style="color: #f87171; font-size: 13px; margin-bottom: 12px;">
-          Connection failed — check URL and make sure rembg is running.
-        </div>
-
-        <div v-if="!rembgForm.rembg_url" style="color: var(--text-dim); font-size: 12px; padding: 8px; background: var(--surface-2); border-radius: 6px; margin-bottom: 12px;">
-          Without rembg, Go-based white background removal will be used (lower quality, visible artifacts on edges).
-        </div>
-
-        <button class="btn btn-primary" @click="saveRembg">Save Rembg URL</button>
-      </div>
     </div>
 
     <PinModal v-if="showPinModal" :mode="pinMode" :error="pinError" @confirm="onPinConfirm" @cancel="onPinCancel" />
