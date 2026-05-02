@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { api } from '../api.js'
+import { t } from '../i18n/index.js'
 
 const props = defineProps({
   visible: { type: Boolean, default: false },
@@ -83,32 +84,32 @@ function handleDelete(id) {
   <div v-if="visible" class="modal-overlay" @click.self="$emit('close')">
     <div class="modal" style="max-width: 640px;">
       <div class="modal-header">
-        <h2 class="modal-title">Saved Descriptions</h2>
+        <h2 class="modal-title">{{ t('descriptions.title') }}</h2>
         <button class="modal-close" @click="$emit('close')">&times;</button>
       </div>
 
       <div style="display: flex; gap: 8px; margin-bottom: 12px;">
-        <input class="form-input" v-model="search" placeholder="Search..." style="flex: 1;" />
-        <button class="btn btn-primary btn-sm" @click="showCreate = !showCreate">{{ showCreate ? 'Cancel' : 'New' }}</button>
+        <input class="form-input" v-model="search" :placeholder="t('descriptions.placeholder_search')" style="flex: 1;" />
+        <button class="btn btn-primary btn-sm" @click="showCreate = !showCreate">{{ showCreate ? t('descriptions.btn_cancel') : t('descriptions.btn_new') }}</button>
       </div>
 
       <div v-if="types.length > 0" class="style-markers" style="margin-bottom: 12px;">
-        <span class="style-chip" :class="{ active: !typeFilter }" @click="typeFilter = ''">All</span>
+        <span class="style-chip" :class="{ active: !typeFilter }" @click="typeFilter = ''">{{ t('descriptions.all') }}</span>
         <span v-for="t in types" :key="t" class="style-chip" :class="{ active: typeFilter === t }" @click="typeFilter = t">{{ t }}</span>
       </div>
 
       <div v-if="showCreate" style="background: var(--surface-2); padding: 12px; border-radius: var(--radius-sm); margin-bottom: 12px;">
         <div class="form-group">
-          <input class="form-input" v-model="newText" placeholder="Description text" />
+          <input class="form-input" v-model="newText" :placeholder="t('descriptions.placeholder_text')" />
         </div>
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
-          <input class="form-input" v-model="newName" placeholder="Name (optional)" />
-          <input class="form-input" v-model="newType" placeholder="Tag/type (optional)" />
+          <input class="form-input" v-model="newName" :placeholder="t('descriptions.placeholder_name')" />
+          <input class="form-input" v-model="newType" :placeholder="t('descriptions.placeholder_tag')" />
         </div>
         <div class="form-group" style="margin-top: 8px;">
-          <textarea class="form-textarea" v-model="newNegative" placeholder="Negative prompt (optional)" rows="2"></textarea>
+          <textarea class="form-textarea" v-model="newNegative" :placeholder="t('descriptions.placeholder_negative')" rows="2"></textarea>
         </div>
-        <button class="btn btn-primary btn-sm" @click="handleCreate" :disabled="!newText.trim()">Save</button>
+        <button class="btn btn-primary btn-sm" @click="handleCreate" :disabled="!newText.trim()">{{ t('descriptions.btn_save') }}</button>
       </div>
 
       <div class="saved-modal-list">
@@ -120,13 +121,13 @@ function handleDelete(id) {
             </div>
             <div v-if="editingId !== desc.id" class="saved-modal-text">{{ desc.text }}</div>
             <div v-else style="display: flex; flex-direction: column; gap: 6px;">
-              <textarea class="form-textarea" v-model="editText" placeholder="Description text" rows="3"></textarea>
-              <input class="form-input" v-model="editName" placeholder="Name" />
-              <input class="form-input" v-model="editType" placeholder="Type/tag" />
-              <textarea class="form-textarea" v-model="editNegative" placeholder="Negative prompt" rows="2"></textarea>
+              <textarea class="form-textarea" v-model="editText" :placeholder="t('descriptions.placeholder_text')" rows="3"></textarea>
+              <input class="form-input" v-model="editName" :placeholder="t('descriptions.placeholder_name_edit')" />
+              <input class="form-input" v-model="editType" :placeholder="t('descriptions.placeholder_type_edit')" />
+              <textarea class="form-textarea" v-model="editNegative" :placeholder="t('descriptions.placeholder_negative_edit')" rows="2"></textarea>
               <div style="display: flex; gap: 6px;">
-                <button class="btn btn-primary btn-sm" @click.stop="saveEdit(desc)">Save</button>
-                <button class="btn btn-secondary btn-sm" @click.stop="editingId = null">Cancel</button>
+                <button class="btn btn-primary btn-sm" @click.stop="saveEdit(desc)">{{ t('descriptions.btn_save') }}</button>
+                <button class="btn btn-secondary btn-sm" @click.stop="editingId = null">{{ t('descriptions.btn_cancel') }}</button>
               </div>
             </div>
             <div v-if="desc.negative_prompt" style="font-size: 11px; color: var(--text-dim); margin-top: 4px;">
@@ -134,13 +135,13 @@ function handleDelete(id) {
             </div>
           </div>
           <div style="display: flex; flex-direction: column; gap: 4px; flex-shrink: 0;">
-            <button v-if="editingId !== desc.id" class="btn btn-secondary btn-sm" @click.stop="startEdit(desc)">Edit</button>
-            <button class="btn btn-danger btn-sm" @click.stop="handleDelete(desc.id)">Del</button>
+            <button v-if="editingId !== desc.id" class="btn btn-secondary btn-sm" @click.stop="startEdit(desc)">{{ t('descriptions.btn_edit') }}</button>
+            <button class="btn btn-danger btn-sm" @click.stop="handleDelete(desc.id)">{{ t('descriptions.btn_del') }}</button>
           </div>
         </div>
         <div v-if="filtered.length === 0" class="empty-state">
           <div class="empty-state-icon">&#128196;</div>
-          <div>No saved descriptions</div>
+          <div>{{ t('descriptions.no_saved') }}</div>
         </div>
       </div>
     </div>

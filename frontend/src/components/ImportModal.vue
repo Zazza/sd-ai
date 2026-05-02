@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { api } from '../api.js'
+import { t } from '../i18n/index.js'
 
 const props = defineProps({
   presets: { type: Array, required: true },
@@ -58,7 +59,7 @@ async function doImport() {
   <div class="modal-overlay" @click.self="$emit('close')">
     <div class="modal">
       <div class="modal-header">
-        <h2 class="modal-title">Import Presets ({{ presets.length }} from {{ fileCount }} file{{ fileCount > 1 ? 's' : '' }})</h2>
+        <h2 class="modal-title">{{ t('import.title', { count: presets.length, files: fileCount, plural: fileCount > 1 ? 's' : '' }) }}</h2>
         <button class="modal-close" @click="$emit('close')">&times;</button>
       </div>
 
@@ -67,9 +68,9 @@ async function doImport() {
       <div style="margin-bottom: 12px;">
         <label class="import-select-all">
           <input type="checkbox" :checked="allSelected" @change="toggleAll" />
-          Select all
+          {{ t('import.select_all') }}
         </label>
-        <span class="import-counter">{{ selectedCount }} selected</span>
+        <span class="import-counter">{{ t('import.selected', { count: selectedCount }) }}</span>
       </div>
 
       <div class="import-list">
@@ -82,7 +83,7 @@ async function doImport() {
           <label v-for="i in indices" :key="i" class="import-item" :class="{ 'import-item-indented': fileCount > 1 }">
             <input type="checkbox" v-model="selected[i]" />
             <div class="import-item-info">
-              <div class="import-item-name">{{ presets[i].name || 'Untitled' }}</div>
+              <div class="import-item-name">{{ presets[i].name || t('import.untitled') }}</div>
               <div class="import-item-meta">
                 <span>{{ presets[i].preset_type || 'general' }}</span>
                 <span>{{ presets[i].sampler }}</span>
@@ -94,9 +95,9 @@ async function doImport() {
       </div>
 
       <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
-        <button class="btn btn-secondary" @click="$emit('close')">Cancel</button>
+        <button class="btn btn-secondary" @click="$emit('close')">{{ t('import.btn_cancel') }}</button>
         <button class="btn btn-primary" :disabled="importing || selectedCount === 0" @click="doImport">
-          {{ importing ? 'Importing...' : `Import (${selectedCount})` }}
+          {{ importing ? t('import.importing') : t('import.btn_import', { count: selectedCount }) }}
         </button>
       </div>
     </div>

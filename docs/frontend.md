@@ -26,8 +26,10 @@ frontend/src/
 │   ├── SavedDescriptionsModal.vue # Сохранённые описания
 │   ├── PinModal.vue               # PIN-код для kids mode
 │   ├── ToggleSwitch.vue           # Toggle компонент
-│   ├── AppFooter.vue              # Footer
-│   └── HelloWorld.vue             # (dev)
+│   └── AppFooter.vue              # Footer
+├── i18n/
+│   ├── index.js                   # Re-export entry point
+│   └── en.js                      # English strings (~300 keys)
 ├── assets/
 │   └── main.css                   # CSS variables, global styles
 └── wailsjs/                       # Auto-generated Wails bindings
@@ -37,6 +39,25 @@ frontend/src/
         ├── main/App.d.ts          # TypeScript types
         └── models.ts              # Data models
 ```
+
+## i18n — Интернационализация
+
+Все UI-строки вынесены в `i18n/en.js` — плоский объект с ~300 ключами.
+
+```javascript
+import { t } from '../i18n/index.js'
+
+// Использование
+t('generate.btn_generate')                    // → "Generate"
+t('settings.label_llm_url')                   // → "LLM URL"
+t('fi.progress_analyze', { step: 1, total: 3 }) // → "Analyzing 1/3..."
+```
+
+**Конвенция именования ключей:** `{component}.{context}` — например `generate.btn_generate`, `settings.label_llm_url`.
+
+**Добавление нового языка:**
+1. Создать `i18n/{lang}.js` с таким же набором ключей
+2. Добавить переключатель в `i18n/index.js`
 
 ## api.js — API-слой
 

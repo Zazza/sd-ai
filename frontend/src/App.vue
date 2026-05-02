@@ -3,6 +3,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { WindowSetSystemDefaultTheme } from './wailsjs/runtime/runtime'
 import { Diamond, Sparkles, LayoutGrid, Sliders, Settings, RotateCcw, Download, FolderOpen, Sun, Moon } from 'lucide-vue-next'
 import { api } from './api.js'
+import { t } from './i18n/index.js'
 import UnifiedPresetsPage from './components/UnifiedPresetsPage.vue'
 import UnifiedGeneratePage from './components/UnifiedGeneratePage.vue'
 import ExportPage from './components/ExportPage.vue'
@@ -129,44 +130,44 @@ onUnmounted(() => {
     <div class="app-body">
     <aside class="sidebar">
       <div class="sidebar-logo">
-        <Diamond :size="20" class="icon" /> SD Studio
+        <Diamond :size="20" class="icon" /> {{ t('app.title') }}
       </div>
       <nav class="sidebar-nav">
         <div class="sidebar-group">
-          <div class="sidebar-group-label">Generation</div>
+          <div class="sidebar-group-label">{{ t('app.nav_generation') }}</div>
           <a class="sidebar-link" :class="{ active: page === 'generate' }" @click="page = 'generate'">
-            <Sparkles :size="16" class="icon" /> Generate
+            <Sparkles :size="16" class="icon" /> {{ t('app.nav_generate') }}
           </a>
           <a class="sidebar-link" :class="{ active: page === 'export' }" @click="page = 'export'">
-            <Download :size="16" class="icon" /> Export
+            <Download :size="16" class="icon" /> {{ t('app.nav_export') }}
           </a>
           <a class="sidebar-link" :class="{ active: page === 'scene' }" @click="page = 'scene'">
-            <LayoutGrid :size="16" class="icon" /> Multi-Scene
+            <LayoutGrid :size="16" class="icon" /> {{ t('app.nav_multi_scene') }}
           </a>
         </div>
         <div class="sidebar-group">
-          <div class="sidebar-group-label">Tools</div>
+          <div class="sidebar-group-label">{{ t('app.nav_tools') }}</div>
           <a class="sidebar-link" :class="{ active: page === 'browser' }" @click="page = 'browser'">
-            <FolderOpen :size="16" class="icon" /> File Browser
+            <FolderOpen :size="16" class="icon" /> {{ t('app.nav_file_browser') }}
           </a>
         </div>
         <div class="sidebar-group">
-          <div class="sidebar-group-label">Management</div>
+          <div class="sidebar-group-label">{{ t('app.nav_management') }}</div>
           <a class="sidebar-link" :class="{ active: page === 'presets' }" @click="page = 'presets'">
-            <Sliders :size="16" class="icon" /> Presets
+            <Sliders :size="16" class="icon" /> {{ t('app.nav_presets') }}
           </a>
           <a class="sidebar-link" :class="{ active: page === 'settings' }" @click="page = 'settings'">
-            <Settings :size="16" class="icon" /> Settings
+            <Settings :size="16" class="icon" /> {{ t('app.nav_settings') }}
           </a>
         </div>
       </nav>
       <div class="sidebar-footer">
-        <button class="sidebar-theme-btn" @click="toggleTheme" :title="theme === 'dark' ? 'Light mode' : 'Dark mode'">
+        <button class="sidebar-theme-btn" @click="toggleTheme" :title="theme === 'dark' ? t('app.theme_light') : t('app.theme_dark')">
           <Sun v-if="theme === 'dark'" :size="14" class="icon" />
           <Moon v-else :size="14" class="icon" />
         </button>
         <button class="sidebar-reset-btn" :class="{ confirm: confirmReset }" @click="resetAll">
-          <RotateCcw :size="14" class="icon" /> {{ confirmReset ? 'Confirm?' : 'Reset All' }}
+          <RotateCcw :size="14" class="icon" /> {{ confirmReset ? t('app.confirm') : t('app.reset_all') }}
         </button>
       </div>
     </aside>

@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, onUnmounted, watch, inject } from 'vue'
 import { EventsEmit } from '../wailsjs/runtime/runtime'
 import { api } from '../api.js'
+import { t } from '../i18n/index.js'
 import SavedDescriptionsModal from './SavedDescriptionsModal.vue'
 import ImageViewer from './ImageViewer.vue'
 
@@ -119,7 +120,7 @@ async function recommendPreset() {
       }
     }
   } catch (e) {
-    error.value = 'Recommendation failed: ' + String(e)
+    error.value = t('generate.error_recommend', { error: String(e) })
   } finally {
     recommending.value = false
   }
@@ -127,11 +128,11 @@ async function recommendPreset() {
 
 async function sendToSD() {
   if (genMode.value === 'compound' && !selectedCompoundPresetId.value) {
-    error.value = 'Select a pipeline first'
+    error.value = t('generate.error_select_pipeline')
     return
   }
   if (genMode.value === 'preset' && !selectedPresetId.value) {
-    error.value = 'Select a preset first'
+    error.value = t('generate.error_select_preset')
     return
   }
   saveGenState()
@@ -155,7 +156,7 @@ async function sendToSD() {
       result = await api.generateImage(selectedPresetId.value, extraPrompt.value, extraNegativePrompt.value)
     }
     if (!result || !result.image) {
-      error.value = 'No image returned. Check preset settings (model, sampler, scheduler).'
+      error.value = t('generate.error_no_image')
     } else {
       generatedImage.value = result.image
       genInfo.value = result.info
@@ -175,11 +176,11 @@ async function sendToSD() {
 
 async function generateImage() {
   if (genMode.value === 'compound' && !selectedCompoundPresetId.value) {
-    error.value = 'Select a pipeline first'
+    error.value = t('generate.error_select_pipeline')
     return
   }
   if (genMode.value === 'preset' && !selectedPresetId.value) {
-    error.value = 'Select a preset first'
+    error.value = t('generate.error_select_preset')
     return
   }
   saveGenState()
@@ -199,13 +200,13 @@ async function generateImage() {
         extraNegativePrompt.value = promptResult.negative_prompt || ''
         promptDirty = false
       } else {
-        error.value = 'LLM returned empty response'
+        error.value = t('generate.error_empty_llm')
         generatingImage.value = false
         generationStage.value = ''
         return
       }
     } catch (e) {
-      error.value = 'Prompt generation failed: ' + String(e)
+      error.value = t('generate.error_prompt_gen', { error: String(e) })
       generatingImage.value = false
       generationStage.value = ''
       return
@@ -232,7 +233,7 @@ async function generateImage() {
       result = await api.generateImage(selectedPresetId.value, extraPrompt.value, extraNegativePrompt.value)
     }
     if (!result || !result.image) {
-      error.value = 'No image returned. Check preset settings (model, sampler, scheduler).'
+      error.value = t('generate.error_no_image')
     } else {
       generatedImage.value = result.image
       genInfo.value = result.info
@@ -272,7 +273,7 @@ async function upscalePreview() {
     }
     const result = await api.upscalePreview(generatedImage.value, selectedPresetId.value, seed)
     if (!result || !result.image) {
-      error.value = 'Upscale failed: no image returned'
+      error.value = t('generate.error_upscale')
     } else {
       generatedImage.value = result.image
       genInfo.value = result.info
@@ -303,7 +304,7 @@ async function upscaleImageX2() {
   try {
     const result = await api.upscaleImage(generatedImage.value, genInfo.value, selectedPresetId.value)
     if (!result || !result.image) {
-      error.value = 'Upscale x2 failed: no image returned'
+      error.value = t('generate.error_upscale_x2')
     } else {
       generatedImage.value = result.image
       genInfo.value = result.info
@@ -337,7 +338,7 @@ async function saveDescription() {
     })
     await loadSavedDescs()
   } catch (e) {
-    error.value = 'Save description failed: ' + String(e)
+    error.value = t('generate.error_save_desc', { error: String(e) })
   }
 }
 
@@ -346,7 +347,7 @@ async function deleteDescription(id) {
     await api.deleteDescription(id)
     await loadSavedDescs()
   } catch (e) {
-    error.value = 'Delete description failed: ' + String(e)
+    error.value = t('generate.error_delete_desc', { error: String(e) })
   }
 }
 
@@ -361,7 +362,7 @@ async function handleCreateDesc(data) {
     await api.createDescriptionFull(data)
     await loadSavedDescs()
   } catch (e) {
-    error.value = 'Create failed: ' + String(e)
+    error.value = t('generate.error_create', { error: String(e) })
   }
 }
 
@@ -370,7 +371,7 @@ async function handleUpdateDesc(data) {
     await api.updateDescription(data)
     await loadSavedDescs()
   } catch (e) {
-    error.value = 'Update failed: ' + String(e)
+    error.value = t('generate.error_update', { error: String(e) })
   }
 }
 
@@ -383,7 +384,7 @@ async function downloadImage() {
       error.value = ''
     }
   } catch (e) {
-    error.value = 'Save failed: ' + String(e)
+    error.value = t('generate.error_save', { error: String(e) })
   }
 }
 
@@ -471,13 +472,13 @@ function onKeydown(e) {
 <template>
   <div>
     <div class="page-header">
-      <h1 class="page-title">Generate</h1>
-      <button class="btn btn-primary" @click="loadPresets">&#8635; Refresh</button>
+      <h1 class="page-title">{{ t('generate.title') }}</h1>
+      <button class="btn btn-primary" @click="loadPresets">&#8635; {{ t('generate.btn_refresh') }}</button>
     </div>
 
     <div v-if="kidsModeActive" class="service-status">
       <div class="status-badge status-ok">
-        &#9679; Kids Mode
+        &#9679; {{ t('generate.kids_mode') }}
       </div>
     </div>
 
@@ -487,22 +488,22 @@ function onKeydown(e) {
       <div class="generate-section">
         <div class="card">
           <div style="display: flex; gap: 8px; margin-bottom: 12px;">
-            <button class="btn btn-sm" :class="genMode === 'preset' ? 'btn-primary' : 'btn-secondary'" @click="genMode = 'preset'">Preset</button>
-            <button class="btn btn-sm" :class="genMode === 'compound' ? 'btn-primary' : 'btn-secondary'" @click="genMode = 'compound'">Pipeline</button>
+            <button class="btn btn-sm" :class="genMode === 'preset' ? 'btn-primary' : 'btn-secondary'" @click="genMode = 'preset'">{{ t('generate.btn_preset') }}</button>
+            <button class="btn btn-sm" :class="genMode === 'compound' ? 'btn-primary' : 'btn-secondary'" @click="genMode = 'compound'">{{ t('generate.btn_pipeline') }}</button>
           </div>
 
           <div v-if="genMode === 'preset'" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
             <div class="form-group">
-              <label class="form-label">Type</label>
+              <label class="form-label">{{ t('generate.label_type') }}</label>
               <select class="form-select" v-model="selectedTypeId" :disabled="generatingImage">
-                <option :value="null">All types</option>
+                <option :value="null">{{ t('generate.all_types') }}</option>
                 <option v-for="t in presetTypes" :key="t.id" :value="t.id">{{ t.name }}</option>
               </select>
             </div>
             <div class="form-group">
-              <label class="form-label">Preset</label>
+              <label class="form-label">{{ t('generate.label_preset') }}</label>
               <select class="form-select" v-model="selectedPresetId" :disabled="generatingImage">
-                <option :value="null" disabled>Select preset...</option>
+                <option :value="null" disabled>{{ t('generate.select_preset') }}</option>
                 <option v-for="p in filteredPresets" :key="p.id" :value="p.id">
                   {{ p.name }}
                 </option>
@@ -511,19 +512,19 @@ function onKeydown(e) {
           </div>
 
           <div v-if="genMode === 'compound'" class="form-group">
-            <label class="form-label">Pipeline</label>
+            <label class="form-label">{{ t('generate.label_pipeline') }}</label>
             <select class="form-select" v-model="selectedCompoundPresetId" :disabled="generatingImage">
-              <option :value="null" disabled>Select pipeline...</option>
+              <option :value="null" disabled>{{ t('generate.select_pipeline') }}</option>
               <option v-for="c in compoundPresets" :key="c.id" :value="c.id">{{ c.name }} ({{ c.steps.length }} steps)</option>
             </select>
           </div>
 
           <div class="form-group" style="margin-top: 12px;">
-            <label class="form-label">Recommend Preset</label>
+            <label class="form-label">{{ t('generate.label_recommend') }}</label>
             <div style="display: flex; gap: 8px;">
-              <input class="form-input" v-model="recommendDesc" placeholder="Describe what you want..." :disabled="recommending || generatingImage" style="flex: 1;" />
+              <input class="form-input" v-model="recommendDesc" :placeholder="t('generate.placeholder_recommend')" :disabled="recommending || generatingImage" style="flex: 1;" />
               <button class="btn btn-secondary" @click="recommendPreset" :disabled="recommending || !recommendDesc.trim()">
-                {{ recommending ? '...' : 'Recommend' }}
+                {{ recommending ? '...' : t('generate.btn_recommend') }}
               </button>
             </div>
             <div v-if="recommendResult" style="margin-top: 8px; padding: 8px; background: var(--surface-2); border-radius: 6px; font-size: 13px;">
@@ -533,10 +534,10 @@ function onKeydown(e) {
           </div>
 
           <div class="form-group">
-            <label class="form-label">Description</label>
-            <textarea class="form-textarea" v-model="description" rows="4" placeholder="Describe what to add or change in the image..." :disabled="generatingImage"></textarea>
+            <label class="form-label">{{ t('generate.label_description') }}</label>
+            <textarea class="form-textarea" v-model="description" rows="4" :placeholder="t('generate.placeholder_description')" :disabled="generatingImage"></textarea>
             <div style="display: flex; gap: 8px; margin-top: 6px;">
-              <button class="btn btn-sm btn-secondary" @click="saveDescription" :disabled="generatingImage || !description.trim()">Save</button>
+              <button class="btn btn-sm btn-secondary" @click="saveDescription" :disabled="generatingImage || !description.trim()">{{ t('generate.btn_save') }}</button>
               <button class="btn btn-sm btn-secondary" @click="showSavedDescs = !showSavedDescs">
                 Saved {{ savedDescs.length ? '(' + savedDescs.length + ')' : '' }}
               </button>
@@ -544,39 +545,39 @@ function onKeydown(e) {
           </div>
 
           <div class="form-group">
-            <label class="form-label">Negative</label>
-            <textarea class="form-textarea" v-model="negative" rows="2" placeholder="What should NOT be in the image..." :disabled="generatingImage"></textarea>
+            <label class="form-label">{{ t('generate.label_negative') }}</label>
+            <textarea class="form-textarea" v-model="negative" rows="2" :placeholder="t('generate.placeholder_negative')" :disabled="generatingImage"></textarea>
           </div>
 
           <button class="btn btn-primary" :class="{ 'btn-generating': generatingImage }" style="width: 100%; justify-content: center; padding: 12px;" @click="generateImage" :disabled="generatingImage || (genMode === 'preset' ? !selectedPresetId : !selectedCompoundPresetId)">
             <span v-if="generatingImage" style="display: inline-flex; align-items: center; gap: 6px;">
               <span class="spinner" style="width: 14px; height: 14px; border-width: 2px;"></span>
-              {{ generationStage === 'prompt' ? 'Generating prompt...' : 'Generating image...' }}
+              {{ generationStage === 'prompt' ? t('generate.generating_prompt') : t('generate.generating_image') }}
             </span>
-            <span v-else>Generate Image</span>
+            <span v-else>{{ t('generate.btn_generate') }}</span>
           </button>
           <button class="btn btn-secondary" style="width: 100%; justify-content: center; padding: 8px; margin-top: 6px;" @click="openBatchGeneration" :disabled="generatingImage || !extraPrompt || (genMode === 'preset' ? !selectedPresetId : !selectedCompoundPresetId)">
-            Batch Generation
+            {{ t('generate.btn_batch_generation') }}
           </button>
 
           <details v-if="!kidsModeActive" style="margin-top: 8px;" class="card">
-            <summary style="cursor: pointer; color: var(--text-dim); font-size: 13px; padding: 8px;">Edit SD Prompt</summary>
+            <summary style="cursor: pointer; color: var(--text-dim); font-size: 13px; padding: 8px;">{{ t('generate.edit_sd_prompt') }}</summary>
             <div style="margin-top: 8px;">
               <div class="form-group">
-                <label class="form-label">Positive Prompt</label>
-                <textarea class="form-textarea" v-model="extraPrompt" rows="4" placeholder="SD positive prompt..." :disabled="generatingImage"></textarea>
+                <label class="form-label">{{ t('generate.label_positive_prompt') }}</label>
+                <textarea class="form-textarea" v-model="extraPrompt" rows="4" :placeholder="t('generate.placeholder_positive_prompt')" :disabled="generatingImage"></textarea>
               </div>
               <div class="form-group">
-                <label class="form-label">Negative Prompt</label>
-                <textarea class="form-textarea" v-model="extraNegativePrompt" rows="2" placeholder="SD negative prompt..." :disabled="generatingImage"></textarea>
+                <label class="form-label">{{ t('generate.label_negative_prompt') }}</label>
+                <textarea class="form-textarea" v-model="extraNegativePrompt" rows="2" :placeholder="t('generate.placeholder_negative_prompt')" :disabled="generatingImage"></textarea>
               </div>
               <button class="btn btn-secondary" style="width: 100%; justify-content: center;" @click="sendToSD" :disabled="generatingImage || (genMode === 'preset' ? !selectedPresetId : !selectedCompoundPresetId) || !extraPrompt">
-                Send to SD
+                {{ t('generate.btn_send_sd') }}
               </button>
             </div>
           </details>
           <div v-else style="margin-top: 8px; padding: 8px; background: var(--bg-secondary); border-radius: 6px; text-align: center; font-size: 12px; color: var(--text-dim);">
-            &#128274; Prompt editing disabled in Kids Mode
+            {{ t('generate.kids_prompt_disabled') }}
           </div>
         </div>
       </div>
@@ -585,41 +586,41 @@ function onKeydown(e) {
         <div class="generate-image-area">
           <div v-if="generatingImage || upscaling || upscalingX2" style="text-align: center;">
             <span class="spinner" style="width: 32px; height: 32px; border-width: 3px;"></span>
-            <p style="margin-top: 12px; color: var(--text-dim);">{{ upscalingX2 ? 'Upscaling x2...' : upscaling ? 'Upscaling to full resolution...' : generationStage === 'prompt' ? 'Generating prompt...' : 'Generating image...' }}</p>
+            <p style="margin-top: 12px; color: var(--text-dim);">{{ upscalingX2 ? t('generate.upscaling_x2') : upscaling ? t('generate.upscaling_full') : generationStage === 'prompt' ? t('generate.generating_prompt') : t('generate.generating_image') }}</p>
           </div>
           <div v-else-if="generatedImage" style="width: 100%; padding: 12px;">
             <div v-if="isPreview && previewMode" class="status status-info" style="margin-bottom: 8px; text-align: center;">
-              Preview &mdash; click Upscale for full resolution. Tip: switch preset before upscale for style transfer.
+              {{ t('generate.preview_info') }}
             </div>
             <img :src="'data:image/png;base64,' + generatedImage" alt="Generated" class="img-fade-in" style="border-radius: var(--radius-sm); cursor: zoom-in;" @click="showViewer = true" />
             <div style="display: flex; gap: 8px; margin-top: 12px; justify-content: center;">
-              <button v-if="isPreview && previewMode" class="btn btn-primary btn-sm" @click="upscalePreview">Upscale to Full Size</button>
-              <button v-if="!isPreview && savedPreview" class="btn btn-secondary btn-sm" @click="backToPreview">&larr; Back to Preview</button>
-              <button v-if="generatedImage && !isPreview" class="btn btn-secondary btn-sm" @click="upscaleImageX2" :disabled="upscalingX2">Upscale x2</button>
-              <button class="btn btn-secondary btn-sm" @click="downloadImage" data-tooltip="Download">Download</button>
-              <button class="btn btn-secondary btn-sm" @click="copyPrompt" data-tooltip="Copy prompt">Copy</button>
-              <button class="btn btn-secondary btn-sm" @click="generateImage" data-tooltip="Regenerate">Regenerate</button>
+              <button v-if="isPreview && previewMode" class="btn btn-primary btn-sm" @click="upscalePreview">{{ t('generate.btn_upscale_full') }}</button>
+              <button v-if="!isPreview && savedPreview" class="btn btn-secondary btn-sm" @click="backToPreview">{{ t('generate.btn_back_preview') }}</button>
+              <button v-if="generatedImage && !isPreview" class="btn btn-secondary btn-sm" @click="upscaleImageX2" :disabled="upscalingX2">{{ t('generate.btn_upscale_x2') }}</button>
+              <button class="btn btn-secondary btn-sm" @click="downloadImage" data-tooltip="Download">{{ t('generate.btn_download') }}</button>
+              <button class="btn btn-secondary btn-sm" @click="copyPrompt" data-tooltip="Copy prompt">{{ t('generate.btn_copy') }}</button>
+              <button class="btn btn-secondary btn-sm" @click="generateImage" data-tooltip="Regenerate">{{ t('generate.btn_regenerate') }}</button>
             </div>
           </div>
           <div v-else class="generate-placeholder">
             <div class="generate-placeholder-icon">&#9744;</div>
-            <p>Generated image will appear here</p>
+            <p>{{ t('generate.placeholder_image') }}</p>
           </div>
         </div>
 
         <details v-if="genInfo" class="gen-info card">
-          <summary>Generation Info</summary>
+          <summary>{{ t('generate.generation_info') }}</summary>
           <pre style="white-space: pre-wrap; word-break: break-word; overflow-wrap: break-word;">{{ formattedGenInfo }}</pre>
         </details>
 
         <details v-if="effectivePrompt" class="gen-info card">
-          <summary>Effective Prompt</summary>
+          <summary>{{ t('generate.effective_prompt') }}</summary>
           <div style="margin-bottom: 8px;">
-            <div style="color: var(--text-dim); font-size: 11px; margin-bottom: 4px;">POSITIVE</div>
+            <div style="color: var(--text-dim); font-size: 11px; margin-bottom: 4px;">{{ t('generate.positive') }}</div>
             <div style="font-size: 12px; line-height: 1.5; word-break: break-word;">{{ effectivePrompt }}</div>
           </div>
           <div v-if="effectiveNegative" style="margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border);">
-            <div style="color: var(--text-dim); font-size: 11px; margin-bottom: 4px;">NEGATIVE</div>
+            <div style="color: var(--text-dim); font-size: 11px; margin-bottom: 4px;">{{ t('generate.negative') }}</div>
             <div style="font-size: 12px; line-height: 1.5; word-break: break-word;">{{ effectiveNegative }}</div>
           </div>
         </details>

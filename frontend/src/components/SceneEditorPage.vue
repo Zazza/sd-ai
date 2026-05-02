@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, onUnmounted, reactive } from 'vue'
 import { EventsOn, EventsOff } from '../wailsjs/runtime/runtime'
 import { api } from '../api.js'
+import { t } from '../i18n/index.js'
 
 const presets = ref([])
 const selectedPresetId = ref(null)
@@ -99,11 +100,11 @@ async function deleteScene(id) {
 
 async function decompose() {
   if (!description.value.trim()) {
-    error.value = 'Enter a scene description'
+    error.value = t('scene.error_enter_description')
     return
   }
   if (!selectedPresetId.value) {
-    error.value = 'Select a preset'
+    error.value = t('scene.error_select_preset')
     return
   }
 
@@ -169,11 +170,11 @@ function progressLabel() {
   if (!progress.value) return ''
   const p = progress.value
   const prefix = batchCount.value > 1 ? `[${batchCurrent.value}/${batchCount.value}] ` : ''
-  if (p.step === 'background') return prefix + 'Generating background...'
-  if (p.step === 'character') return prefix + `Generating character ${p.character}/${p.total}...`
-  if (p.step === 'rembg') return prefix + `Removing background (${p.character}/${p.total})...`
-  if (p.step === 'refine') return prefix + 'Refining image...'
-  if (p.step === 'done') return prefix + 'Done!'
+  if (p.step === 'background') return prefix + t('scene.generating_background')
+  if (p.step === 'character') return prefix + t('scene.generating_character', { current: p.character, total: p.total })
+  if (p.step === 'rembg') return prefix + t('scene.removing_background', { current: p.character, total: p.total })
+  if (p.step === 'refine') return prefix + t('scene.refining')
+  if (p.step === 'done') return prefix + t('scene.done')
   return prefix + p.step
 }
 
@@ -214,42 +215,42 @@ onMounted(() => {
 
 <template>
   <div class="scene-editor">
-    <h2>Multi-Pass Scene Generator</h2>
+    <h2>{{ t('scene.title') }}</h2>
 
     <div v-if="error" class="error">{{ error }}</div>
 
     <!-- Step 1: Description + Preset -->
     <div class="section" v-if="!scene">
       <div class="form-group">
-        <label>Preset</label>
+        <label>{{ t('scene.label_preset') }}</label>
         <select v-model="selectedPresetId">
-          <option :value="null" disabled>Select preset...</option>
+          <option :value="null" disabled>{{ t('scene.select_preset') }}</option>
           <option v-for="p in presetOptions" :key="p.id" :value="p.id">{{ p.name }}</option>
         </select>
       </div>
 
       <div class="form-group">
-        <label>Scene Description</label>
-        <textarea v-model="description" rows="4" placeholder="Describe the scene with all characters, e.g.: A warrior and a mage standing in a dark forest clearing. The warrior is on the left with a sword, the mage on the right casting fire."></textarea>
+        <label>{{ t('scene.label_description') }}</label>
+        <textarea v-model="description" rows="4" :placeholder="t('scene.placeholder_description')"></textarea>
       </div>
 
       <div class="form-group">
-        <label>Negative Prompt</label>
-        <input v-model="negativePrompt" type="text" placeholder="e.g.: female, woman, girl, nude, deformed" />
+        <label>{{ t('scene.label_negative') }}</label>
+        <input v-model="negativePrompt" type="text" :placeholder="t('scene.placeholder_negative')" />
       </div>
 
       <button @click="decompose" :disabled="decomposing || !llmAvailable || !selectedPresetId" class="btn-primary">
-        {{ decomposing ? 'Decomposing...' : 'Decompose Scene' }}
+        {{ decomposing ? t('scene.decomposing') : t('scene.btn_decompose') }}
       </button>
 
       <div v-if="savedScenes.length > 0" class="saved-scenes">
-        <h4>Saved Scenes</h4>
+        <h4>{{ t('scene.saved_scenes') }}</h4>
         <div v-for="s in savedScenes" :key="s.id" class="saved-scene-item">
           <div class="saved-scene-info">
             <span class="saved-scene-name" @click="loadScene(s.id)">{{ s.name }}</span>
             <span class="saved-scene-date">{{ s.created_at?.slice(0, 10) }}</span>
           </div>
-          <button @click="deleteScene(s.id)" class="btn-danger btn-sm">Delete</button>
+          <button @click="deleteScene(s.id)" class="btn-danger btn-sm">{{ t('scene.btn_delete') }}</button>
         </div>
       </div>
     </div>
@@ -257,39 +258,39 @@ onMounted(() => {
     <!-- Step 2: Scene Editor -->
     <div class="section" v-if="scene">
       <div class="editor-header">
-        <h3>Scene Editor</h3>
-        <button @click="scene = null; result = null" class="btn-secondary btn-sm">Back</button>
+        <h3>{{ t('scene.scene_editor') }}</h3>
+        <button @click="scene = null; result = null" class="btn-secondary btn-sm">{{ t('scene.btn_back') }}</button>
       </div>
 
       <div class="form-group">
-        <label>Preset</label>
+        <label>{{ t('scene.label_preset') }}</label>
         <select v-model="selectedPresetId" @change="scene.preset_id = selectedPresetId">
           <option v-for="p in presetOptions" :key="p.id" :value="p.id">{{ p.name }}</option>
         </select>
       </div>
 
       <div class="form-group">
-        <label>Background Prompt</label>
+        <label>{{ t('scene.label_background') }}</label>
         <textarea v-model="scene.background_prompt" rows="2"></textarea>
       </div>
 
       <div class="form-group">
-        <label>Negative Prompt</label>
+        <label>{{ t('scene.label_negative') }}</label>
         <input v-model="scene.negative_prompt" type="text" />
       </div>
 
       <div class="characters-list">
-        <h4>Characters ({{ scene.characters.length }})</h4>
-        <button @click="addCharacter" class="btn-secondary btn-sm">+ Add Character</button>
+        <h4>{{ t('scene.characters', { count: scene.characters.length }) }}</h4>
+        <button @click="addCharacter" class="btn-secondary btn-sm">{{ t('scene.btn_add_character') }}</button>
 
         <div v-for="(char, i) in scene.characters" :key="i" class="character-card">
           <div class="char-header">
-            <input v-model="char.name" class="char-name" placeholder="Character name" />
-            <button @click="removeCharacter(i)" class="btn-danger btn-sm">Remove</button>
+            <input v-model="char.name" class="char-name" :placeholder="t('scene.placeholder_char_name')" />
+            <button @click="removeCharacter(i)" class="btn-danger btn-sm">{{ t('scene.btn_remove') }}</button>
           </div>
 
           <div class="form-group">
-            <label>Character Prompt</label>
+            <label>{{ t('scene.label_char_prompt') }}</label>
             <textarea v-model="char.prompt" rows="2"></textarea>
           </div>
 
@@ -331,14 +332,14 @@ onMounted(() => {
 
       <div class="editor-actions">
         <div class="form-group" style="margin-bottom: 0;">
-          <label>Count</label>
+          <label>{{ t('scene.label_count') }}</label>
           <input type="number" v-model.number="batchCount" min="1" max="20" style="width: 70px;" />
         </div>
         <button @click="generate" :disabled="generating || !sdAvailable" class="btn-primary">
           {{ generating ? progressLabel() : `Generate${batchCount > 1 ? ' x' + batchCount : ''}` }}
         </button>
-        <button @click="saveScene" :disabled="!scene" class="btn-secondary">Save Scene</button>
-        <button @click="scene = null; result = null" class="btn-secondary">Cancel</button>
+        <button @click="saveScene" :disabled="!scene" class="btn-secondary">{{ t('scene.btn_save_scene') }}</button>
+        <button @click="scene = null; result = null" class="btn-secondary">{{ t('scene.btn_cancel') }}</button>
       </div>
 
       <div v-if="generating && progress" class="progress-info">
@@ -351,29 +352,29 @@ onMounted(() => {
 
     <!-- Step 3: Result -->
     <div class="section" v-if="resultImage && batchResults.length <= 1">
-      <h3>Result</h3>
+      <h3>{{ t('scene.result') }}</h3>
       <div class="result-image">
         <img :src="'data:image/png;base64,' + resultImage" alt="Generated scene" />
       </div>
       <div class="result-actions">
-        <button @click="saveImage" class="btn-secondary">Save Image</button>
-        <button @click="scene = null; result = null; resultImage = ''" class="btn-secondary">New Scene</button>
+        <button @click="saveImage" class="btn-secondary">{{ t('scene.btn_save_image') }}</button>
+        <button @click="scene = null; result = null; resultImage = ''" class="btn-secondary">{{ t('scene.btn_new_scene') }}</button>
       </div>
     </div>
 
     <!-- Step 3b: Batch Results -->
     <div class="section" v-if="batchResults.length > 1">
-      <h3>Results ({{ batchResults.length }})</h3>
+      <h3>{{ t('scene.results', { count: batchResults.length }) }}</h3>
       <div class="batch-results-grid">
         <div v-for="(r, i) in batchResults" :key="i" class="batch-result-card">
           <img class="batch-result-image" :src="'data:image/png;base64,' + r.image" :alt="'Result ' + (i + 1)" />
           <div class="batch-result-meta">
-            <button @click="downloadImage(r.image, i)" class="btn-secondary btn-sm" style="width: 100%;">Save</button>
+            <button @click="downloadImage(r.image, i)" class="btn-secondary btn-sm" style="width: 100%;">{{ t('scene.btn_save') }}</button>
           </div>
         </div>
       </div>
       <div class="result-actions" style="margin-top: 12px;">
-        <button @click="scene = null; result = null; resultImage = ''; batchResults = []" class="btn-secondary">New Scene</button>
+        <button @click="scene = null; result = null; resultImage = ''; batchResults = []" class="btn-secondary">{{ t('scene.btn_new_scene') }}</button>
       </div>
     </div>
   </div>

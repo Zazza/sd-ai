@@ -3,6 +3,7 @@ import { ref, watch, onMounted, onUnmounted, inject } from 'vue'
 import { EventsOn, EventsOff } from '../wailsjs/runtime/runtime'
 import { BatchGenerate, BatchCompoundGenerate, SelectFolder } from '../wailsjs/go/main/App.js'
 import { api } from '../api.js'
+import { t } from '../i18n/index.js'
 
 const shared = inject('sharedGenState', null)
 
@@ -50,15 +51,15 @@ async function selectFolder() {
 
 async function startGeneration() {
   if (!prompt.value.trim()) {
-    error.value = 'Prompt is required'
+    error.value = t('batch.error_prompt_required')
     return
   }
   if (!outputFolder.value.trim()) {
-    error.value = 'Output folder is required'
+    error.value = t('batch.error_folder_required')
     return
   }
   if (count.value < 1 || count.value > 100) {
-    error.value = 'Count must be between 1 and 100'
+    error.value = t('batch.error_count_range')
     return
   }
 
@@ -168,53 +169,53 @@ function saveBatchState() {
 <template>
   <div>
     <div class="page-header">
-      <h1 class="page-title">Batch Generation</h1>
+      <h1 class="page-title">{{ t('batch.title') }}</h1>
     </div>
 
     <div v-if="error" class="status status-error">{{ error }}</div>
 
     <div class="card" style="max-width: 700px;">
       <div style="display: flex; gap: 8px; margin-bottom: 12px;">
-        <button class="btn btn-sm" :class="batchMode === 'preset' ? 'btn-primary' : 'btn-secondary'" @click="batchMode = 'preset'">Preset</button>
-        <button class="btn btn-sm" :class="batchMode === 'compound' ? 'btn-primary' : 'btn-secondary'" @click="batchMode = 'compound'">Pipeline</button>
+        <button class="btn btn-sm" :class="batchMode === 'preset' ? 'btn-primary' : 'btn-secondary'" @click="batchMode = 'preset'">{{ t('batch.btn_preset') }}</button>
+        <button class="btn btn-sm" :class="batchMode === 'compound' ? 'btn-primary' : 'btn-secondary'" @click="batchMode = 'compound'">{{ t('batch.btn_pipeline') }}</button>
       </div>
 
       <div v-if="batchMode === 'preset'" class="form-group">
-        <label class="form-label">Preset (optional)</label>
+        <label class="form-label">{{ t('batch.label_preset_optional') }}</label>
         <select class="form-select" v-model="selectedPresetId" :disabled="generating">
-          <option :value="null">No preset — use defaults</option>
+          <option :value="null">{{ t('batch.no_preset') }}</option>
           <option v-for="p in presets" :key="p.id" :value="p.id">{{ p.name }}</option>
         </select>
       </div>
 
       <div v-if="batchMode === 'compound'" class="form-group">
-        <label class="form-label">Pipeline</label>
+        <label class="form-label">{{ t('batch.label_pipeline') }}</label>
         <select class="form-select" v-model="selectedCompoundPresetId" :disabled="generating">
-          <option :value="null" disabled>Select pipeline...</option>
+          <option :value="null" disabled>{{ t('batch.select_pipeline') }}</option>
           <option v-for="c in compoundPresets" :key="c.id" :value="c.id">{{ c.name }} ({{ c.steps.length }} steps)</option>
         </select>
       </div>
 
       <div class="form-group">
-        <label class="form-label">Prompt</label>
-        <textarea class="form-textarea" v-model="prompt" rows="5" placeholder="SD positive prompt..." :disabled="generating"></textarea>
+        <label class="form-label">{{ t('batch.label_prompt') }}</label>
+        <textarea class="form-textarea" v-model="prompt" rows="5" :placeholder="t('batch.placeholder_prompt')" :disabled="generating"></textarea>
       </div>
 
       <div class="form-group">
-        <label class="form-label">Negative Prompt</label>
-        <textarea class="form-textarea" v-model="negativePrompt" rows="2" placeholder="SD negative prompt..." :disabled="generating"></textarea>
+        <label class="form-label">{{ t('batch.label_negative') }}</label>
+        <textarea class="form-textarea" v-model="negativePrompt" rows="2" :placeholder="t('batch.placeholder_negative')" :disabled="generating"></textarea>
       </div>
 
       <div style="display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: end;">
         <div class="form-group">
-          <label class="form-label">Output Folder</label>
+          <label class="form-label">{{ t('batch.label_output_folder') }}</label>
           <div style="display: flex; gap: 8px;">
-            <input class="form-input" v-model="outputFolder" placeholder="/path/to/output" :disabled="generating" style="flex: 1;" />
-            <button class="btn btn-secondary" @click="selectFolder" :disabled="generating">Browse</button>
+            <input class="form-input" v-model="outputFolder" :placeholder="t('batch.placeholder_output')" :disabled="generating" style="flex: 1;" />
+            <button class="btn btn-secondary" @click="selectFolder" :disabled="generating">{{ t('batch.btn_browse') }}</button>
           </div>
         </div>
         <div class="form-group">
-          <label class="form-label">Count</label>
+          <label class="form-label">{{ t('batch.label_count') }}</label>
           <input class="form-input" type="number" v-model.number="count" min="1" max="100" :disabled="generating" style="width: 80px;" />
         </div>
       </div>
@@ -222,7 +223,7 @@ function saveBatchState() {
       <button class="btn btn-primary" style="width: 100%; justify-content: center; padding: 12px; margin-top: 12px;" @click="startGeneration" :disabled="generating || !prompt.trim() || !outputFolder.trim() || (batchMode === 'compound' && !selectedCompoundPresetId)">
         <span v-if="generating" style="display: inline-flex; align-items: center; gap: 6px;">
           <span class="spinner" style="width: 14px; height: 14px; border-width: 2px;"></span>
-          Generating {{ progress ? `${progress.current}/${progress.total}` : '...' }}
+          Generating {{ progress ? `${progress.current}/${progress.total}` : t('settings.btn_loading') }}
         </span>
         <span v-else>Generate {{ count }} Images</span>
       </button>
@@ -232,7 +233,7 @@ function saveBatchState() {
       <div style="margin-bottom: 8px;">
         <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
           <span style="color: var(--text-dim); font-size: 13px;">
-            {{ progress.status === 'done' ? 'Complete' : `Image ${progress.current} of ${progress.total}` }}
+            {{ progress.status === 'done' ? t('batch.complete') : `Image ${progress.current} of ${progress.total}` }}
           </span>
           <span style="color: var(--text-dim); font-size: 13px;">{{ progress.status }}</span>
         </div>
@@ -241,7 +242,7 @@ function saveBatchState() {
         </div>
       </div>
       <div v-if="generatedFiles.length" style="margin-top: 8px;">
-        <div style="color: var(--text-dim); font-size: 12px; margin-bottom: 4px;">Saved files:</div>
+        <div style="color: var(--text-dim); font-size: 12px; margin-bottom: 4px;">{{ t('batch.saved_files') }}</div>
         <div v-for="(f, i) in generatedFiles" :key="i" style="font-size: 12px; padding: 2px 0; color: var(--text);">{{ f }}</div>
       </div>
     </div>

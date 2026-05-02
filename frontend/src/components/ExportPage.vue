@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { api } from '../api.js'
+import { t } from '../i18n/index.js'
 import { EventsOn, EventsOff } from '../wailsjs/runtime/runtime'
 
 const exportPresets = ref([])
@@ -179,7 +180,7 @@ async function loadPresets() {
 
 async function doExport() {
   if (!sourceImage.value) {
-    error.value = 'No image loaded'
+    error.value = t('export.error_no_image')
     return
   }
   exporting.value = true
@@ -236,10 +237,10 @@ onUnmounted(() => {
       <div class="export-main">
         <div class="export-preview card">
           <div class="card-header">
-            <span class="card-title">Source Image</span>
+            <span class="card-title">{{ t('export.source_image') }}</span>
             <div class="card-actions">
-              <button class="btn btn-sm" @click="loadLastImage">Load Last</button>
-              <button class="btn btn-sm" @click="uploadImage">Upload File</button>
+              <button class="btn btn-sm" @click="loadLastImage">{{ t('export.btn_load_last') }}</button>
+              <button class="btn btn-sm" @click="uploadImage">{{ t('export.btn_upload') }}</button>
             </div>
           </div>
           <div class="preview-area">
@@ -250,24 +251,24 @@ onUnmounted(() => {
               </div>
             </div>
             <div v-else class="preview-empty">
-              No image loaded. Load last generated or upload from disk.
+              {{ t('export.no_image') }}
             </div>
           </div>
         </div>
 
         <div class="export-settings card">
           <div class="card-header">
-            <span class="card-title">Export Settings</span>
+            <span class="card-title">{{ t('export.export_settings') }}</span>
           </div>
           <div class="card-body">
             <div class="form-group">
-              <label class="form-label">Preset</label>
+              <label class="form-label">{{ t('export.label_preset') }}</label>
               <div class="preset-row">
                 <select class="form-select" :value="selectedPresetId" @change="onPresetSelect($event.target.value)">
-                  <option :value="null">Custom</option>
+                  <option :value="null">{{ t('export.custom') }}</option>
                   <option v-for="p in exportPresets" :key="p.id" :value="p.id">{{ p.name }}</option>
                 </select>
-                <button class="btn btn-sm" @click="openSavePreset" title="Save current as preset">Save</button>
+                <button class="btn btn-sm" @click="openSavePreset" title="Save current as preset">{{ t('export.btn_save_preset') }}</button>
               </div>
             </div>
 
@@ -287,7 +288,7 @@ onUnmounted(() => {
             <div class="form-divider"></div>
 
             <div class="form-group">
-              <label class="form-label">Format</label>
+              <label class="form-label">{{ t('export.label_format') }}</label>
               <select class="form-select" v-model="format">
                 <option v-for="f in formats" :key="f.value" :value="f.value">{{ f.label }}</option>
               </select>
@@ -295,36 +296,36 @@ onUnmounted(() => {
 
             <div class="form-row">
               <div class="form-group form-group-half">
-                <label class="form-label">Width (px)</label>
+                <label class="form-label">{{ t('export.label_width') }}</label>
                 <input class="form-control" type="number" v-model.number="width" min="1" />
               </div>
               <div class="form-group form-group-half">
-                <label class="form-label">Height (px)</label>
+                <label class="form-label">{{ t('export.label_height') }}</label>
                 <input class="form-control" type="number" v-model.number="height" min="1" />
               </div>
             </div>
 
             <div class="form-group form-inline">
               <label class="form-label">
-                <input type="checkbox" v-model="lockRatio" /> Lock Aspect Ratio
+                <input type="checkbox" v-model="lockRatio" /> {{ t('export.lock_aspect') }}
               </label>
-              <button class="btn btn-sm" @click="resetSize" v-if="imageInfo.width">Reset</button>
+              <button class="btn btn-sm" @click="resetSize" v-if="imageInfo.width">{{ t('export.btn_reset') }}</button>
             </div>
 
             <div class="form-group" v-if="showQuality">
-              <label class="form-label">Quality: {{ quality }}</label>
+              <label class="form-label">{{ t('export.label_quality', { value: quality }) }}</label>
               <input type="range" min="1" max="100" v-model.number="quality" class="quality-slider" />
             </div>
 
             <div class="form-group">
-              <label class="form-label">Interpolation</label>
+              <label class="form-label">{{ t('export.label_interpolation') }}</label>
               <select class="form-select" v-model="interpolation">
                 <option v-for="i in interpolations" :key="i.value" :value="i.value">{{ i.label }}</option>
               </select>
             </div>
 
             <div class="form-group">
-              <label class="form-label">Filename</label>
+              <label class="form-label">{{ t('export.label_filename') }}</label>
               <input class="form-control" type="text" v-model="filename" />
             </div>
 
@@ -332,7 +333,7 @@ onUnmounted(() => {
             <div v-if="successMsg" class="success-msg">{{ successMsg }}</div>
 
             <button class="btn btn-primary btn-block" :disabled="exporting || !sourceImage" @click="doExport">
-              {{ exporting ? 'Exporting...' : 'Export Image' }}
+              {{ exporting ? t('export.exporting') : t('export.btn_export') }}
             </button>
           </div>
         </div>
@@ -341,11 +342,11 @@ onUnmounted(() => {
       <div class="export-sidebar">
         <div class="card">
           <div class="card-header">
-            <span class="card-title">Saved Presets</span>
+            <span class="card-title">{{ t('export.saved_presets') }}</span>
           </div>
           <div class="card-body">
             <div class="preset-list">
-              <div v-if="!exportPresets.length" class="preset-empty">No presets yet</div>
+              <div v-if="!exportPresets.length" class="preset-empty">{{ t('export.no_presets') }}</div>
               <div
                 v-for="p in exportPresets"
                 :key="p.id"
@@ -367,13 +368,13 @@ onUnmounted(() => {
             <div class="preset-form" v-if="showPresetForm">
               <div class="form-divider"></div>
               <div class="form-group">
-                <input class="form-control" type="text" v-model="presetName" placeholder="Preset name" />
+                <input class="form-control" type="text" v-model="presetName" :placeholder="t('export.placeholder_preset_name')" />
               </div>
               <div class="preset-form-actions">
                 <button class="btn btn-sm btn-primary" @click="savePreset" :disabled="!presetName">
-                  {{ editingPreset ? 'Update' : 'Save' }}
+                  {{ editingPreset ? t('export.btn_update') : t('export.btn_save') }}
                 </button>
-                <button class="btn btn-sm" @click="showPresetForm = false; editingPreset = null">Cancel</button>
+                <button class="btn btn-sm" @click="showPresetForm = false; editingPreset = null">{{ t('export.btn_cancel') }}</button>
               </div>
             </div>
           </div>

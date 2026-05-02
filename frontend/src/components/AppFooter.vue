@@ -2,6 +2,7 @@
 import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { EventsOn, EventsOff } from '../wailsjs/runtime/runtime'
 import { api } from '../api.js'
+import { t } from '../i18n/index.js'
 import { Image, Trash2, X, Plus, Pencil, Check } from 'lucide-vue-next'
 
 const emit = defineEmits(['navigate'])
@@ -338,10 +339,10 @@ onMounted(async () => {
       <div class="footer-actions">
         <span v-if="footerError" style="color: var(--danger); font-size: 11px; margin-right: 8px;">{{ footerError }}</span>
         <button class="footer-tab-btn" :class="{ active: expanded && panel === 'session' }" @click="togglePanel('session')">
-          Session {{ itemCount > 0 ? `(${itemCount})` : '' }}
+          {{ t('footer.session') }} {{ itemCount > 0 ? `(${itemCount})` : '' }}
         </button>
         <button class="footer-tab-btn" :class="{ active: expanded && panel === 'log' }" @click="togglePanel('log')">
-          Log
+          {{ t('footer.log') }}
         </button>
       </div>
     </div>
@@ -354,7 +355,7 @@ onMounted(async () => {
               {{ s.name }} ({{ s.item_count }})
             </option>
           </select>
-          <button class="session-tool-btn" title="New Session" @click="showNewSession = true">
+          <button class="session-tool-btn" :title="t('footer.title_new_session')" @click="showNewSession = true">
             <Plus :size="12" />
           </button>
           <template v-if="renamingId">
@@ -363,22 +364,22 @@ onMounted(async () => {
             <button class="session-tool-btn" @click="renamingId = 0"><X :size="12" /></button>
           </template>
           <template v-else>
-            <button class="session-tool-btn" title="Rename" @click="activeSessions && startRename(activeSessions)">
+            <button class="session-tool-btn" :title="t('footer.title_rename')" @click="activeSessions && startRename(activeSessions)">
               <Pencil :size="12" />
             </button>
           </template>
         </div>
         <div class="session-actions">
-          <button class="session-tool-btn text-btn" @click="doClearSession" :disabled="!items.length">Clear</button>
+          <button class="session-tool-btn text-btn" @click="doClearSession" :disabled="!items.length">{{ t('footer.btn_clear') }}</button>
           <button class="session-delete-btn" :class="{ confirm: confirmDeleteSession }" @click="doDeleteSession" :disabled="sessions.length <= 1">
-            <Trash2 :size="12" /> {{ confirmDeleteSession ? 'Delete?' : 'Delete Session' }}
+            <Trash2 :size="12" /> {{ confirmDeleteSession ? t('footer.confirm_delete') : t('footer.btn_delete') }}
           </button>
           <button class="session-tool-btn" @click="expanded = false"><X :size="12" /></button>
         </div>
       </div>
 
       <div v-if="showNewSession" class="session-new">
-        <input class="session-rename-input" v-model="newSessionName" placeholder="Session name..." @keydown.enter="doCreateSession" @keydown.escape="showNewSession = false" />
+        <input class="session-rename-input" v-model="newSessionName" :placeholder="t('footer.placeholder_session_name')" @keydown.enter="doCreateSession" @keydown.escape="showNewSession = false" />
         <button class="session-tool-btn" @click="doCreateSession"><Check :size="12" /></button>
         <button class="session-tool-btn" @click="showNewSession = false"><X :size="12" /></button>
       </div>
@@ -408,19 +409,19 @@ onMounted(async () => {
           <div v-if="item.is_active" class="si-active-badge"></div>
         </div>
       </div>
-      <div v-else class="si-empty">No images in this session</div>
+      <div v-else class="si-empty">{{ t('footer.no_images') }}</div>
     </div>
 
     <div v-if="expanded && panel === 'log'" class="footer-log">
       <div class="log-toolbar">
         <div class="log-filters">
-          <button class="filter-btn" :class="{ active: filterLevel === 'all' }" @click.stop="filterLevel = 'all'">All</button>
-          <button class="filter-btn" :class="{ active: filterLevel === 'error' }" @click.stop="filterLevel = 'error'">Errors</button>
-          <button class="filter-btn" :class="{ active: filterLevel === 'warn' }" @click.stop="filterLevel = 'warn'">Warnings</button>
-          <button class="filter-btn" :class="{ active: filterLevel === 'info' }" @click.stop="filterLevel = 'info'">Info</button>
-          <button class="filter-btn" :class="{ active: filterLevel === 'debug' }" @click.stop="filterLevel = 'debug'">Debug</button>
+          <button class="filter-btn" :class="{ active: filterLevel === 'all' }" @click.stop="filterLevel = 'all'">{{ t('footer.filter_all') }}</button>
+          <button class="filter-btn" :class="{ active: filterLevel === 'error' }" @click.stop="filterLevel = 'error'">{{ t('footer.filter_errors') }}</button>
+          <button class="filter-btn" :class="{ active: filterLevel === 'warn' }" @click.stop="filterLevel = 'warn'">{{ t('footer.filter_warnings') }}</button>
+          <button class="filter-btn" :class="{ active: filterLevel === 'info' }" @click.stop="filterLevel = 'info'">{{ t('footer.filter_info') }}</button>
+          <button class="filter-btn" :class="{ active: filterLevel === 'debug' }" @click.stop="filterLevel = 'debug'">{{ t('footer.filter_debug') }}</button>
         </div>
-        <button class="filter-btn" @click.stop="logs.splice(0, logs.length)">Clear</button>
+        <button class="filter-btn" @click.stop="logs.splice(0, logs.length)">{{ t('footer.btn_clear_logs') }}</button>
       </div>
       <div class="log-entries" ref="logContainer">
         <div v-for="(entry, i) in filteredLogs()" :key="i" class="log-entry" :class="levelClass(entry.level)">
@@ -428,7 +429,7 @@ onMounted(async () => {
           <span class="log-level">{{ entry.level.toUpperCase() }}</span>
           <span class="log-msg">{{ entry.message }}</span>
         </div>
-        <div v-if="logs.length === 0" class="log-empty">No log entries yet</div>
+        <div v-if="logs.length === 0" class="log-empty">{{ t('footer.no_logs') }}</div>
       </div>
     </div>
   </div>

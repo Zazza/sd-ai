@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, onUnmounted, inject } from 'vue'
 import { EventsOn, EventsOff } from '../wailsjs/runtime/runtime'
 import { api } from '../api.js'
+import { t } from '../i18n/index.js'
 
 const shared = inject('sharedGenState', null)
 
@@ -93,11 +94,11 @@ async function loadData() {
 
 async function generate() {
   if (selectedItems.value.length === 0) {
-    error.value = 'Select at least one item'
+    error.value = t('test.error_select_item')
     return
   }
   if (!prompt.value.trim()) {
-    error.value = 'Prompt is required'
+    error.value = t('test.error_prompt_required')
     return
   }
 
@@ -200,26 +201,26 @@ function saveTestState() {
 <template>
   <div>
     <div class="page-header">
-      <h1 class="page-title">Compare</h1>
+      <h1 class="page-title">{{ t('test.title') }}</h1>
     </div>
 
     <div v-if="error" class="status status-error">{{ error }}</div>
 
     <div class="card" style="max-width: 800px;">
       <div style="display: flex; gap: 8px; margin-bottom: 16px;">
-        <button class="btn" :class="mode === 'presets' ? 'btn-primary' : 'btn-secondary'" @click="mode = 'presets'; results = []">Presets</button>
-        <button class="btn" :class="mode === 'models' ? 'btn-primary' : 'btn-secondary'" @click="mode = 'models'; results = []">Models</button>
-        <button class="btn" :class="mode === 'compounds' ? 'btn-primary' : 'btn-secondary'" @click="mode = 'compounds'; results = []">Pipelines</button>
+        <button class="btn" :class="mode === 'presets' ? 'btn-primary' : 'btn-secondary'" @click="mode = 'presets'; results = []">{{ t('test.btn_presets') }}</button>
+        <button class="btn" :class="mode === 'models' ? 'btn-primary' : 'btn-secondary'" @click="mode = 'models'; results = []">{{ t('test.btn_models') }}</button>
+        <button class="btn" :class="mode === 'compounds' ? 'btn-primary' : 'btn-secondary'" @click="mode = 'compounds'; results = []">{{ t('test.btn_pipelines') }}</button>
       </div>
 
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
         <label class="form-label" style="margin: 0;">
-          {{ mode === 'presets' ? 'Select Presets' : mode === 'compounds' ? 'Select Pipelines' : 'Select Models' }}
-          ({{ selectedItems.length }} selected)
+          {{ mode === 'presets' ? t('test.select_presets') : mode === 'compounds' ? t('test.select_pipelines') : t('test.select_models') }}
+          {{ t('test.selected_count', { count: selectedItems.length }) }}
         </label>
         <div style="display: flex; gap: 6px;">
-          <button class="btn btn-sm btn-secondary" @click="selectAll" :disabled="generating">All</button>
-          <button class="btn btn-sm btn-secondary" @click="deselectAll" :disabled="generating">None</button>
+          <button class="btn btn-sm btn-secondary" @click="selectAll" :disabled="generating">{{ t('test.btn_all') }}</button>
+          <button class="btn btn-sm btn-secondary" @click="deselectAll" :disabled="generating">{{ t('test.btn_none') }}</button>
         </div>
       </div>
 
@@ -230,7 +231,7 @@ function saveTestState() {
             <span>{{ p.name }}</span>
             <span v-if="p.model_name" style="color: var(--text-dim); font-size: 11px; margin-left: auto;">{{ p.model_name }}</span>
           </div>
-          <div v-if="!presets.length" style="color: var(--text-dim); padding: 12px; text-align: center;">No presets found</div>
+          <div v-if="!presets.length" style="color: var(--text-dim); padding: 12px; text-align: center;">{{ t('test.no_presets') }}</div>
         </template>
         <template v-else-if="mode === 'compounds'">
           <div v-for="c in compoundPresets" :key="c.id" class="test-select-item" :class="{ active: selectedCompoundIds.includes(c.id) }" @click="!generating && toggleCompound(c.id)">
@@ -238,62 +239,62 @@ function saveTestState() {
             <span>{{ c.name }}</span>
             <span style="color: var(--text-dim); font-size: 11px; margin-left: auto;">{{ c.steps.length }} steps</span>
           </div>
-          <div v-if="!compoundPresets.length" style="color: var(--text-dim); padding: 12px; text-align: center;">No pipelines found. Create one in Pipelines page.</div>
+          <div v-if="!compoundPresets.length" style="color: var(--text-dim); padding: 12px; text-align: center;">{{ t('test.no_pipelines') }}</div>
         </template>
         <template v-else>
           <div v-for="m in models" :key="m.title" class="test-select-item" :class="{ active: selectedModelNames.includes(m.title) }" @click="!generating && toggleModel(m.title)">
             <input type="checkbox" :checked="selectedModelNames.includes(m.title)" @click.prevent />
             <span>{{ m.title }}</span>
           </div>
-          <div v-if="!models.length" style="color: var(--text-dim); padding: 12px; text-align: center;">No models found. Check SD connection.</div>
+          <div v-if="!models.length" style="color: var(--text-dim); padding: 12px; text-align: center;">{{ t('test.no_models') }}</div>
         </template>
       </div>
 
       <div class="form-group" style="margin-top: 16px;">
-        <label class="form-label">Prompt</label>
-        <textarea class="form-textarea" v-model="prompt" rows="3" placeholder="Positive prompt..." :disabled="generating"></textarea>
+        <label class="form-label">{{ t('test.label_prompt') }}</label>
+        <textarea class="form-textarea" v-model="prompt" rows="3" :placeholder="t('test.placeholder_prompt')" :disabled="generating"></textarea>
       </div>
 
       <div class="form-group">
-        <label class="form-label">Negative Prompt</label>
-        <textarea class="form-textarea" v-model="negativePrompt" rows="2" placeholder="Negative prompt..." :disabled="generating"></textarea>
+        <label class="form-label">{{ t('test.label_negative') }}</label>
+        <textarea class="form-textarea" v-model="negativePrompt" rows="2" :placeholder="t('test.placeholder_negative')" :disabled="generating"></textarea>
       </div>
 
       <div v-if="mode !== 'compounds'" style="margin-bottom: 12px;">
         <button class="btn btn-secondary btn-sm" @click="showAdvanced = !showAdvanced">
-          {{ showAdvanced ? '&#9660; Hide Parameters' : '&#9654; Show Parameters' }}
+          {{ showAdvanced ? t('test.hide_params') : t('test.show_params') }}
         </button>
       </div>
 
       <div v-if="showAdvanced && mode !== 'compounds'" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px;">
         <div class="form-group">
-          <label class="form-label">Sampler</label>
+          <label class="form-label">{{ t('test.label_sampler') }}</label>
           <select class="form-select" v-model="sampler" :disabled="generating">
-            <option value="">Default</option>
+            <option value="">{{ t('test.default') }}</option>
             <option v-for="s in samplers" :key="s.name" :value="s.name">{{ s.name }}</option>
           </select>
         </div>
         <div class="form-group">
-          <label class="form-label">Schedule Type</label>
+          <label class="form-label">{{ t('test.label_schedule') }}</label>
           <select class="form-select" v-model="scheduleType" :disabled="generating">
-            <option value="">Default</option>
+            <option value="">{{ t('test.default') }}</option>
             <option v-for="s in schedulers" :key="s.name" :value="s.name">{{ s.label || s.name }}</option>
           </select>
         </div>
         <div class="form-group">
-          <label class="form-label">Width</label>
+          <label class="form-label">{{ t('test.label_width') }}</label>
           <input class="form-input" type="number" v-model.number="width" min="64" max="2048" step="64" :disabled="generating" />
         </div>
         <div class="form-group">
-          <label class="form-label">Height</label>
+          <label class="form-label">{{ t('test.label_height') }}</label>
           <input class="form-input" type="number" v-model.number="height" min="64" max="2048" step="64" :disabled="generating" />
         </div>
         <div class="form-group">
-          <label class="form-label">Steps</label>
+          <label class="form-label">{{ t('test.label_steps') }}</label>
           <input class="form-input" type="number" v-model.number="steps" min="1" max="150" :disabled="generating" />
         </div>
         <div class="form-group">
-          <label class="form-label">CFG Scale</label>
+          <label class="form-label">{{ t('test.label_cfg') }}</label>
           <input class="form-input" type="number" v-model.number="cfgScale" min="1" max="30" step="0.5" :disabled="generating" />
         </div>
       </div>
@@ -335,7 +336,7 @@ function saveTestState() {
                 <span>Seed: {{ r.seed }}</span>
                 <span v-if="r.model_name" style="margin-left: 8px;">{{ r.model_name }}</span>
               </div>
-              <button class="btn btn-secondary btn-sm" @click="downloadImage(r.image, r.name)" style="margin-top: 6px; width: 100%;">Download</button>
+              <button class="btn btn-secondary btn-sm" @click="downloadImage(r.image, r.name)" style="margin-top: 6px; width: 100%;">{{ t('test.btn_download') }}</button>
             </div>
           </template>
         </div>

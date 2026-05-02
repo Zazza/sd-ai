@@ -144,6 +144,7 @@ Settings are stored in SQLite (`data/presets.db`) and persist across reinstalls.
 ├── frontend/
 │   └── src/
 │       ├── components/  # Vue components
+│       ├── i18n/        # UI strings (en.js, ~300 keys)
 │       ├── __tests__/   # Test setup & mocks (vitest)
 │       └── wailsjs/     # Auto-generated Wails bindings
 └── data/                # Runtime data
@@ -184,7 +185,7 @@ Prioritized findings from code review (2026-04-24).
 | # | Issue | Effort |
 |---|-------|--------|
 | 11 | Frontend: missing error handling, no retry buttons, no progress indicators | 1d |
-| 12 | Leftover `HelloWorld.vue` template not removed | 5m |
+| 12 | ~~Leftover `HelloWorld.vue` template not removed~~ Fixed | 5m |
 | 13 | No DB migration system — `CREATE TABLE IF NOT EXISTS` only, no versioning/rollback | 0.5d |
 | 14 | Docker container runs as root, no healthcheck, no resource limits | 2h |
 | 15 | No CI/CD, no linters (golangci-lint, prettier, eslint) | 0.5d |

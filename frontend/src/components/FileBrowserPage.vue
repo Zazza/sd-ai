@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { api } from '../api.js'
+import { t } from '../i18n/index.js'
 import ImageViewer from './ImageViewer.vue'
 import { FolderUp, Folder, FolderOpen, Image, Send, Download } from 'lucide-vue-next'
 
@@ -220,23 +221,23 @@ onUnmounted(() => {
       <input
         v-model="currentPath"
         class="fb-path-input"
-        placeholder="Enter folder path..."
+        :placeholder="t('browser.placeholder_path')"
         @keydown.enter="loadPath"
       />
       <button class="btn btn-secondary" @click="browseFolder">
-        <FolderOpen :size="14" /> Browse
+        <FolderOpen :size="14" /> {{ t('browser.btn_browse') }}
       </button>
       <button class="btn btn-secondary" @click="goUp" :disabled="!currentPath">
         <FolderUp :size="14" />
       </button>
       <button class="btn btn-primary" @click="loadPath" :disabled="!currentPath || loading">
-        Go
+        {{ t('browser.btn_go') }}
       </button>
     </div>
 
     <div v-if="error" class="fb-error">{{ error }}</div>
 
-    <div v-if="loading" class="fb-loading">Loading...</div>
+    <div v-if="loading" class="fb-loading">{{ t('browser.loading') }}</div>
 
     <div v-else-if="entries.length" class="fb-grid">
       <div
@@ -264,10 +265,10 @@ onUnmounted(() => {
             <div class="fb-card-meta">{{ formatSize(entry.size) }}</div>
           </div>
           <div class="fb-card-actions" @click.stop>
-            <button class="fb-action-btn" title="Send to From Image" @click="sendToFromImage(entry)">
+            <button class="fb-action-btn" :title="t('browser.send_to_from_image')" @click="sendToFromImage(entry)">
               <Send :size="12" />
             </button>
-            <button class="fb-action-btn" title="Send to Export" @click="sendToExport(entry)">
+            <button class="fb-action-btn" :title="t('browser.send_to_export')" @click="sendToExport(entry)">
               <Download :size="12" />
             </button>
           </div>
@@ -276,11 +277,11 @@ onUnmounted(() => {
     </div>
 
     <div v-else-if="currentPath && !loading" class="fb-empty">
-      No images found in this folder
+      {{ t('browser.no_images') }}
     </div>
 
     <div v-else-if="!currentPath" class="fb-empty">
-      Select a folder to browse images
+      {{ t('browser.select_folder') }}
     </div>
 
     <ImageViewer

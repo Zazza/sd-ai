@@ -1,6 +1,7 @@
 <script setup>
 import { ref, reactive, watch, onMounted } from 'vue'
 import { api } from '../api.js'
+import { t } from '../i18n/index.js'
 import ToggleSwitch from './ToggleSwitch.vue'
 import PinModal from './PinModal.vue'
 
@@ -246,7 +247,7 @@ async function loadSD() {
   try {
     const [m, l] = await Promise.allSettled([api.getModels(), api.getLoRAs()])
     if (m.status === 'fulfilled') sdModels.value = m.value
-    else sdError.value = 'Cannot load models — is Stable Diffusion running?'
+    else sdError.value = t('settings.cannot_load_models')
     if (l.status === 'fulfilled') sdLoRAs.value = l.value
   } finally {
     sdLoading.value = false
@@ -260,7 +261,7 @@ async function loadLLM() {
     llmModels.value = await api.getLLMModels() || []
   } catch (e) {
     const label = backendLabel[connectionForm.llm_backend] || 'LLM backend'
-    llmError.value = `Cannot load models — is ${label} running?`
+    llmError.value = t('settings.cannot_load_llm', { label })
   } finally {
     llmLoading.value = false
   }
@@ -422,24 +423,24 @@ onMounted(loadSettings)
 <template>
   <div>
     <div class="page-header">
-      <h1 class="page-title">Settings</h1>
+      <h1 class="page-title">{{ t('settings.title') }}</h1>
     </div>
 
     <div class="tabs">
-      <button class="tab" :class="{ active: activeTab === 'connection' }" @click="switchTab('connection')">Connection</button>
-      <button class="tab" :class="{ active: activeTab === 'generation' }" @click="switchTab('generation')">Generation</button>
-      <button class="tab" :class="{ active: activeTab === 'analyze' }" @click="switchTab('analyze')">Analyze</button>
-      <button class="tab" :class="{ active: activeTab === 'safety' }" @click="switchTab('safety')">Safety</button>
-      <button class="tab" :class="{ active: activeTab === 'advanced' }" @click="switchTab('advanced')">Advanced</button>
+      <button class="tab" :class="{ active: activeTab === 'connection' }" @click="switchTab('connection')">{{ t('settings.tab_connection') }}</button>
+      <button class="tab" :class="{ active: activeTab === 'generation' }" @click="switchTab('generation')">{{ t('settings.tab_generation') }}</button>
+      <button class="tab" :class="{ active: activeTab === 'analyze' }" @click="switchTab('analyze')">{{ t('settings.tab_analyze') }}</button>
+      <button class="tab" :class="{ active: activeTab === 'safety' }" @click="switchTab('safety')">{{ t('settings.tab_safety') }}</button>
+      <button class="tab" :class="{ active: activeTab === 'advanced' }" @click="switchTab('advanced')">{{ t('settings.tab_advanced') }}</button>
     </div>
 
     <!-- Connection Tab -->
     <div v-if="activeTab === 'connection'" class="card">
-      <div v-if="connectionSaved" class="status status-success" style="margin-bottom: 16px;">Settings saved. Changes apply immediately.</div>
+      <div v-if="connectionSaved" class="status status-success" style="margin-bottom: 16px;">{{ t('settings.saved_immediate') }}</div>
       <div v-if="connectionError" class="status status-error" style="margin-bottom: 16px;">{{ connectionError }}</div>
 
       <div class="form-group">
-        <label class="form-label">LLM Backend</label>
+        <label class="form-label">{{ t('settings.label_llm_backend') }}</label>
         <select class="form-input" v-model="connectionForm.llm_backend">
           <option value="lmstudio">LM Studio</option>
           <option value="ollama">Ollama</option>
@@ -448,12 +449,12 @@ onMounted(loadSettings)
       </div>
 
       <div class="form-group">
-        <label class="form-label">LLM URL</label>
+        <label class="form-label">{{ t('settings.label_llm_url') }}</label>
         <input class="form-input" v-model="connectionForm.llm_url" :placeholder="defaultURLs[connectionForm.llm_backend]" />
       </div>
 
       <div class="form-group" v-if="connectionForm.llm_backend !== 'llamacpp'">
-        <label class="form-label">Model for Generate</label>
+        <label class="form-label">{{ t('settings.label_model_generate') }}</label>
         <div style="display: flex; gap: 8px;">
           <select class="form-input" v-model="generateModel" style="flex: 1;">
             <option value="">default</option>
@@ -466,10 +467,10 @@ onMounted(loadSettings)
       </div>
 
       <div class="form-group" v-if="connectionForm.llm_backend !== 'llamacpp'">
-        <label class="form-label">Model for Analyze</label>
+        <label class="form-label">{{ t('settings.label_model_analyze') }}</label>
         <div style="display: flex; gap: 8px;">
           <select class="form-input" v-model="analyzeModel" style="flex: 1;">
-            <option value="">Same as Generate</option>
+            <option value="">{{ t('settings.same_as_generate') }}</option>
             <option v-for="m in connectionLLMModels" :key="m.id" :value="m.id">{{ m.id }}</option>
           </select>
         </div>
@@ -477,28 +478,28 @@ onMounted(loadSettings)
 
       <div class="form-group" v-if="connectionForm.llm_backend === 'llamacpp'">
         <div style="color: var(--text-dim); font-size: 13px; padding: 8px; background: var(--surface-2); border-radius: 6px;">
-          llama.cpp uses a single loaded model. Model selection is not available.
+          {{ t('settings.llamacpp_single_model') }}
         </div>
       </div>
 
       <div class="form-group">
-        <label class="form-label">Max Tokens (prompt generation)</label>
+        <label class="form-label">{{ t('settings.label_max_tokens') }}</label>
         <input class="form-input" type="number" v-model="connectionForm.llm_max_tokens" placeholder="256" min="64" max="8192" />
       </div>
 
       <div class="form-group">
-        <label class="form-label">Stable Diffusion URL</label>
+        <label class="form-label">{{ t('settings.label_sd_url') }}</label>
         <input class="form-input" v-model="connectionForm.sd_url" placeholder="http://localhost:7860" />
       </div>
 
       <!-- Ollama-specific -->
       <template v-if="connectionForm.llm_backend === 'ollama'">
         <div class="form-group">
-          <label class="form-label">Keep Alive</label>
+          <label class="form-label">{{ t('settings.label_keep_alive') }}</label>
           <input class="form-input" v-model="connectionForm.llm_keep_alive" placeholder="5m" />
         </div>
         <div class="form-group">
-          <label class="form-label">GPU Layers (num_gpu)</label>
+          <label class="form-label">{{ t('settings.label_gpu_layers') }}</label>
           <input class="form-input" type="number" v-model="connectionForm.llm_num_gpu" placeholder="0" />
         </div>
       </template>
@@ -506,140 +507,140 @@ onMounted(loadSettings)
       <!-- llama.cpp-specific -->
       <template v-if="connectionForm.llm_backend === 'llamacpp'">
         <div class="form-group">
-          <label class="form-label">GPU Layers (num_gpu)</label>
+          <label class="form-label">{{ t('settings.label_gpu_layers') }}</label>
           <input class="form-input" type="number" v-model="connectionForm.llm_num_gpu" placeholder="0" />
         </div>
       </template>
 
-      <button class="btn btn-primary" @click="saveConnection">Save Connection Settings</button>
+      <button class="btn btn-primary" @click="saveConnection">{{ t('settings.btn_save_connection') }}</button>
 
       <div class="card" style="margin-top: 24px;">
-        <h3 style="color: var(--text-bright); margin-bottom: 16px;">Rembg (Background Removal)</h3>
-        <div v-if="rembgSaved" class="status status-success" style="margin-bottom: 16px;">URL saved.</div>
+        <h3 style="color: var(--text-bright); margin-bottom: 16px;">{{ t('settings.section_rembg') }}</h3>
+        <div v-if="rembgSaved" class="status status-success" style="margin-bottom: 16px;">{{ t('settings.rembg_saved') }}</div>
         <div v-if="rembgError" class="status status-error" style="margin-bottom: 16px;">{{ rembgError }}</div>
 
         <div style="color: var(--text-dim); font-size: 13px; margin-bottom: 12px; line-height: 1.5;">
-          Rembg is an AI background removal service. Run it on any device with Python/CUDA:
+          {{ t('settings.rembg_description') }}
           <code style="background: var(--surface-2); padding: 2px 6px; border-radius: 4px; font-size: 12px;">rembg s --host 0.0.0.0 --port 7000</code>
-          <br>Then enter its URL below. Required for clean multi-character compositing.
+          <br>{{ t('settings.rembg_required') }}
         </div>
 
         <div class="form-group">
-          <label class="form-label">Rembg Server URL</label>
+          <label class="form-label">{{ t('settings.label_rembg_url') }}</label>
           <div style="display: flex; gap: 8px;">
             <input class="form-input" v-model="rembgForm.rembg_url" placeholder="http://192.168.1.100:7000" style="flex: 1;" />
             <button class="btn btn-secondary btn-sm" @click="testRembg" :disabled="rembgTesting || !rembgForm.rembg_url">
-              {{ rembgTesting ? 'Testing...' : 'Test' }}
+              {{ rembgTesting ? t('settings.btn_testing') : t('settings.btn_test') }}
             </button>
           </div>
         </div>
 
         <div v-if="rembgStatus === 'ok'" style="color: #4ade80; font-size: 13px; margin-bottom: 12px;">
-          Connection successful — rembg is running.
+          {{ t('settings.rembg_ok') }}
         </div>
         <div v-if="rembgStatus === 'error'" style="color: #f87171; font-size: 13px; margin-bottom: 12px;">
-          Connection failed — check URL and make sure rembg is running.
+          {{ t('settings.rembg_error') }}
         </div>
 
         <div v-if="!rembgForm.rembg_url" style="color: var(--text-dim); font-size: 12px; padding: 8px; background: var(--surface-2); border-radius: 6px; margin-bottom: 12px;">
-          Without rembg, Go-based white background removal will be used (lower quality, visible artifacts on edges).
+          {{ t('settings.rembg_no_url') }}
         </div>
 
-        <button class="btn btn-primary" @click="saveRembg">Save Rembg URL</button>
+        <button class="btn btn-primary" @click="saveRembg">{{ t('settings.btn_save_rembg') }}</button>
       </div>
 
       <div class="card" style="margin-top: 24px;">
-        <h3 style="color: var(--text-bright); margin-bottom: 16px;">LLM Models</h3>
+        <h3 style="color: var(--text-bright); margin-bottom: 16px;">{{ t('settings.section_llm_models') }}</h3>
         <div v-if="llmError" class="status status-error" style="margin-bottom: 8px;">{{ llmError }}</div>
         <div v-if="llmLoading" style="text-align: center; padding: 20px;"><span class="spinner"></span></div>
-        <div v-else-if="llmModels.length === 0" style="color: var(--text-dim);">No models available</div>
+        <div v-else-if="llmModels.length === 0" style="color: var(--text-dim);">{{ t('settings.no_models') }}</div>
         <div v-for="m in llmModels" :key="m.id" style="padding: 8px 0; border-bottom: 1px solid var(--border);">
           <div style="color: var(--text-bright); font-size: 13px;">{{ m.id }}</div>
           <div style="color: var(--text-dim); font-size: 11px;">{{ m.object }}</div>
         </div>
         <button class="btn btn-secondary btn-sm" style="margin-top: 12px;" @click="loadLLM" :disabled="llmLoading">
-          {{ llmLoading ? 'Loading...' : 'Refresh Models' }}
+          {{ llmLoading ? t('settings.btn_loading') : t('settings.btn_refresh_models') }}
         </button>
       </div>
 
       <div class="card" style="margin-top: 16px;">
-        <h3 style="color: var(--text-bright); margin-bottom: 16px;">LLM Parameters</h3>
-        <div v-if="llmParamsSaved" class="status status-success" style="margin-bottom: 16px;">Parameters saved.</div>
+        <h3 style="color: var(--text-bright); margin-bottom: 16px;">{{ t('settings.section_llm_params') }}</h3>
+        <div v-if="llmParamsSaved" class="status status-success" style="margin-bottom: 16px;">{{ t('settings.params_saved') }}</div>
         <div v-if="llmParamsError" class="status status-error" style="margin-bottom: 16px;">{{ llmParamsError }}</div>
 
-        <h4 style="color: var(--text-bright); margin: 16px 0 8px; font-size: 14px;">Generate Parameters</h4>
+        <h4 style="color: var(--text-bright); margin: 16px 0 8px; font-size: 14px;">{{ t('settings.generate_params') }}</h4>
         <div class="form-row-2">
           <div class="form-group">
-            <label class="form-label">Temperature</label>
+            <label class="form-label">{{ t('settings.label_temperature') }}</label>
             <input class="form-input" type="number" v-model.number="generateParams.temperature" step="0.1" min="0" max="2" />
           </div>
           <div class="form-group">
-            <label class="form-label">Context Size (num_ctx)</label>
+            <label class="form-label">{{ t('settings.label_context_size') }}</label>
             <input class="form-input" type="number" v-model.number="generateParams.num_ctx" step="512" min="512" max="32768" />
           </div>
         </div>
         <div class="form-row-2">
           <div class="form-group">
-            <label class="form-label">Max Predict (num_predict)</label>
+            <label class="form-label">{{ t('settings.label_max_predict') }}</label>
             <input class="form-input" type="number" v-model.number="generateParams.num_predict" min="32" max="8192" />
           </div>
           <div class="form-group">
-            <label class="form-label">Top P</label>
+            <label class="form-label">{{ t('settings.label_top_p') }}</label>
             <input class="form-input" type="number" v-model.number="generateParams.top_p" step="0.05" min="0" max="1" />
           </div>
         </div>
         <div class="form-row-2">
           <div class="form-group">
-            <label class="form-label">Threads (0=auto)</label>
+            <label class="form-label">{{ t('settings.label_threads') }}</label>
             <input class="form-input" type="number" v-model.number="generateParams.num_thread" min="0" max="64" />
           </div>
         </div>
 
-        <h4 style="color: var(--text-bright); margin: 16px 0 8px; font-size: 14px;">Analyze Parameters</h4>
+        <h4 style="color: var(--text-bright); margin: 16px 0 8px; font-size: 14px;">{{ t('settings.analyze_params') }}</h4>
         <div class="form-row-2">
           <div class="form-group">
-            <label class="form-label">Temperature</label>
+            <label class="form-label">{{ t('settings.label_temperature') }}</label>
             <input class="form-input" type="number" v-model.number="analyzeParams.temperature" step="0.1" min="0" max="2" />
           </div>
           <div class="form-group">
-            <label class="form-label">Context Size (num_ctx)</label>
+            <label class="form-label">{{ t('settings.label_context_size') }}</label>
             <input class="form-input" type="number" v-model.number="analyzeParams.num_ctx" step="512" min="512" max="32768" />
           </div>
         </div>
         <div class="form-row-2">
           <div class="form-group">
-            <label class="form-label">Max Predict (num_predict)</label>
+            <label class="form-label">{{ t('settings.label_max_predict') }}</label>
             <input class="form-input" type="number" v-model.number="analyzeParams.num_predict" min="32" max="8192" />
           </div>
           <div class="form-group">
-            <label class="form-label">Top P</label>
+            <label class="form-label">{{ t('settings.label_top_p') }}</label>
             <input class="form-input" type="number" v-model.number="analyzeParams.top_p" step="0.05" min="0" max="1" />
           </div>
         </div>
         <div class="form-row-2">
           <div class="form-group">
-            <label class="form-label">Threads (0=auto)</label>
+            <label class="form-label">{{ t('settings.label_threads') }}</label>
             <input class="form-input" type="number" v-model.number="analyzeParams.num_thread" min="0" max="64" />
           </div>
         </div>
 
-        <button class="btn btn-primary" @click="saveLLMParams" style="margin-top: 8px;">Save Parameters</button>
+        <button class="btn btn-primary" @click="saveLLMParams" style="margin-top: 8px;">{{ t('settings.btn_save_params') }}</button>
       </div>
     </div>
 
     <!-- Generation Tab (merged: Generation + Prompt) -->
     <div v-if="activeTab === 'generation'">
       <div class="card">
-        <h3 style="color: var(--text-bright); margin-bottom: 16px;">Preview Generation</h3>
-        <div v-if="generationSaved" class="status status-success" style="margin-bottom: 16px;">Settings saved.</div>
+        <h3 style="color: var(--text-bright); margin-bottom: 16px;">{{ t('settings.section_preview') }}</h3>
+        <div v-if="generationSaved" class="status status-success" style="margin-bottom: 16px;">{{ t('settings.generation_saved') }}</div>
         <div v-if="generationError" class="status status-error" style="margin-bottom: 16px;">{{ generationError }}</div>
 
         <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 16px;">
           <ToggleSwitch v-model="generationForm.preview_mode" />
           <div>
-            <div style="color: var(--text-bright); font-weight: 500;">{{ generationForm.preview_mode ? 'Enabled' : 'Disabled' }}</div>
+            <div style="color: var(--text-bright); font-weight: 500;">{{ generationForm.preview_mode ? t('settings.enabled') : t('settings.disabled') }}</div>
             <div style="color: var(--text-dim); font-size: 12px; margin-top: 2px;">
-              Generate a small preview first, then upscale to full resolution
+              {{ t('settings.preview_description') }}
             </div>
           </div>
         </div>
@@ -647,125 +648,125 @@ onMounted(loadSettings)
         <template v-if="generationForm.preview_mode">
           <div class="form-row-2">
             <div class="form-group">
-              <label class="form-label">Preview Width</label>
+              <label class="form-label">{{ t('settings.label_preview_width') }}</label>
               <input class="form-input" type="number" v-model.number="generationForm.preview_width" step="64" min="64" max="2048" />
             </div>
             <div class="form-group">
-              <label class="form-label">Preview Height</label>
+              <label class="form-label">{{ t('settings.label_preview_height') }}</label>
               <input class="form-input" type="number" v-model.number="generationForm.preview_height" step="64" min="64" max="2048" />
             </div>
           </div>
         </template>
 
-        <button class="btn btn-primary" @click="saveGeneration">Save Generation Settings</button>
+        <button class="btn btn-primary" @click="saveGeneration">{{ t('settings.btn_save_generation') }}</button>
       </div>
 
       <div class="card" style="margin-top: 16px;">
-        <h3 style="color: var(--text-bright); margin-bottom: 16px;">SD Prompt Instruction</h3>
-        <div v-if="promptInstructionSaved" class="status status-success" style="margin-bottom: 16px;">Instruction saved.</div>
+        <h3 style="color: var(--text-bright); margin-bottom: 16px;">{{ t('settings.section_sd_prompt') }}</h3>
+        <div v-if="promptInstructionSaved" class="status status-success" style="margin-bottom: 16px;">{{ t('settings.instruction_saved') }}</div>
         <div v-if="promptInstructionError" class="status status-error" style="margin-bottom: 16px;">{{ promptInstructionError }}</div>
         <div style="color: var(--text-dim); font-size: 13px; margin-bottom: 12px; line-height: 1.5;">
-          This instruction is sent to the LLM when generating SD prompts. It defines how the LLM should merge your preset with your description into a valid Stable Diffusion prompt.
+          {{ t('settings.prompt_instruction_description') }}
         </div>
         <div class="form-group">
           <textarea class="form-textarea" v-model="promptInstruction" rows="16" style="font-family: monospace; font-size: 12px; line-height: 1.5;"></textarea>
         </div>
         <div style="display: flex; gap: 8px;">
-          <button class="btn btn-primary" @click="savePromptInstruction">Save Instruction</button>
-          <button class="btn btn-secondary" @click="promptInstruction = defaultPromptInstruction">Reset to Default</button>
+          <button class="btn btn-primary" @click="savePromptInstruction">{{ t('settings.btn_save_instruction') }}</button>
+          <button class="btn btn-secondary" @click="promptInstruction = defaultPromptInstruction">{{ t('settings.btn_reset_default') }}</button>
         </div>
       </div>
     </div>
 
     <!-- Analyze Tab (unchanged) -->
     <div v-if="activeTab === 'analyze'" class="card">
-      <h3 style="color: var(--text-bright); margin-bottom: 16px;">Image Analysis Prompts</h3>
-      <div v-if="analyzeSaved" class="status status-success" style="margin-bottom: 16px;">Prompts saved.</div>
+      <h3 style="color: var(--text-bright); margin-bottom: 16px;">{{ t('settings.section_analyze_prompts') }}</h3>
+      <div v-if="analyzeSaved" class="status status-success" style="margin-bottom: 16px;">{{ t('settings.prompts_saved') }}</div>
       <div v-if="analyzeError" class="status status-error" style="margin-bottom: 16px;">{{ analyzeError }}</div>
 
       <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 16px;">
         <ToggleSwitch v-model="analyzeUseChain" />
         <div>
-          <div style="color: var(--text-bright); font-weight: 500;">{{ analyzeUseChain ? 'Chain Mode (4 steps)' : 'Single Prompt' }}</div>
+          <div style="color: var(--text-bright); font-weight: 500;">{{ analyzeUseChain ? t('settings.chain_mode') : t('settings.single_prompt') }}</div>
           <div style="color: var(--text-dim); font-size: 12px; margin-top: 2px;">
-            Chain mode runs 4 sequential vision calls for 30-50% more detail
+            {{ t('settings.chain_description') }}
           </div>
         </div>
       </div>
 
       <div class="form-group">
-        <label class="form-label">System Prompt</label>
+        <label class="form-label">{{ t('settings.label_system_prompt') }}</label>
         <textarea class="form-textarea" v-model="analyzeSystemPrompt" rows="3" style="font-family: monospace; font-size: 12px; line-height: 1.5;"></textarea>
       </div>
 
       <template v-if="!analyzeUseChain">
         <div class="form-group">
-          <label class="form-label">Single Analysis Prompt</label>
+          <label class="form-label">{{ t('settings.label_single_analysis') }}</label>
           <textarea class="form-textarea" v-model="analyzeSinglePrompt" rows="10" style="font-family: monospace; font-size: 12px; line-height: 1.5;"></textarea>
         </div>
       </template>
 
       <template v-if="analyzeUseChain">
         <div class="form-group">
-          <label class="form-label">Step 1 — Main Subject</label>
+          <label class="form-label">{{ t('settings.step_main_subject') }}</label>
           <textarea class="form-textarea" v-model="analyzeChainPrompts[0]" rows="3" style="font-family: monospace; font-size: 12px; line-height: 1.5;"></textarea>
         </div>
         <div class="form-group">
-          <label class="form-label">Step 2 — Background & Setting</label>
+          <label class="form-label">{{ t('settings.step_background') }}</label>
           <textarea class="form-textarea" v-model="analyzeChainPrompts[1]" rows="3" style="font-family: monospace; font-size: 12px; line-height: 1.5;"></textarea>
         </div>
         <div class="form-group">
-          <label class="form-label">Step 3 — Colors, Lighting & Style</label>
+          <label class="form-label">{{ t('settings.step_colors') }}</label>
           <textarea class="form-textarea" v-model="analyzeChainPrompts[2]" rows="3" style="font-family: monospace; font-size: 12px; line-height: 1.5;"></textarea>
         </div>
         <div class="form-group">
-          <label class="form-label">Step 4 — Details & Final Tags</label>
+          <label class="form-label">{{ t('settings.step_details') }}</label>
           <textarea class="form-textarea" v-model="analyzeChainPrompts[3]" rows="3" style="font-family: monospace; font-size: 12px; line-height: 1.5;"></textarea>
         </div>
       </template>
 
       <div style="display: flex; gap: 8px;">
-        <button class="btn btn-primary" @click="saveAnalyzePrompts">Save Prompts</button>
+        <button class="btn btn-primary" @click="saveAnalyzePrompts">{{ t('settings.btn_save_prompts') }}</button>
         <button class="btn btn-secondary" @click="resetAnalyzePrompts">Reset to Default</button>
       </div>
     </div>
 
     <!-- Safety Tab -->
     <div v-if="activeTab === 'safety'" class="card">
-      <h3 style="color: var(--text-bright); margin-bottom: 16px;">Kids Mode</h3>
+      <h3 style="color: var(--text-bright); margin-bottom: 16px;">{{ t('settings.section_kids') }}</h3>
       <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 16px;">
         <ToggleSwitch :modelValue="kidsMode" @update:modelValue="onKidsToggle" />
         <div>
-          <div style="color: var(--text-bright); font-weight: 500;">{{ kidsMode ? 'Enabled' : 'Disabled' }}</div>
+          <div style="color: var(--text-bright); font-weight: 500;">{{ kidsMode ? t('settings.enabled') : t('settings.disabled') }}</div>
           <div style="color: var(--text-dim); font-size: 12px; margin-top: 2px;">
-            Content filter for child-safe image generation
+            {{ t('settings.kids_description') }}
           </div>
         </div>
       </div>
 
       <div v-if="kidsMode && kidsCategories.length > 0" style="margin-bottom: 16px; padding: 12px; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm);">
-        <div style="color: var(--text-bright); font-weight: 500; margin-bottom: 10px;">Filter Categories</div>
+        <div style="color: var(--text-bright); font-weight: 500; margin-bottom: 10px;">{{ t('settings.filter_categories') }}</div>
         <div style="display: flex; flex-direction: column; gap: 8px;">
           <div v-for="cat in kidsCategories" :key="cat.name" style="display: flex; align-items: center; justify-content: space-between; padding: 4px 0;">
             <div>
               <span style="color: var(--text-bright); font-size: 13px;">{{ cat.label }}</span>
-              <span v-if="cat.alwaysOn" style="color: var(--text-dim); font-size: 11px; margin-left: 6px;">(always on)</span>
+              <span v-if="cat.alwaysOn" style="color: var(--text-dim); font-size: 11px; margin-left: 6px;">{{ t('settings.always_on') }}</span>
             </div>
             <ToggleSwitch :modelValue="cat.enabled" @update:modelValue="onKidsCatToggle(cat)" :disabled="cat.alwaysOn" />
           </div>
         </div>
-        <div style="color: var(--text-dim); font-size: 11px; margin-top: 8px;">PIN required to change categories</div>
+        <div style="color: var(--text-dim); font-size: 11px; margin-top: 8px;">{{ t('settings.pin_required_categories') }}</div>
       </div>
 
       <div style="color: var(--text-dim); font-size: 13px; line-height: 1.6;">
-        When enabled, Kids Mode applies multiple safety layers:
+        {{ t('settings.kids_layers') }}
         <ul style="margin: 8px 0 0 16px; padding: 0;">
-          <li>Filters user input for restricted content</li>
-          <li>Instructs the LLM to generate only safe prompts</li>
-          <li>Filters LLM output for inappropriate tags</li>
-          <li>Forces negative prompt safety tags</li>
+          <li>{{ t('settings.kids_filter_input') }}</li>
+          <li>{{ t('settings.kids_filter_llm') }}</li>
+          <li>{{ t('settings.kids_filter_output') }}</li>
+          <li>{{ t('settings.kids_forces_negative') }}</li>
         </ul>
-        <div style="margin-top: 8px;">Protected by 4-digit PIN to prevent children from disabling it.</div>
+        <div style="margin-top: 8px;">{{ t('settings.kids_pin_protected') }}</div>
       </div>
     </div>
 
@@ -775,9 +776,9 @@ onMounted(loadSettings)
 
       <div class="form-row-2">
         <div class="card">
-          <h3 style="color: var(--text-bright); margin-bottom: 16px;">SD Models</h3>
+          <h3 style="color: var(--text-bright); margin-bottom: 16px;">{{ t('settings.section_sd_models') }}</h3>
           <div v-if="sdLoading" style="text-align: center; padding: 20px;"><span class="spinner"></span></div>
-          <div v-else-if="sdModels.length === 0" style="color: var(--text-dim);">No models loaded</div>
+          <div v-else-if="sdModels.length === 0" style="color: var(--text-dim);">{{ t('settings.no_models_loaded') }}</div>
           <div v-for="m in sdModels" :key="m.model_name" style="padding: 8px 0; border-bottom: 1px solid var(--border);">
             <div style="color: var(--text-bright); font-size: 13px;">{{ m.title }}</div>
             <div style="color: var(--text-dim); font-size: 11px;">{{ m.model_name }}</div>
@@ -785,9 +786,9 @@ onMounted(loadSettings)
         </div>
 
         <div class="card">
-          <h3 style="color: var(--text-bright); margin-bottom: 16px;">SD LoRA</h3>
+          <h3 style="color: var(--text-bright); margin-bottom: 16px;">{{ t('settings.section_sd_lora') }}</h3>
           <div v-if="sdLoading" style="text-align: center; padding: 20px;"><span class="spinner"></span></div>
-          <div v-else-if="sdLoRAs.length === 0" style="color: var(--text-dim);">No LoRA models found</div>
+          <div v-else-if="sdLoRAs.length === 0" style="color: var(--text-dim);">{{ t('settings.no_lora') }}</div>
           <div v-else style="display: flex; flex-wrap: wrap; gap: 6px;">
             <span v-for="l in sdLoRAs" :key="l.name"
               style="padding: 4px 10px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 4px; font-size: 12px; color: var(--text);"
@@ -799,7 +800,7 @@ onMounted(loadSettings)
       </div>
 
       <button class="btn btn-secondary" style="margin-top: 16px;" @click="loadSD" :disabled="sdLoading">
-        {{ sdLoading ? 'Loading...' : 'Refresh' }}
+        {{ sdLoading ? t('settings.btn_loading') : t('settings.btn_refresh') }}
       </button>
     </div>
 

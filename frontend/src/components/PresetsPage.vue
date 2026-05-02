@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { api } from '../api.js'
+import { t } from '../i18n/index.js'
 import PresetForm from './PresetForm.vue'
 import ImportModal from './ImportModal.vue'
 
@@ -182,24 +183,24 @@ onMounted(load)
 <template>
   <div>
     <div class="page-header">
-      <h1 class="page-title">Presets</h1>
+      <h1 class="page-title">{{ t('presets.title') }}</h1>
       <div class="header-actions">
         <template v-if="selectMode">
           <button class="btn btn-secondary btn-sm" @click="selectAll">
-            {{ selectedCount === presets.length ? 'Deselect All' : 'Select All' }}
+            {{ selectedCount === presets.length ? t('presets.btn_deselect_all') : t('presets.btn_select_all') }}
           </button>
           <button class="btn btn-primary btn-sm" @click="handleExport" :disabled="selectedCount === 0">
-            Export ({{ selectedCount }})
+            {{ t('presets.btn_export', { count: selectedCount }) }}
           </button>
           <button class="btn btn-danger btn-sm" @click="requestBatchDelete" :disabled="selectedCount === 0">
-            Delete ({{ selectedCount }})
+            {{ t('presets.btn_delete_selected', { count: selectedCount }) }}
           </button>
-          <button class="btn btn-secondary btn-sm" @click="toggleSelectMode">Cancel</button>
+          <button class="btn btn-secondary btn-sm" @click="toggleSelectMode">{{ t('presets.btn_cancel') }}</button>
         </template>
         <template v-else>
-          <button class="btn btn-secondary" @click="handleOpenImport">Import</button>
-          <button class="btn btn-secondary" @click="toggleSelectMode" :disabled="presets.length === 0">Select</button>
-          <button class="btn btn-primary" @click="openCreate">+ New Preset</button>
+          <button class="btn btn-secondary" @click="handleOpenImport">{{ t('presets.btn_import') }}</button>
+          <button class="btn btn-secondary" @click="toggleSelectMode" :disabled="presets.length === 0">{{ t('presets.btn_select') }}</button>
+          <button class="btn btn-primary" @click="openCreate">{{ t('presets.btn_new') }}</button>
         </template>
       </div>
     </div>
@@ -210,20 +211,20 @@ onMounted(load)
 
     <div v-else-if="presets.length === 0" class="empty-state">
       <div class="empty-state-icon">&#9776;</div>
-      <p>No presets yet. Create your first one!</p>
+      <p>{{ t('presets.no_presets') }}</p>
     </div>
 
     <template v-else>
       <div style="display: flex; gap: 8px; margin-bottom: 16px; align-items: center;">
-        <input class="form-input" v-model="filterSearch" placeholder="Search presets..." style="flex: 1; max-width: 300px;" />
+        <input class="form-input" v-model="filterSearch" :placeholder="t('presets.search_presets')" style="flex: 1; max-width: 300px;" />
         <select class="form-select" v-model="filterType" style="width: auto; min-width: 140px;">
-          <option value="">All types</option>
-          <option v-for="t in availableTypes" :key="t" :value="t">{{ t }}</option>
+          <option value="">{{ t('presets.all_types') }}</option>
+          <option v-for="at in availableTypes" :key="at" :value="at">{{ at }}</option>
         </select>
       </div>
 
       <div v-if="filteredPresets.length === 0" style="color: var(--text-dim); text-align: center; padding: 24px;">
-        No presets match the filter
+        {{ t('presets.no_match') }}
       </div>
 
       <div v-else class="card-grid">
@@ -243,9 +244,9 @@ onMounted(load)
           <span>CFG {{ p.cfg_scale }}</span>
         </div>
         <div v-if="!selectMode" class="preset-actions">
-          <button class="btn btn-secondary btn-sm" @click="openEdit(p)">Edit</button>
-          <button class="btn btn-secondary btn-sm" @click="handleDuplicate(p)">Duplicate</button>
-          <button class="btn btn-danger btn-sm" @click="handleDelete(p.id)">{{ pendingDeleteId === p.id ? 'Sure?' : 'Delete' }}</button>
+          <button class="btn btn-secondary btn-sm" @click="openEdit(p)">{{ t('presets.btn_edit') }}</button>
+          <button class="btn btn-secondary btn-sm" @click="handleDuplicate(p)">{{ t('presets.btn_duplicate') }}</button>
+          <button class="btn btn-danger btn-sm" @click="handleDelete(p.id)">{{ pendingDeleteId === p.id ? t('presets.btn_sure') : t('presets.btn_delete') }}</button>
         </div>
       </div>
     </div>
@@ -268,14 +269,14 @@ onMounted(load)
     <div v-if="showDeleteConfirm" class="modal-overlay" @click.self="showDeleteConfirm = false">
       <div class="modal">
         <div class="modal-header">
-          <h2 class="modal-title">Delete Presets</h2>
+          <h2 class="modal-title">{{ t('presets.delete_title') }}</h2>
           <button class="modal-close" @click="showDeleteConfirm = false">&times;</button>
         </div>
-        <p>Are you sure you want to delete <strong>{{ selectedCount }}</strong> preset{{ selectedCount > 1 ? 's' : '' }}?</p>
-        <p style="color: var(--text-dim); font-size: 0.9em;">This action cannot be undone.</p>
+        <p>{{ t('presets.delete_confirm') }} <strong>{{ selectedCount }}</strong> preset{{ selectedCount > 1 ? 's' : '' }}?</p>
+        <p style="color: var(--text-dim); font-size: 0.9em;">{{ t('presets.delete_cannot_undo') }}</p>
         <div style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px;">
-          <button class="btn btn-secondary" @click="showDeleteConfirm = false">Cancel</button>
-          <button class="btn btn-danger" @click="confirmBatchDelete">Delete</button>
+          <button class="btn btn-secondary" @click="showDeleteConfirm = false">{{ t('presets.btn_cancel') }}</button>
+          <button class="btn btn-danger" @click="confirmBatchDelete">{{ t('presets.btn_delete') }}</button>
         </div>
       </div>
     </div>

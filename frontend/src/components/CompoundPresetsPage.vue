@@ -1,6 +1,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { api } from '../api.js'
+import { t } from '../i18n/index.js'
 
 const compounds = ref([])
 const presets = ref([])
@@ -77,11 +78,11 @@ function moveStepDown(idx) {
 
 async function saveCompound() {
   if (!formName.value.trim()) {
-    error.value = 'Name is required'
+    error.value = t('compound.error_name_required')
     return
   }
   if (formSteps.value.some(s => !s.preset_id)) {
-    error.value = 'Each step must have a preset'
+    error.value = t('compound.error_step_preset')
     return
   }
 
@@ -132,29 +133,29 @@ onMounted(loadData)
 <template>
   <div>
     <div class="page-header">
-      <h1 class="page-title">Pipelines</h1>
-      <button class="btn btn-primary" @click="openCreate">+ New Pipeline</button>
+      <h1 class="page-title">{{ t('compound.title') }}</h1>
+      <button class="btn btn-primary" @click="openCreate">{{ t('compound.btn_new') }}</button>
     </div>
 
     <div v-if="error" class="status status-error">{{ error }}</div>
 
     <div v-if="showForm" class="card" style="max-width: 700px;">
-      <h3 style="margin-bottom: 12px;">{{ editing ? 'Edit Pipeline' : 'New Pipeline' }}</h3>
+      <h3 style="margin-bottom: 12px;">{{ editing ? t('compound.edit_pipeline') : t('compound.new_pipeline') }}</h3>
 
       <div class="form-group">
-        <label class="form-label">Name</label>
-        <input class="form-input" v-model="formName" placeholder="Pipeline name..." />
+        <label class="form-label">{{ t('compound.label_name') }}</label>
+        <input class="form-input" v-model="formName" :placeholder="t('compound.placeholder_name')" />
       </div>
 
       <div class="form-group">
-        <label class="form-label">Description</label>
-        <input class="form-input" v-model="formDescription" placeholder="Optional description..." />
+        <label class="form-label">{{ t('compound.label_description') }}</label>
+        <input class="form-input" v-model="formDescription" :placeholder="t('compound.placeholder_description')" />
       </div>
 
       <div style="margin-bottom: 12px;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-          <label class="form-label" style="margin: 0;">Steps ({{ formSteps.length }})</label>
-          <button class="btn btn-sm btn-secondary" @click="addStep">+ Add Step</button>
+          <label class="form-label" style="margin: 0;">{{ t('compound.steps_count', { count: formSteps.length }) }}</label>
+          <button class="btn btn-sm btn-secondary" @click="addStep">{{ t('compound.btn_add_step') }}</button>
         </div>
 
         <div v-for="(step, idx) in formSteps" :key="idx" style="border: 1px solid var(--border); border-radius: 6px; padding: 12px; margin-bottom: 8px; background: var(--surface-1);">
@@ -169,26 +170,26 @@ onMounted(loadData)
 
           <div style="display: grid; grid-template-columns: 1fr; gap: 8px;">
             <div class="form-group" style="margin: 0;">
-              <label class="form-label">Preset</label>
+              <label class="form-label">{{ t('compound.label_preset') }}</label>
               <select class="form-select" v-model="step.preset_id">
-                <option :value="null" disabled>Select preset...</option>
+                <option :value="null" disabled>{{ t('compound.select_preset') }}</option>
                 <option v-for="p in presets" :key="p.id" :value="p.id">{{ p.name }}</option>
               </select>
             </div>
 
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
               <div class="form-group" style="margin: 0;">
-                <label class="form-label">Width</label>
+                <label class="form-label">{{ t('compound.label_width') }}</label>
                 <input class="form-input" type="number" v-model.number="step.width" min="64" max="2048" step="64" />
               </div>
               <div class="form-group" style="margin: 0;">
-                <label class="form-label">Height</label>
+                <label class="form-label">{{ t('compound.label_height') }}</label>
                 <input class="form-input" type="number" v-model.number="step.height" min="64" max="2048" step="64" />
               </div>
             </div>
 
             <div v-if="idx > 0" class="form-group" style="margin: 0;">
-              <label class="form-label">Denoising Strength</label>
+              <label class="form-label">{{ t('compound.label_denoising') }}</label>
               <input class="form-input" type="number" v-model.number="step.denoising_strength" min="0" max="1" step="0.05" />
             </div>
           </div>
@@ -196,13 +197,13 @@ onMounted(loadData)
       </div>
 
       <div style="display: flex; gap: 8px;">
-        <button class="btn btn-primary" @click="saveCompound">{{ editing ? 'Update' : 'Create' }}</button>
-        <button class="btn btn-secondary" @click="cancelForm">Cancel</button>
+        <button class="btn btn-primary" @click="saveCompound">{{ editing ? t('compound.btn_update') : t('compound.btn_create') }}</button>
+        <button class="btn btn-secondary" @click="cancelForm">{{ t('compound.btn_cancel') }}</button>
       </div>
     </div>
 
     <div v-if="!showForm && compounds.length === 0" class="card" style="max-width: 700px; text-align: center;">
-      <p style="color: var(--text-dim);">No pipelines yet. Create one to chain presets into multi-step generation.</p>
+      <p style="color: var(--text-dim);">{{ t('compound.no_pipelines') }}</p>
     </div>
 
     <div v-if="!showForm" style="display: grid; gap: 12px; max-width: 700px;">
@@ -213,8 +214,8 @@ onMounted(loadData)
             <p v-if="cp.description" style="color: var(--text-dim); font-size: 13px; margin-bottom: 8px;">{{ cp.description }}</p>
           </div>
           <div style="display: flex; gap: 6px;">
-            <button class="btn btn-sm btn-secondary" @click="openEdit(cp)">Edit</button>
-            <button class="btn btn-sm btn-secondary" style="color: var(--error, #e55);" @click="deleteCompound(cp.id)">Delete</button>
+            <button class="btn btn-sm btn-secondary" @click="openEdit(cp)">{{ t('compound.btn_edit') }}</button>
+            <button class="btn btn-sm btn-secondary" style="color: var(--error, #e55);" @click="deleteCompound(cp.id)">{{ t('compound.btn_delete') }}</button>
           </div>
         </div>
 

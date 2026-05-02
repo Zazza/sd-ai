@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, nextTick, watch, onMounted, onUnmounted, inject } from 'vue'
 import { api } from '../api.js'
+import { t } from '../i18n/index.js'
 import { EventsOn, EventsOff } from '../wailsjs/runtime/runtime'
 import ImageViewer from './ImageViewer.vue'
 
@@ -143,10 +144,10 @@ async function useLastImage() {
         error.value = ''
         clearMask()
       } else {
-        error.value = 'No image found for active session item'
+        error.value = t('fi.error_no_session_image')
       }
     } else {
-      error.value = 'No active session item found'
+      error.value = t('fi.error_no_active_item')
     }
   } catch (e) {
     error.value = String(e)
@@ -178,7 +179,7 @@ function handlePaste(e) {
       const file = item.getAsFile()
       if (!file) continue
       if (file.size > 16 * 1024 * 1024) {
-        error.value = 'Image too large (max 16 MB)'
+        error.value = t('fi.error_image_too_large')
         return
       }
       const reader = new FileReader()
@@ -205,11 +206,11 @@ function onDrop(e) {
   const file = e.dataTransfer?.files?.[0]
   if (!file) return
   if (!file.type.startsWith('image/')) {
-    error.value = 'Please drop an image file'
+    error.value = t('fi.error_drop_image')
     return
   }
   if (file.size > 16 * 1024 * 1024) {
-    error.value = 'Image too large (max 16 MB)'
+    error.value = t('fi.error_image_too_large')
     return
   }
   const reader = new FileReader()
@@ -261,7 +262,7 @@ async function analyzeImage() {
       recommendPreset(tags.value)
     }
   } catch (e) {
-    error.value = 'Analysis failed: ' + String(e)
+    error.value = t('fi.error_analysis', { error: String(e) })
   } finally {
     analyzing.value = false
     if (analyzeTimer) {
@@ -471,19 +472,19 @@ watch(uploadedImage, () => {
 
 async function generate() {
   if (!uploadedImage.value) {
-    error.value = 'Upload an image first'
+    error.value = t('fi.error_upload_first')
     return
   }
   if (genMode.value === 'preset' && !selectedPresetId.value && mode.value !== 'remove') {
-    error.value = 'Select a preset first'
+    error.value = t('fi.error_select_preset')
     return
   }
   if (genMode.value === 'compound' && !selectedCompoundPresetId.value && mode.value !== 'remove') {
-    error.value = 'Select a pipeline first'
+    error.value = t('fi.error_select_pipeline')
     return
   }
   if ((mode.value === 'inpaint' || mode.value === 'remove') && !hasMask.value) {
-    error.value = 'Draw a mask on the image first'
+    error.value = t('fi.error_draw_mask')
     return
   }
 
@@ -516,7 +517,7 @@ async function generate() {
     }
     const result = await api.generateFromImage(params)
     if (!result || !result.image) {
-      error.value = 'No image returned. Check preset settings.'
+      error.value = t('fi.error_no_image')
     } else {
       generatedImage.value = result.image
       genInfo.value = result.info
@@ -538,7 +539,7 @@ async function downloadImage() {
     const defaultName = 'sd-studio-from-image-' + Date.now() + '.png'
     await api.saveImage(generatedImage.value, defaultName)
   } catch (e) {
-    error.value = 'Save failed: ' + String(e)
+    error.value = t('fi.error_save', { error: String(e) })
   }
 }
 
@@ -731,13 +732,13 @@ function onKeydown(e) {
 <template>
   <div>
     <div class="page-header">
-      <h1 class="page-title">Generate From Image</h1>
-      <button class="btn btn-primary" @click="loadPresets">&#8635; Refresh</button>
+      <h1 class="page-title">{{ t('fi.title') }}</h1>
+      <button class="btn btn-primary" @click="loadPresets">{{ t('fi.btn_refresh') }}</button>
     </div>
 
     <div v-if="kidsModeActive" class="service-status">
       <div class="status-badge status-ok">
-        &#9679; Kids Mode
+        &#9679; {{ t('fi.kids_mode') }}
       </div>
     </div>
 
@@ -756,7 +757,7 @@ function onKeydown(e) {
             @click="uploadImage()"
           >
             <div style="font-size: 32px; color: var(--text-dim);">&#128444;</div>
-            <p style="color: var(--text-dim); margin-top: 8px;">Drop image here, click to upload, or Ctrl+V</p>
+            <p style="color: var(--text-dim); margin-top: 8px;">{{ t('fi.drop_image') }}</p>
           </div>
 
           <div v-else class="inpaint-canvas-container">
@@ -784,174 +785,174 @@ function onKeydown(e) {
           </div>
 
           <div v-if="uploadedImage" class="fi-btn-row">
-            <button class="btn btn-sm btn-secondary" @click="uploadImage">Change</button>
-            <button class="btn btn-sm btn-secondary" @click="useLastImage">Last Generated</button>
-            <button class="btn btn-sm btn-secondary" @click="pasteFromClipboard">Paste</button>
-            <button class="btn btn-sm btn-secondary" @click="clearImage">Clear</button>
+            <button class="btn btn-sm btn-secondary" @click="uploadImage">{{ t('fi.btn_change') }}</button>
+            <button class="btn btn-sm btn-secondary" @click="useLastImage">{{ t('fi.btn_last_generated') }}</button>
+            <button class="btn btn-sm btn-secondary" @click="pasteFromClipboard">{{ t('fi.btn_paste') }}</button>
+            <button class="btn btn-sm btn-secondary" @click="clearImage">{{ t('fi.btn_clear') }}</button>
           </div>
           <div v-else class="fi-btn-row" style="margin-top: 8px;">
-            <button class="btn btn-sm btn-secondary" @click="useLastImage">Last Generated</button>
-            <button class="btn btn-sm btn-secondary" @click="pasteFromClipboard">Paste</button>
+            <button class="btn btn-sm btn-secondary" @click="useLastImage">{{ t('fi.btn_last_generated') }}</button>
+            <button class="btn btn-sm btn-secondary" @click="pasteFromClipboard">{{ t('fi.btn_paste') }}</button>
           </div>
 
           <div style="display: flex; gap: 8px; margin-top: 16px; margin-bottom: 12px; flex-wrap: wrap;">
-            <button class="btn btn-sm" :class="mode === 'img2img' ? 'btn-primary' : 'btn-secondary'" @click="mode = 'img2img'" :disabled="generatingImage">img2img</button>
-            <button class="btn btn-sm" :class="mode === 'inpaint' ? 'btn-primary' : 'btn-secondary'" @click="mode = 'inpaint'" :disabled="generatingImage">inpaint</button>
-            <button class="btn btn-sm" :class="mode === 'remove' ? 'btn-primary' : 'btn-secondary'" @click="mode = 'remove'" :disabled="generatingImage">remove</button>
+            <button class="btn btn-sm" :class="mode === 'img2img' ? 'btn-primary' : 'btn-secondary'" @click="mode = 'img2img'" :disabled="generatingImage">{{ t('fi.mode_img2img') }}</button>
+            <button class="btn btn-sm" :class="mode === 'inpaint' ? 'btn-primary' : 'btn-secondary'" @click="mode = 'inpaint'" :disabled="generatingImage">{{ t('fi.mode_inpaint') }}</button>
+            <button class="btn btn-sm" :class="mode === 'remove' ? 'btn-primary' : 'btn-secondary'" @click="mode = 'remove'" :disabled="generatingImage">{{ t('fi.mode_remove') }}</button>
           </div>
 
           <div v-if="mode === 'img2img' || mode === 'inpaint'" class="form-group">
-            <label class="form-label">Denoising Strength: {{ denoisingStrength.toFixed(2) }}</label>
+            <label class="form-label">{{ t('fi.label_denoising', { value: denoisingStrength.toFixed(2) }) }}</label>
             <input type="range" class="form-range" v-model.number="denoisingStrength" min="0.05" max="1.0" step="0.05" :disabled="generatingImage" />
             <div style="display: flex; justify-content: space-between; font-size: 11px; color: var(--text-dim);">
-              <span>Keep original</span>
-              <span>Full redraw</span>
+              <span>{{ t('fi.keep_original') }}</span>
+              <span>{{ t('fi.full_redraw') }}</span>
             </div>
           </div>
 
           <div v-if="mode === 'remove'" class="form-group" style="margin-top: 4px;">
             <div style="font-size: 11px; color: var(--text-dim);">
-              Denoising: {{ denoisingStrength.toFixed(2) }} | Mask Blur: {{ maskBlur }} | Fill: Fill | Full Res: on
+              {{ t('fi.remove_params', { denoising: denoisingStrength.toFixed(2), blur: maskBlur }) }}
             </div>
           </div>
 
           <div v-if="mode === 'inpaint' || mode === 'remove'" class="inpaint-controls">
             <div class="form-group">
-              <label class="form-label">Brush Size: {{ brushSize }}px</label>
+              <label class="form-label">{{ t('fi.label_brush_size', { value: brushSize }) }}</label>
               <input type="range" class="form-range" v-model.number="brushSize" min="5" max="100" step="1" />
             </div>
             <div class="fi-btn-row">
-              <button class="btn btn-sm btn-secondary" @click="clearMask" :disabled="!hasMask">Clear Mask</button>
-              <button class="btn btn-sm btn-secondary" @click="undoMask" :disabled="!hasMask">Undo</button>
-              <button class="btn btn-sm btn-secondary" @click="openFullscreenMask" title="Open fullscreen mask editor">&#x26F6; Fullscreen</button>
+              <button class="btn btn-sm btn-secondary" @click="clearMask" :disabled="!hasMask">{{ t('fi.btn_clear_mask') }}</button>
+              <button class="btn btn-sm btn-secondary" @click="undoMask" :disabled="!hasMask">{{ t('fi.btn_undo') }}</button>
+              <button class="btn btn-sm btn-secondary" @click="openFullscreenMask" title="Open fullscreen mask editor">{{ t('fi.btn_fullscreen') }}</button>
             </div>
             <div v-if="mode === 'inpaint'" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 8px;">
               <div class="form-group">
-                <label class="form-label">Mask Blur: {{ maskBlur }}</label>
+                <label class="form-label">{{ t('fi.label_mask_blur', { value: maskBlur }) }}</label>
                 <input type="range" class="form-range" v-model.number="maskBlur" min="0" max="64" step="1" />
               </div>
               <div class="form-group">
-                <label class="form-label">Inpaint Fill</label>
+                <label class="form-label">{{ t('fi.label_inpaint_fill') }}</label>
                 <select class="form-select" v-model="inpaintFill">
-                  <option :value="0">Fill</option>
-                  <option :value="1">Original</option>
-                  <option :value="2">Latent Noise</option>
+                  <option :value="0">{{ t('fi.fill_fill') }}</option>
+                  <option :value="1">{{ t('fi.fill_original') }}</option>
+                  <option :value="2">{{ t('fi.fill_latent_noise') }}</option>
                 </select>
               </div>
             </div>
             <div v-if="mode === 'inpaint'" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 4px;">
               <div class="form-group">
-                <label class="form-label">Mask Padding: {{ maskPadding }}px</label>
+                <label class="form-label">{{ t('fi.label_mask_padding', { value: maskPadding }) }}</label>
                 <input type="range" class="form-range" v-model.number="maskPadding" min="0" max="64" step="1" />
               </div>
               <div class="form-group">
-                <label class="form-label">Mask Feather: {{ maskFeather }}px</label>
+                <label class="form-label">{{ t('fi.label_mask_feather', { value: maskFeather }) }}</label>
                 <input type="range" class="form-range" v-model.number="maskFeather" min="0" max="64" step="1" />
               </div>
             </div>
             <div v-if="mode === 'inpaint'" class="form-group" style="margin-top: 4px;">
               <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
                 <input type="checkbox" v-model="inpaintFullRes" style="accent-color: var(--accent);" />
-                <span style="font-size: 12px;">Inpaint Full Resolution</span>
+                <span style="font-size: 12px;">{{ t('fi.inpaint_full_res') }}</span>
               </label>
               <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; margin-top: 4px;">
                 <input type="checkbox" v-model="invertMask" style="accent-color: var(--accent);" />
-                <span style="font-size: 12px;">Invert Mask (change everything except selection)</span>
+                <span style="font-size: 12px;">{{ t('fi.invert_mask') }}</span>
               </label>
             </div>
             <div v-if="hasMask" style="font-size: 11px; color: var(--accent); margin-top: 4px;">
-              Mask drawn ({{ maskHistory.length }} strokes){{ invertMask ? ' [inverted]' : '' }}
+              {{ t('fi.mask_drawn', { count: maskHistory.length, inverted: invertMask ? ' [inverted]' : '' }) }}
             </div>
             <div v-else style="font-size: 11px; color: var(--text-dim); margin-top: 4px;">
-              Paint over areas to regenerate
+              {{ t('fi.paint_areas') }}
             </div>
           </div>
 
           <div style="display: flex; gap: 8px; margin-bottom: 12px;">
-            <button class="btn btn-sm" :class="genMode === 'preset' ? 'btn-primary' : 'btn-secondary'" @click="genMode = 'preset'">Preset</button>
-            <button class="btn btn-sm" :class="genMode === 'compound' ? 'btn-primary' : 'btn-secondary'" @click="genMode = 'compound'">Pipeline</button>
+            <button class="btn btn-sm" :class="genMode === 'preset' ? 'btn-primary' : 'btn-secondary'" @click="genMode = 'preset'">{{ t('fi.btn_preset') }}</button>
+            <button class="btn btn-sm" :class="genMode === 'compound' ? 'btn-primary' : 'btn-secondary'" @click="genMode = 'compound'">{{ t('fi.btn_pipeline') }}</button>
           </div>
 
           <div v-if="genMode === 'preset'" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
             <div class="form-group">
-              <label class="form-label">Type</label>
+              <label class="form-label">{{ t('fi.label_type') }}</label>
               <select class="form-select" v-model="selectedTypeId" :disabled="generatingImage">
-                <option :value="null">All types</option>
+                <option :value="null">{{ t('fi.all_types') }}</option>
                 <option v-for="t in presetTypes" :key="t.id" :value="t.id">{{ t.name }}</option>
               </select>
             </div>
             <div class="form-group">
-              <label class="form-label">Preset</label>
+              <label class="form-label">{{ t('fi.label_preset') }}</label>
               <select class="form-select" v-model="selectedPresetId" :disabled="generatingImage">
-                <option :value="null" disabled>Select preset...</option>
+                <option :value="null" disabled>{{ t('fi.select_preset') }}</option>
                 <option v-for="p in filteredPresets" :key="p.id" :value="p.id">{{ p.name }}</option>
               </select>
             </div>
           </div>
 
           <div v-if="genMode === 'compound'" class="form-group">
-            <label class="form-label">Pipeline</label>
+            <label class="form-label">{{ t('fi.label_pipeline') }}</label>
             <select class="form-select" v-model="selectedCompoundPresetId" :disabled="generatingImage">
-              <option :value="null" disabled>Select pipeline...</option>
+              <option :value="null" disabled>{{ t('fi.select_pipeline') }}</option>
               <option v-for="c in compoundPresets" :key="c.id" :value="c.id">{{ c.name }} ({{ c.steps.length }} steps)</option>
             </select>
           </div>
 
           <div v-if="mode !== 'remove'" class="form-group" style="margin-top: 12px;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-              <label class="form-label" style="margin-bottom: 0;">Extracted Tags</label>
+              <label class="form-label" style="margin-bottom: 0;">{{ t('fi.extracted_tags') }}</label>
               <div style="display: flex; gap: 6px;">
-                <button class="btn btn-sm" :class="analyzeMode === 'quick' ? 'btn-primary' : 'btn-secondary'" @click="analyzeMode = 'quick'" style="font-size: 11px; padding: 2px 8px;">Quick</button>
-                <button class="btn btn-sm" :class="analyzeMode === 'deep' ? 'btn-primary' : 'btn-secondary'" @click="analyzeMode = 'deep'" style="font-size: 11px; padding: 2px 8px;">Deep</button>
+                <button class="btn btn-sm" :class="analyzeMode === 'quick' ? 'btn-primary' : 'btn-secondary'" @click="analyzeMode = 'quick'" style="font-size: 11px; padding: 2px 8px;">{{ t('fi.quick') }}</button>
+                <button class="btn btn-sm" :class="analyzeMode === 'deep' ? 'btn-primary' : 'btn-secondary'" @click="analyzeMode = 'deep'" style="font-size: 11px; padding: 2px 8px;">{{ t('fi.deep') }}</button>
               </div>
             </div>
             <div style="display: flex; gap: 8px; margin-bottom: 6px;">
               <button class="btn btn-sm btn-secondary" @click="analyzeImage" :disabled="analyzing || !uploadedImage">
                 <template v-if="analyzing">
                   <span v-if="analyzeMode === 'deep' && chainStep > 0">Step {{ chainStep }}/{{ chainTotal }} &mdash; {{ analyzeElapsed }}s</span>
-                  <span v-else>Analyzing...</span>
+                  <span v-else>{{ t('fi.analyzing') }}</span>
                 </template>
-                <span v-else>Analyze</span>
+                <span v-else>{{ t('fi.btn_analyze') }}</span>
               </button>
               <button v-if="!kidsModeActive" class="btn btn-sm btn-secondary" @click="tags = ''" :disabled="!tags || generatingImage" title="Clear tags">&#10005;</button>
               <button v-if="tags" class="btn btn-sm btn-secondary" @click="transferToGenerate" :disabled="generatingImage" title="Transfer tags to Generate tab">&#8594; Generate</button>
             </div>
-            <textarea class="form-textarea" v-model="tags" rows="4" placeholder="Extracted tags appear here. You can also type your own description to guide generation." :disabled="generatingImage || kidsModeActive"></textarea>
+            <textarea class="form-textarea" v-model="tags" rows="4" :placeholder="t('fi.placeholder_tags')" :disabled="generatingImage || kidsModeActive"></textarea>
             <div v-if="kidsModeActive" style="margin-top: 4px; padding: 6px; background: var(--bg-secondary); border-radius: 4px; text-align: center; font-size: 11px; color: var(--text-dim);">
-              &#128274; Tags editing restricted in Kids Mode
+              {{ t('fi.kids_tags_restricted') }}
             </div>
           </div>
 
           <div v-if="mode !== 'remove' && recommendation" class="fi-recommendation">
-            <div style="font-weight: 600; margin-bottom: 6px;">Recommended: {{ recommendation.preset_name }}</div>
+            <div style="font-weight: 600; margin-bottom: 6px;">{{ t('fi.recommended', { name: recommendation.preset_name }) }}</div>
             <div v-if="recommendation.reasoning" style="font-size: 12px; color: var(--text-dim); margin-bottom: 8px;">
               {{ recommendation.reasoning }}
             </div>
             <div v-if="recommendation.extra_prompt" style="font-size: 12px; color: var(--text-dim); margin-bottom: 8px;">
-              <span style="font-weight: 600;">Extra tags:</span> {{ recommendation.extra_prompt }}
+              <span style="font-weight: 600;">{{ t('fi.extra_tags') }}</span> {{ recommendation.extra_prompt }}
             </div>
             <div style="display: flex; gap: 8px;">
-              <button class="btn btn-sm btn-primary" @click="applyRecommendation">Apply</button>
-              <button class="btn btn-sm btn-secondary" @click="recommendation = null">Dismiss</button>
+              <button class="btn btn-sm btn-primary" @click="applyRecommendation">{{ t('fi.btn_apply') }}</button>
+              <button class="btn btn-sm btn-secondary" @click="recommendation = null">{{ t('fi.btn_dismiss') }}</button>
             </div>
           </div>
 
           <div v-if="mode !== 'remove' && recommending" style="margin-top: 8px; display: flex; align-items: center; gap: 8px; color: var(--text-dim); font-size: 13px;">
             <span class="spinner" style="width: 14px; height: 14px; border-width: 2px;"></span>
-            Recommending preset...
+            {{ t('fi.recommending_preset') }}
           </div>
 
           <div v-if="!kidsModeActive" class="form-group">
-            <label class="form-label">Extra Negative</label>
-            <textarea class="form-textarea" v-model="extraNegativePrompt" rows="2" placeholder="Additional negative prompt..." :disabled="generatingImage"></textarea>
+            <label class="form-label">{{ t('fi.label_extra_negative') }}</label>
+            <textarea class="form-textarea" v-model="extraNegativePrompt" rows="2" :placeholder="t('fi.placeholder_extra_negative')" :disabled="generatingImage"></textarea>
           </div>
 
           <button class="btn btn-primary" :class="{ 'btn-generating': generatingImage }" style="width: 100%; justify-content: center; padding: 12px;" @click="generate" :disabled="generatingImage || !uploadedImage || ((mode === 'inpaint' || mode === 'remove') && !hasMask) || (mode !== 'remove' && (genMode === 'preset' ? !selectedPresetId : !selectedCompoundPresetId))">
             <span v-if="generatingImage" style="display: inline-flex; align-items: center; gap: 6px;">
               <span class="spinner" style="width: 14px; height: 14px; border-width: 2px;"></span>
-              {{ removeStage === 'analyzing' ? 'Analyzing context...' : generationStage === 'analyzing' ? 'Analyzing image...' : 'Generating image...' }}
+              {{ removeStage === 'analyzing' ? t('fi.analyzing_context') : generationStage === 'analyzing' ? t('fi.analyzing_image') : t('generate.generating_image') }}
             </span>
-            <span v-else>Generate</span>
+            <span v-else>{{ t('fi.btn_generate') }}</span>
           </button>
         </div>
       </div>
@@ -960,35 +961,35 @@ function onKeydown(e) {
         <div class="generate-image-area">
           <div v-if="generatingImage" style="text-align: center;">
             <span class="spinner" style="width: 32px; height: 32px; border-width: 3px;"></span>
-            <p style="margin-top: 12px; color: var(--text-dim);">{{ removeStage === 'analyzing' ? 'Analyzing context...' : generationStage === 'analyzing' ? 'Analyzing image...' : 'Generating image...' }}</p>
+            <p style="margin-top: 12px; color: var(--text-dim);">{{ removeStage === 'analyzing' ? t('fi.analyzing_context') : generationStage === 'analyzing' ? t('fi.analyzing_image') : t('generate.generating_image') }}</p>
           </div>
           <div v-else-if="generatedImage" style="width: 100%; padding: 12px;">
             <img :src="'data:image/png;base64,' + generatedImage" alt="Generated" class="img-fade-in" style="border-radius: var(--radius-sm); cursor: zoom-in;" @click="showViewer = true" />
             <div style="display: flex; gap: 8px; margin-top: 12px; justify-content: center;">
-              <button class="btn btn-secondary btn-sm" @click="downloadImage">Download</button>
-              <button class="btn btn-secondary btn-sm" @click="copyPrompt">Copy</button>
-              <button class="btn btn-secondary btn-sm" @click="generate">Regenerate</button>
+              <button class="btn btn-secondary btn-sm" @click="downloadImage">{{ t('fi.btn_download') }}</button>
+              <button class="btn btn-secondary btn-sm" @click="copyPrompt">{{ t('fi.btn_copy') }}</button>
+              <button class="btn btn-secondary btn-sm" @click="generate">{{ t('fi.btn_regenerate') }}</button>
             </div>
           </div>
           <div v-else class="generate-placeholder">
             <div class="generate-placeholder-icon">&#9744;</div>
-            <p>Generated image will appear here</p>
+            <p>{{ t('fi.placeholder_image') }}</p>
           </div>
         </div>
 
         <details v-if="genInfo" class="gen-info card">
-          <summary>Generation Info</summary>
+          <summary>{{ t('fi.generation_info') }}</summary>
           <pre style="white-space: pre-wrap; word-break: break-word; overflow-wrap: break-word;">{{ formattedGenInfo }}</pre>
         </details>
 
         <details v-if="effectivePrompt" class="gen-info card">
-          <summary>Effective Prompt</summary>
+          <summary>{{ t('fi.effective_prompt') }}</summary>
           <div style="margin-bottom: 8px;">
-            <div style="color: var(--text-dim); font-size: 11px; margin-bottom: 4px;">POSITIVE</div>
+            <div style="color: var(--text-dim); font-size: 11px; margin-bottom: 4px;">{{ t('generate.positive') }}</div>
             <div style="font-size: 12px; line-height: 1.5; word-break: break-word;">{{ effectivePrompt }}</div>
           </div>
           <div v-if="effectiveNegative" style="margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border);">
-            <div style="color: var(--text-dim); font-size: 11px; margin-bottom: 4px;">NEGATIVE</div>
+            <div style="color: var(--text-dim); font-size: 11px; margin-bottom: 4px;">{{ t('generate.negative') }}</div>
             <div style="font-size: 12px; line-height: 1.5; word-break: break-word;">{{ effectiveNegative }}</div>
           </div>
         </details>
@@ -999,13 +1000,13 @@ function onKeydown(e) {
 
     <div v-if="fullscreenMask" class="fs-mask-overlay">
       <div class="fs-mask-toolbar">
-        <span style="font-weight: 600;">Mask Editor</span>
+        <span style="font-weight: 600;">{{ t('fi.mask_editor') }}</span>
         <div style="display: flex; align-items: center; gap: 12px;">
           <label class="form-label" style="margin: 0; font-size: 12px;">Brush: {{ brushSize }}px</label>
           <input type="range" v-model.number="brushSize" min="5" max="100" step="1" style="width: 120px; accent-color: var(--accent);" />
-          <button class="btn btn-sm btn-secondary" @click="fsClearMask">Clear</button>
-          <button class="btn btn-sm btn-secondary" @click="fsUndoMask" :disabled="fsHistory.length === 0">Undo</button>
-          <button class="btn btn-sm btn-primary" @click="closeFullscreenMask">Done (Esc)</button>
+          <button class="btn btn-sm btn-secondary" @click="fsClearMask">{{ t('fi.btn_clear') }}</button>
+          <button class="btn btn-sm btn-secondary" @click="fsUndoMask" :disabled="fsHistory.length === 0">{{ t('fi.btn_undo') }}</button>
+          <button class="btn btn-sm btn-primary" @click="closeFullscreenMask">{{ t('fi.btn_done_esc') }}</button>
         </div>
       </div>
       <div class="fs-mask-canvas-wrap">

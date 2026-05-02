@@ -1,5 +1,6 @@
 <script setup>
 import { onMounted, onUnmounted } from 'vue'
+import { t } from '../i18n/index.js'
 
 const props = defineProps({
   imageBase64: { type: String, required: true },
@@ -20,7 +21,7 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown))
 
 <template>
   <div class="image-viewer-overlay" @click="$emit('close')">
-    <img :src="'data:image/png;base64,' + imageBase64" alt="Full size" @click.stop />
+    <img :src="'data:image/png;base64,' + imageBase64" :alt="t('viewer.full_size')" @click.stop />
     <button class="image-viewer-close" @click="$emit('close')">&times;</button>
     <button v-if="hasPrev" class="image-viewer-nav image-viewer-prev" @click.stop="$emit('prev')">&lsaquo;</button>
     <button v-if="hasNext" class="image-viewer-nav image-viewer-next" @click.stop="$emit('next')">&rsaquo;</button>

@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed } from 'vue'
+import { t } from '../i18n/index.js'
 
 const props = defineProps({
   mode: { type: String, required: true },
@@ -12,16 +13,16 @@ const confirmPin = ref('')
 const pinError = ref('')
 
 const isSetMode = computed(() => props.mode === 'set')
-const title = computed(() => isSetMode.value ? 'Set PIN' : 'Enter PIN')
+const title = computed(() => isSetMode.value ? t('pin.set_pin') : t('pin.enter_pin'))
 
 function handleSubmit() {
   pinError.value = ''
   if (!/^\d{4}$/.test(pin.value)) {
-    pinError.value = 'PIN must be exactly 4 digits'
+    pinError.value = t('pin.error_digits')
     return
   }
   if (isSetMode.value && pin.value !== confirmPin.value) {
-    pinError.value = 'PINs do not match'
+    pinError.value = t('pin.error_mismatch')
     return
   }
   emit('confirm', pin.value)
@@ -45,10 +46,10 @@ function handleCancel() {
 
       <div style="padding: 16px 0;">
         <div v-if="isSetMode" style="color: var(--text-dim); margin-bottom: 16px; font-size: 13px;">
-          Set a 4-digit PIN to protect Kids Mode settings. Your child will need this PIN to disable the safety filter.
+          {{ t('pin.set_description') }}
         </div>
         <div v-else style="color: var(--text-dim); margin-bottom: 16px; font-size: 13px;">
-          Enter the PIN to disable Kids Mode.
+          {{ t('pin.disable_description') }}
         </div>
 
         <div v-if="pinError || error" class="status status-error" style="margin-bottom: 12px;">
@@ -56,36 +57,36 @@ function handleCancel() {
         </div>
 
         <div class="form-group">
-          <label class="form-label">PIN</label>
+          <label class="form-label">{{ t('pin.label_pin') }}</label>
           <input
             class="form-input"
             type="password"
             inputmode="numeric"
             maxlength="4"
             v-model="pin"
-            placeholder="4 digits"
+            :placeholder="t('pin.placeholder_pin')"
             @keyup.enter="handleSubmit"
             autofocus
           />
         </div>
 
         <div v-if="isSetMode" class="form-group">
-          <label class="form-label">Confirm PIN</label>
+          <label class="form-label">{{ t('pin.label_confirm') }}</label>
           <input
             class="form-input"
             type="password"
             inputmode="numeric"
             maxlength="4"
             v-model="confirmPin"
-            placeholder="Re-enter PIN"
+            :placeholder="t('pin.placeholder_confirm')"
             @keyup.enter="handleSubmit"
           />
         </div>
       </div>
 
       <div style="display: flex; gap: 8px; justify-content: flex-end;">
-        <button class="btn btn-secondary" @click="handleCancel">Cancel</button>
-        <button class="btn btn-primary" @click="handleSubmit">Confirm</button>
+        <button class="btn btn-secondary" @click="handleCancel">{{ t('pin.btn_cancel') }}</button>
+        <button class="btn btn-primary" @click="handleSubmit">{{ t('pin.btn_confirm') }}</button>
       </div>
     </div>
   </div>

@@ -31,6 +31,7 @@ sd-ai/
 │   └── src/
 │       ├── components/        # Vue компоненты
 │       ├── api.js             # API-слой (маппинг Wails bindings)
+│       ├── i18n/              # Интернационализация (en.js + index.js)
 │       ├── assets/            # CSS
 │       └── wailsjs/           # Auto-generated Wails bindings
 ├── data/                      # SQLite DB
@@ -71,7 +72,7 @@ Backend → Frontend коммуникация через `runtime.EventsEmit(ctx
 ```
 ┌─────────────────────────────────────────┐
 │              frontend (Vue 3)            │
-│  components ← api.js ← wailsjs/bindings │
+│  components ← i18n/t() ← api.js ← wailsjs/bindings │
 └──────────────────┬──────────────────────┘
                    │ Wails RPC
 ┌──────────────────▼──────────────────────┐
