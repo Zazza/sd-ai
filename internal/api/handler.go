@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -15,12 +16,12 @@ import (
 
 type Handler struct {
 	presets *preset.DB
-	llm     *llm.Client
-	sd      *sd.Client
+	llm     llm.Service
+	sd      sd.Service
 	config  *config.Config
 }
 
-func NewHandler(presets *preset.DB, llmClient *llm.Client, sdClient *sd.Client, cfg *config.Config) *Handler {
+func NewHandler(presets *preset.DB, llmClient llm.Service, sdClient sd.Service, cfg *config.Config) *Handler {
 	return &Handler{presets: presets, llm: llmClient, sd: sdClient, config: cfg}
 }
 
@@ -305,6 +306,9 @@ func (h *Handler) getSettings(w http.ResponseWriter, r *http.Request) {
 		"sd_url":           h.config.SDUrl,
 		"llm_model":        h.config.LLMModel,
 		"sd_prompt_model":  h.config.SDPromptModel,
+		"vision_model":     h.config.VisionModel,
+		"llm_backend":      h.config.LLMBackend,
+		"llm_keep_alive":   "5m",
 	}
 	for k, v := range defaults {
 		if _, ok := settings[k]; !ok {
@@ -321,12 +325,31 @@ func (h *Handler) updateSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	allowed := map[string]bool{
-		"llm_url": true, "sd_url": true, "llm_model": true, "sd_prompt_model": true,
+	urlFields := map[string]bool{"llm_url": true, "sd_url": true, "rembg_url": true}
+	for k, v := range data {
+		if urlFields[k] && v != "" {
+			if _, err := url.Parse(v); err != nil {
+				writeError(w, http.StatusBadRequest, fmt.Sprintf("invalid %s: %s", k, err.Error()))
+				return
+			}
+		}
+	}
+
+	numericFields := map[string]bool{
+		"llm_num_ctx": true, "llm_num_gpu": true, "llm_max_tokens": true,
+		"preview_width": true, "preview_height": true,
+	}
+	for k, v := range data {
+		if numericFields[k] && v != "" {
+			if n, err := strconv.Atoi(v); err != nil || n < 0 {
+				writeError(w, http.StatusBadRequest, fmt.Sprintf("invalid %s: must be a non-negative integer", k))
+				return
+			}
+		}
 	}
 
 	for k, v := range data {
-		if !allowed[k] {
+		if !config.AllowedSettings[k] {
 			continue
 		}
 		if err := h.presets.SetSetting(k, v); err != nil {

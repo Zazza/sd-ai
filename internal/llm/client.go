@@ -2,6 +2,7 @@ package llm
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -18,6 +19,8 @@ type Client struct {
 	backendCfg BackendConfig
 	httpClient *http.Client
 }
+
+var _ Service = (*Client)(nil)
 
 func New(baseURL, backend string) *Client {
 	if backend == "" {
@@ -99,7 +102,13 @@ func (c *Client) Chat(model, systemPrompt, userMessage string, temperature float
 	url := c.baseURL + "/v1/chat/completions"
 	log.Printf("[LLM] POST %s model=%s max_tokens=%d temperature=%.1f prompt_len=%d", url, model, maxTokens, temperature, len(userMessage))
 
-	resp, err := c.httpClient.Post(url, "application/json", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, url, bytes.NewReader(body))
+	if err != nil {
+		return "", fmt.Errorf("create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		log.Printf("[LLM] request error: %v", err)
 		return "", fmt.Errorf("request failed: %w", err)
@@ -165,7 +174,13 @@ func (c *Client) ChatVision(model, systemPrompt, userText, imageBase64 string, t
 	url := c.baseURL + "/v1/chat/completions"
 	log.Printf("[LLM Vision] POST %s model=%s", url, model)
 
-	resp, err := c.httpClient.Post(url, "application/json", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, url, bytes.NewReader(body))
+	if err != nil {
+		return "", fmt.Errorf("create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("request failed: %w", err)
 	}
@@ -348,7 +363,13 @@ func (c *Client) ChatWithMessages(model string, messages []Message, temperature 
 	url := c.baseURL + "/v1/chat/completions"
 	log.Printf("[LLM] POST %s model=%s msgs=%d", url, model, len(messages))
 
-	resp, err := c.httpClient.Post(url, "application/json", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, url, bytes.NewReader(body))
+	if err != nil {
+		return "", fmt.Errorf("create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("request failed: %w", err)
 	}
@@ -382,8 +403,13 @@ func CleanTags(s string) string {
 }
 
 func (c *Client) HealthCheck() error {
-	client := &http.Client{Timeout: 3 * time.Second}
-	resp, err := client.Get(c.baseURL + "/v1/models")
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/v1/models", nil)
+	if err != nil {
+		return fmt.Errorf("health check failed: %w", err)
+	}
+	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("health check failed: %w", err)
 	}
@@ -419,7 +445,11 @@ func (c *Client) GetModels() ([]LLMModel, error) {
 }
 
 func (c *Client) getOpenAIModels() ([]LLMModel, error) {
-	resp, err := c.httpClient.Get(c.baseURL + "/v1/models")
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, c.baseURL+"/v1/models", nil)
+	if err != nil {
+		return nil, fmt.Errorf("get models: %w", err)
+	}
+	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("get models: %w", err)
 	}

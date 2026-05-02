@@ -2,6 +2,7 @@ package sd
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -24,6 +25,8 @@ type Client struct {
 	retryDelay       time.Duration
 }
 
+var _ Service = (*Client)(nil)
+
 func New(baseURL string) *Client {
 	return &Client{
 		baseURL: baseURL,
@@ -36,8 +39,13 @@ func New(baseURL string) *Client {
 }
 
 func (c *Client) HealthCheck() error {
-	client := &http.Client{Timeout: 3 * time.Second}
-	resp, err := client.Get(c.baseURL + "/sdapi/v1/sd-models")
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/sdapi/v1/sd-models", nil)
+	if err != nil {
+		return fmt.Errorf("health check failed: %w", err)
+	}
+	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("health check failed: %w", err)
 	}
@@ -49,7 +57,11 @@ func (c *Client) HealthCheck() error {
 }
 
 func (c *Client) GetOptions() (map[string]interface{}, error) {
-	resp, err := c.httpClient.Get(c.baseURL + "/sdapi/v1/options")
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, c.baseURL+"/sdapi/v1/options", nil)
+	if err != nil {
+		return nil, fmt.Errorf("get options: %w", err)
+	}
+	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("get options: %w", err)
 	}
@@ -126,7 +138,12 @@ type VAE struct {
 
 func (c *Client) SetModel(modelName string) error {
 	body, _ := json.Marshal(map[string]string{"sd_model_checkpoint": modelName})
-	resp, err := c.httpClient.Post(c.baseURL+"/sdapi/v1/options", "application/json", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, c.baseURL+"/sdapi/v1/options", bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("set model: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("set model: %w", err)
 	}
@@ -185,7 +202,12 @@ func (c *Client) doWithRetry(fn func() (*http.Response, error)) (*http.Response,
 
 func (c *Client) doPost(url string, body []byte) (*Txt2ImgResponse, error) {
 	resp, err := c.doWithRetry(func() (*http.Response, error) {
-		return c.httpClient.Post(url, "application/json", bytes.NewReader(body))
+		req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, url, bytes.NewReader(body))
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Content-Type", "application/json")
+		return c.httpClient.Do(req)
 	})
 	if resp != nil {
 		defer resp.Body.Close()
@@ -229,7 +251,11 @@ func (c *Client) Txt2Img(req Txt2ImgRequest) (*Txt2ImgResponse, error) {
 }
 
 func (c *Client) GetModels() ([]SDModel, error) {
-	resp, err := c.httpClient.Get(c.baseURL + "/sdapi/v1/sd-models")
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, c.baseURL+"/sdapi/v1/sd-models", nil)
+	if err != nil {
+		return nil, fmt.Errorf("get models: %w", err)
+	}
+	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("get models: %w", err)
 	}
@@ -243,7 +269,11 @@ func (c *Client) GetModels() ([]SDModel, error) {
 }
 
 func (c *Client) GetSamplers() ([]Sampler, error) {
-	resp, err := c.httpClient.Get(c.baseURL + "/sdapi/v1/samplers")
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, c.baseURL+"/sdapi/v1/samplers", nil)
+	if err != nil {
+		return nil, fmt.Errorf("get samplers: %w", err)
+	}
+	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("get samplers: %w", err)
 	}
@@ -257,7 +287,11 @@ func (c *Client) GetSamplers() ([]Sampler, error) {
 }
 
 func (c *Client) GetSchedulers() ([]Scheduler, error) {
-	resp, err := c.httpClient.Get(c.baseURL + "/sdapi/v1/schedulers")
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, c.baseURL+"/sdapi/v1/schedulers", nil)
+	if err != nil {
+		return nil, fmt.Errorf("get schedulers: %w", err)
+	}
+	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("get schedulers: %w", err)
 	}
@@ -271,7 +305,11 @@ func (c *Client) GetSchedulers() ([]Scheduler, error) {
 }
 
 func (c *Client) GetUpscalers() ([]Upscaler, error) {
-	resp, err := c.httpClient.Get(c.baseURL + "/sdapi/v1/upscalers")
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, c.baseURL+"/sdapi/v1/upscalers", nil)
+	if err != nil {
+		return nil, fmt.Errorf("get upscalers: %w", err)
+	}
+	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("get upscalers: %w", err)
 	}
@@ -285,7 +323,11 @@ func (c *Client) GetUpscalers() ([]Upscaler, error) {
 }
 
 func (c *Client) GetVAEs() ([]VAE, error) {
-	resp, err := c.httpClient.Get(c.baseURL + "/sdapi/v1/sd-vae")
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, c.baseURL+"/sdapi/v1/sd-vae", nil)
+	if err != nil {
+		return nil, fmt.Errorf("get vae: %w", err)
+	}
+	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("get vae: %w", err)
 	}
@@ -332,7 +374,12 @@ func (c *Client) Img2Img(req Img2ImgRequest) (*Txt2ImgResponse, error) {
 
 func (c *Client) SetVAE(vaeName string) error {
 	body, _ := json.Marshal(map[string]string{"sd_vae": vaeName})
-	resp, err := c.httpClient.Post(c.baseURL+"/sdapi/v1/options", "application/json", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, c.baseURL+"/sdapi/v1/options", bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("set vae: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("set vae: %w", err)
 	}
@@ -346,7 +393,11 @@ type LoRA struct {
 }
 
 func (c *Client) GetLoRAs() ([]LoRA, error) {
-	resp, err := c.httpClient.Get(c.baseURL + "/sdapi/v1/loras")
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, c.baseURL+"/sdapi/v1/loras", nil)
+	if err != nil {
+		return nil, fmt.Errorf("get loras: %w", err)
+	}
+	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("get loras: %w", err)
 	}

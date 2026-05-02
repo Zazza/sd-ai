@@ -17,6 +17,7 @@ import (
 	"image/png"
 	"io"
 	"math"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -42,8 +43,8 @@ import (
 type App struct {
 	ctx          context.Context
 	presets      *preset.DB
-	llm          *llm.Client
-	sd           *sd.Client
+	llm          llm.Service
+	sd           sd.Service
 	rembgClient  *rembg.Client
 	log          *logger.Logger
 	config       *config.Config
@@ -52,7 +53,7 @@ type App struct {
 	batchRunning bool
 }
 
-func NewApp(presets *preset.DB, llmClient *llm.Client, sdClient *sd.Client, cfg *config.Config) *App {
+func NewApp(presets *preset.DB, llmClient llm.Service, sdClient sd.Service, cfg *config.Config) *App {
 	return &App{
 		presets:     presets,
 		llm:         llmClient,
@@ -1823,38 +1824,29 @@ func (a *App) GetSettings() (map[string]string, error) {
 }
 
 func (a *App) UpdateSettings(data map[string]string) error {
-	allowed := map[string]bool{
-		"llm_url": true, "sd_url": true, "llm_model": true, "sd_prompt_model": true,
-		"vision_model": true,
-		"llm_backend": true, "llm_keep_alive": true, "llm_num_ctx": true, "llm_num_gpu": true, "llm_max_tokens": true,
-		"llm_generate_model": true, "llm_analyze_model": true,
-		"llm_generate_temperature": true, "llm_generate_num_ctx": true, "llm_generate_num_predict": true,
-		"llm_generate_top_p": true, "llm_generate_num_thread": true,
-		"llm_analyze_temperature": true, "llm_analyze_num_ctx": true, "llm_analyze_num_predict": true,
-		"llm_analyze_top_p": true, "llm_analyze_num_thread": true,
-		"kids_mode": true, "kids_pin_hash": true, "kids_pin_salt": true,
-		"kids_cat_violence": true, "kids_cat_horror": true, "kids_cat_weapons": true,
-		"kids_cat_substances": true, "kids_cat_mature": true,
-		"rembg_url": true,
-		"preview_mode": true, "preview_width": true, "preview_height": true,
-		"gen_preset_id": true, "gen_action_pose": true, "gen_characters": true,
-		"gen_clothing_details": true,
-		"gen_environment": true, "gen_lighting": true, "gen_negative": true,
-		"gen_extra_prompt": true, "gen_extra_negative": true,
-		"gen_description": true, "gen_type_id": true,
-		"gen_mode": true, "gen_compound_preset_id": true,
-		"batch_preset_id": true, "batch_compound_preset_id": true, "batch_mode": true,
-		"batch_prompt": true, "batch_negative": true, "batch_count": true, "batch_output_folder": true,
-		"test_mode": true, "test_prompt": true, "test_negative": true,
-		"test_sampler": true, "test_schedule_type": true, "test_steps": true,
-		"test_cfg_scale": true, "test_width": true, "test_height": true,
-		"fi_mode": true, "fi_preset_id": true, "fi_compound_preset_id": true,
-		"fi_gen_mode": true, "fi_denoising": true, "fi_extra_negative": true, "fi_analyze_mode": true,
-		"theme": true, "file_browser_path": true,
+	urlFields := map[string]bool{"llm_url": true, "sd_url": true, "rembg_url": true}
+	for k, v := range data {
+		if urlFields[k] && v != "" {
+			if _, err := url.Parse(v); err != nil {
+				return fmt.Errorf("invalid %s: %w", k, err)
+			}
+		}
+	}
+
+	numericFields := map[string]bool{
+		"llm_num_ctx": true, "llm_num_gpu": true, "llm_max_tokens": true,
+		"preview_width": true, "preview_height": true,
+	}
+	for k, v := range data {
+		if numericFields[k] && v != "" {
+			if n, err := strconv.Atoi(v); err != nil || n < 0 {
+				return fmt.Errorf("invalid %s: must be a non-negative integer", k)
+			}
+		}
 	}
 
 	for k, v := range data {
-		if !allowed[k] {
+		if !config.AllowedSettings[k] {
 			continue
 		}
 		if err := a.presets.SetSetting(k, v); err != nil {
@@ -1895,7 +1887,7 @@ func (a *App) UpdateSettings(data map[string]string) error {
 
 	var changed []string
 	for k := range data {
-		if allowed[k] {
+		if config.AllowedSettings[k] {
 			changed = append(changed, k)
 		}
 	}

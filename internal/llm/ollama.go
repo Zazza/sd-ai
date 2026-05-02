@@ -1,8 +1,10 @@
 package llm
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 )
 
 type ollamaTagsResponse struct {
@@ -12,7 +14,11 @@ type ollamaTagsResponse struct {
 }
 
 func (c *Client) getOllamaModels() ([]LLMModel, error) {
-	resp, err := c.httpClient.Get(c.baseURL + "/api/tags")
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, c.baseURL+"/api/tags", nil)
+	if err != nil {
+		return nil, fmt.Errorf("get ollama models: %w", err)
+	}
+	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("get ollama models: %w", err)
 	}
