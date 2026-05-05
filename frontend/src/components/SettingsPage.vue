@@ -208,8 +208,8 @@ async function saveConnection() {
       sd_url: connectionForm.sd_url,
       llm_backend: connectionForm.llm_backend,
       llm_keep_alive: String(connectionForm.llm_keep_alive),
-      llm_num_gpu: String(connectionForm.llm_num_gpu),
-      llm_max_tokens: String(connectionForm.llm_max_tokens),
+      llm_num_gpu: String(parseInt(connectionForm.llm_num_gpu) || 0),
+      llm_max_tokens: String(parseInt(connectionForm.llm_max_tokens) || 256),
       llm_generate_model: generateModel.value,
       llm_analyze_model: analyzeModel.value,
     })

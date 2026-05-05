@@ -303,8 +303,9 @@ func (a *App) filterKidsOutput(text string) string {
 // --- Service Status ---
 
 type ServiceInfo struct {
-	Available bool   `json:"available"`
-	Model     string `json:"model"`
+	Available   bool   `json:"available"`
+	Model       string `json:"model"`
+	VisionModel string `json:"vision_model,omitempty"`
 }
 
 type ServiceStatus struct {
@@ -326,7 +327,16 @@ func (a *App) CheckServices() ServiceStatus {
 			a.log.Warn("LLM unavailable: %s", err)
 		} else {
 			info.Available = true
-			info.Model = a.config.LLMModel
+			if v, err := a.presets.GetSetting("llm_generate_model"); err == nil && v != "" {
+				info.Model = v
+			} else {
+				info.Model = a.config.SDPromptModel
+			}
+			if v, err := a.presets.GetSetting("llm_analyze_model"); err == nil && v != "" {
+				info.VisionModel = v
+			} else {
+				info.VisionModel = a.config.VisionModel
+			}
 		}
 		mu.Lock()
 		status.LLM = info
@@ -1838,9 +1848,11 @@ func (a *App) UpdateSettings(data map[string]string) error {
 		"preview_width": true, "preview_height": true,
 	}
 	for k, v := range data {
-		if numericFields[k] && v != "" {
-			if n, err := strconv.Atoi(v); err != nil || n < 0 {
-				return fmt.Errorf("invalid %s: must be a non-negative integer", k)
+		if numericFields[k] {
+			if v == "" {
+				data[k] = "0"
+			} else if n, err := strconv.Atoi(v); err != nil || n < 0 {
+				data[k] = "0"
 			}
 		}
 	}

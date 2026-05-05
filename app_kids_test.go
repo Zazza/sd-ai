@@ -140,8 +140,7 @@ func TestCheckServices_LLMModelField(t *testing.T) {
 
 	status := app.CheckServices()
 	assert.True(t, status.LLM.Available)
-	assert.Equal(t, "my-llm-model", status.LLM.Model, "LLM model should use config.LLMModel, not SDPromptModel")
-	assert.NotEqual(t, "my-sd-model", status.LLM.Model)
+	assert.Equal(t, "my-sd-model", status.LLM.Model, "LLM model should use SDPromptModel from config as fallback")
 	assert.True(t, status.SD.Available)
 	assert.Equal(t, "sd-1.5", status.SD.Model)
 }
@@ -162,14 +161,17 @@ func TestUpdateSettings_ValidURL(t *testing.T) {
 func TestUpdateSettings_InvalidNumeric(t *testing.T) {
 	app, _ := newTestApp(t)
 	err := app.UpdateSettings(map[string]string{"llm_num_ctx": "abc"})
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "invalid llm_num_ctx")
+	assert.NoError(t, err)
+	v, _ := app.presets.GetSetting("llm_num_ctx")
+	assert.Equal(t, "0", v)
 }
 
 func TestUpdateSettings_NegativeNumeric(t *testing.T) {
 	app, _ := newTestApp(t)
 	err := app.UpdateSettings(map[string]string{"llm_max_tokens": "-1"})
-	assert.Error(t, err)
+	assert.NoError(t, err)
+	v, _ := app.presets.GetSetting("llm_max_tokens")
+	assert.Equal(t, "0", v)
 }
 
 func TestUpdateSettings_ValidNumeric(t *testing.T) {

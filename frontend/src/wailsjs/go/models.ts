@@ -531,6 +531,7 @@ export namespace main {
 	export class ServiceInfo {
 	    available: boolean;
 	    model: string;
+	    vision_model?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new ServiceInfo(source);
@@ -540,6 +541,7 @@ export namespace main {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.available = source["available"];
 	        this.model = source["model"];
+	        this.vision_model = source["vision_model"];
 	    }
 	}
 	export class ServiceStatus {

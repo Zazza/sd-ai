@@ -41,7 +41,7 @@ func New(baseURL string) *Client {
 func (c *Client) HealthCheck() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/sdapi/v1/sd-models", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/sdapi/v1/options", nil)
 	if err != nil {
 		return fmt.Errorf("health check failed: %w", err)
 	}

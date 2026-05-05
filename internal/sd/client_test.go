@@ -624,11 +624,11 @@ func TestImg2Img_SendsCorrectRequestBody(t *testing.T) {
 
 func TestHealthCheck_Success(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/sdapi/v1/sd-models" {
-			t.Errorf("path = %s, want /sdapi/v1/sd-models", r.URL.Path)
+		if r.URL.Path != "/sdapi/v1/options" {
+			t.Errorf("path = %s, want /sdapi/v1/options", r.URL.Path)
 		}
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode([]SDModel{})
+		json.NewEncoder(w).Encode(map[string]interface{}{"sd_model_checkpoint": "test"})
 	}))
 	defer server.Close()
 

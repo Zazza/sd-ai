@@ -30,7 +30,7 @@ let confirmDeleteTimer = null
 let observer = null
 
 const services = reactive({
-  llm: { available: false, label: 'LLM', model: '', tab: 'connection' },
+  llm: { available: false, label: 'LLM', model: '', visionModel: '', tab: 'connection' },
   sd: { available: false, label: 'SD', model: '', tab: 'connection' },
   rembg: { available: false, label: 'Rembg', tab: 'connection' },
 })
@@ -117,6 +117,7 @@ async function checkServices() {
     const status = await api.checkServices()
     services.llm.available = status.llm?.available || false
     services.llm.model = status.llm?.model || ''
+    services.llm.visionModel = status.llm?.vision_model || ''
     services.sd.available = status.sd?.available || false
     services.sd.model = status.sd?.model || ''
   } catch {
@@ -333,7 +334,10 @@ onMounted(async () => {
               :class="{ online: svc.available, offline: !svc.available }"
               @click="goToService(key)" :title="'Go to ' + svc.label + ' settings'">
           <span class="dot-indicator" :class="{ online: svc.available }"></span>
-          {{ svc.label }}{{ svc.model ? ': ' + svc.model : '' }}
+          {{ svc.label }}<template v-if="key === 'llm' && (svc.model || svc.visionModel)">
+            <template v-if="svc.model"> Gen:{{ svc.model }}</template><template v-if="svc.visionModel"> Vis:{{ svc.visionModel }}</template>
+          </template>
+          <template v-else-if="svc.model">: {{ svc.model }}</template>
         </span>
       </div>
       <div class="footer-actions">
