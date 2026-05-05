@@ -2,6 +2,8 @@
 
 **AI-powered desktop app for image generation with Stable Diffusion + LLM.**
 
+[Русский](README-ru.md) | [Changelog](CHANGELOG.md)
+
 SD Studio bridges your local Stable Diffusion and LLM into a single workflow: describe what you want in plain language, get a properly crafted SD prompt, and generate — no manual tag wrangling. Built for power users who want full control over their local pipeline.
 
 > **Note:** SD Studio connects to your local [Stable Diffusion WebUI](https://github.com/AUTOMATIC1111/stable-diffusion-webui) and an [OpenAI-compatible LLM](https://ollama.com). Both run on your hardware — no cloud, no subscriptions, no data leaving your machine.
@@ -16,6 +18,17 @@ SD Studio bridges your local Stable Diffusion and LLM into a single workflow: de
 - **Pipelines** — chain multiple generation steps (txt2img → img2img → inpaint) into a single workflow
 - **Session Management** — organize work into sessions with full generation history
 - **Kids Mode** — PIN-protected content filtering with category controls
+
+## Screenshots
+
+<p align="center">
+  <img src="docs/screenshots/main-generation.png" width="45%" alt="Text-to-Image generation">
+  <img src="docs/screenshots/from-image-inpaint.png" width="45%" alt="Inpainting with mask editor">
+</p>
+<p align="center">
+  <img src="docs/screenshots/scene-editor.png" width="45%" alt="Multi-scene composition">
+  <img src="docs/screenshots/batch-generation.png" width="45%" alt="Batch generation">
+</p>
 
 ## Features
 

@@ -25,6 +25,7 @@ import {
   CreateSession, ListSessions, SwitchSession, RenameSession, DeleteSession,
   GetSessionItems, GetActiveSessionItem, SetActiveSessionItem, DeleteSessionItem,
   ClearSession, GetSessionImage, GetSessionThumb, HasSessionItems, ConfirmClose,
+  InterruptGeneration,
 } from './wailsjs/go/main/App.js'
 
 export const api = {
@@ -126,4 +127,5 @@ export const api = {
   getSessionThumb: (id) => GetSessionThumb(id),
   hasSessionItems: () => HasSessionItems(),
   confirmClose: (action) => ConfirmClose(action),
+  interruptGeneration: () => InterruptGeneration(),
 }

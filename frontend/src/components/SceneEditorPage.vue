@@ -3,6 +3,7 @@ import { ref, computed, onMounted, onUnmounted, reactive } from 'vue'
 import { EventsOn, EventsOff } from '../wailsjs/runtime/runtime'
 import { api } from '../api.js'
 import { t } from '../i18n/index.js'
+import { useGenerationProgress } from '../composables/useGenerationProgress.js'
 
 const presets = ref([])
 const selectedPresetId = ref(null)
@@ -10,6 +11,7 @@ const description = ref('')
 const negativePrompt = ref('')
 const scene = ref(null)
 const generating = ref(false)
+const { sdProgress, preview, interrupt: interruptGeneration, reset: resetProgress } = useGenerationProgress()
 const decomposing = ref(false)
 const progress = ref(null)
 const error = ref('')
@@ -142,6 +144,7 @@ async function generate() {
   resultImage.value = ''
   batchResults.value = []
   batchCurrent.value = 0
+  resetProgress()
 
   EventsOn('multipass:progress', (p) => {
     progress.value = p
@@ -217,7 +220,7 @@ onMounted(() => {
   <div class="scene-editor">
     <h2>{{ t('scene.title') }}</h2>
 
-    <div v-if="error" class="error">{{ error }}</div>
+    <div v-if="error" class="status" :class="error === 'interrupted' ? 'status-warning' : 'status-error'">{{ error }}</div>
 
     <!-- Step 1: Description + Preset -->
     <div class="section" v-if="!scene">
@@ -344,9 +347,19 @@ onMounted(() => {
 
       <div v-if="generating && progress" class="progress-info">
         <div class="progress-bar">
-          <div class="progress-fill" :style="{ width: progressWidth }"></div>
+          <div class="progress-fill" :style="{ width: progress ? ((progress.step === 'done' ? 1 : (batchCurrent / batchCount || 0)) * 100) + '%' : '0%' }"></div>
         </div>
         <span>{{ progressLabel() }}</span>
+        <div v-if="sdProgress && sdProgress.progress > 0" style="margin-top: 8px;">
+          <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+            <span style="color: var(--text-dim); font-size: 12px;">SD: {{ Math.round(sdProgress.progress * 100) }}%</span>
+            <span style="color: var(--text-dim); font-size: 12px;">{{ t('progress.sd_step', { current: Math.round(sdProgress.progress * sdProgress.steps), total: sdProgress.steps }) }}</span>
+          </div>
+          <div style="background: var(--surface-2); border-radius: 4px; overflow: hidden; height: 4px;">
+            <div :style="{ width: (sdProgress.progress * 100) + '%', background: 'var(--accent)', height: '100%', transition: 'width 0.3s' }"></div>
+          </div>
+          <button class="btn btn-sm btn-secondary" @click="interruptGeneration" style="margin-top: 6px; font-size: 11px;">{{ t('progress.btn_interrupt') }}</button>
+        </div>
       </div>
     </div>
 

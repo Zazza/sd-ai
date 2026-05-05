@@ -419,6 +419,12 @@ input, textarea, select {
   border: 1px solid rgba(224, 85, 85, 0.3);
 }
 
+.status-warning {
+  background: rgba(255, 167, 38, 0.12);
+  color: #ffa726;
+  border: 1px solid rgba(255, 167, 38, 0.3);
+}
+
 .status-success {
   background: rgba(76, 175, 80, 0.12);
   color: var(--success);

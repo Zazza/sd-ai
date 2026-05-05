@@ -1,3 +1,5 @@
+[English](api-reference-en.md) | [Русский](api-reference-ru.md)
+
 # SD Studio — API Reference (Wails Bindings)
 
 ## Общие типы

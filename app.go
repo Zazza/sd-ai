@@ -51,6 +51,9 @@ type App struct {
 	dataDir      string
 	batchMu      sync.Mutex
 	batchRunning bool
+	sdPollingMu     sync.Mutex
+	sdPollingCancel context.CancelFunc
+	sdInterrupted   bool
 }
 
 func NewApp(presets *preset.DB, llmClient llm.Service, sdClient sd.Service, cfg *config.Config) *App {
@@ -68,6 +71,79 @@ func NewApp(presets *preset.DB, llmClient llm.Service, sdClient sd.Service, cfg 
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 	a.log.SetContext(ctx)
+}
+
+type SDProgressEvent struct {
+	Progress    float64 `json:"progress"`
+	ETARelative float64 `json:"eta_relative"`
+	Job         string  `json:"job"`
+	JobCount    int     `json:"job_count"`
+	JobNo       int     `json:"job_no"`
+	Steps       int     `json:"steps"`
+	SamplerName string  `json:"sampler_name"`
+	Preview     string  `json:"preview,omitempty"`
+}
+
+func (a *App) startSDPolling() {
+	a.sdPollingMu.Lock()
+	defer a.sdPollingMu.Unlock()
+	a.sdInterrupted = false
+	if a.sdPollingCancel != nil {
+		return
+	}
+	ctx, cancel := context.WithCancel(a.ctx)
+	a.sdPollingCancel = cancel
+	go func() {
+		ticker := time.NewTicker(500 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				prog, err := a.sd.GetProgress()
+				if err != nil {
+					continue
+				}
+				runtime.EventsEmit(a.ctx, "sd:progress", SDProgressEvent{
+					Progress:    prog.Progress,
+					ETARelative: prog.ETARelative,
+					Job:         prog.State.Job,
+					JobCount:    prog.State.JobCount,
+					JobNo:       prog.State.JobNo,
+					Steps:       prog.State.Sampling.Steps,
+					SamplerName: prog.State.Sampling.SamplerName,
+					Preview:     prog.CurrentImage,
+				})
+			}
+		}
+	}()
+}
+
+func (a *App) stopSDPolling() {
+	a.sdPollingMu.Lock()
+	defer a.sdPollingMu.Unlock()
+	if a.sdPollingCancel != nil {
+		a.sdPollingCancel()
+		a.sdPollingCancel = nil
+	}
+}
+
+func (a *App) InterruptGeneration() error {
+	a.sdPollingMu.Lock()
+	a.sdInterrupted = true
+	a.sdPollingMu.Unlock()
+	return a.sd.Interrupt()
+}
+
+func (a *App) checkSDInterrupted() error {
+	a.sdPollingMu.Lock()
+	interrupted := a.sdInterrupted
+	a.sdPollingMu.Unlock()
+	if interrupted {
+		return fmt.Errorf("interrupted")
+	}
+	return nil
 }
 
 const (
@@ -539,10 +615,13 @@ RESPONSE LENGTH: your response is limited to ~%d tokens. You MUST fit within thi
 	}
 	userMessage := strings.Join(userParts, "\n\n")
 
+	runtime.EventsEmit(a.ctx, "llm:status", map[string]string{"status": "thinking"})
 	raw, err := a.llm.GenerateSDPrompt(systemPrompt, userMessage, p.PresetType, generateModel, maxTokens)
 	if err != nil {
+		runtime.EventsEmit(a.ctx, "llm:status", map[string]string{"status": "done"})
 		return nil, err
 	}
+	runtime.EventsEmit(a.ctx, "llm:status", map[string]string{"status": "done"})
 
 	var result GenerateSDPromptResult
 	jsonRaw := extractJSON(raw)
@@ -643,10 +722,13 @@ OUTPUT — valid JSON only, no markdown:
 		}
 	}
 
+	runtime.EventsEmit(a.ctx, "llm:status", map[string]string{"status": "thinking"})
 	raw, err := a.llm.GenerateSDPrompt(systemPrompt, userMessage, "", generateModel, maxTokens)
 	if err != nil {
+		runtime.EventsEmit(a.ctx, "llm:status", map[string]string{"status": "done"})
 		return nil, err
 	}
+	runtime.EventsEmit(a.ctx, "llm:status", map[string]string{"status": "done"})
 
 	var result RecommendPresetResult
 	if err := json.Unmarshal([]byte(extractJSON(raw)), &result); err != nil {
@@ -699,10 +781,13 @@ func (a *App) AnalyzeImage(imageBase64 string) (string, error) {
 		if prompt == "" {
 			prompt = config.DefaultAnalyzePrompt
 		}
+		runtime.EventsEmit(a.ctx, "llm:status", map[string]string{"status": "thinking"})
 		tags, err := a.llm.AnalyzeImage(model, systemPrompt+"\n\n"+prompt, imageBase64, maxTokens)
 		if err != nil {
+			runtime.EventsEmit(a.ctx, "llm:status", map[string]string{"status": "done"})
 			return "", err
 		}
+		runtime.EventsEmit(a.ctx, "llm:status", map[string]string{"status": "done"})
 		tags = a.filterKidsOutput(tags)
 		return tags, nil
 	}
@@ -717,8 +802,10 @@ func (a *App) AnalyzeImage(imageBase64 string) (string, error) {
 	}
 
 	for i := 0; i < len(chainPrompts); i++ {
+		runtime.EventsEmit(a.ctx, "llm:status", map[string]string{"status": "thinking"})
 		resp, err := a.llm.ChatWithMessages(model, messages, 0.4, maxTokens)
 		if err != nil {
+			runtime.EventsEmit(a.ctx, "llm:status", map[string]string{"status": "done"})
 			if i == 0 {
 				return "", err
 			}
@@ -726,6 +813,7 @@ func (a *App) AnalyzeImage(imageBase64 string) (string, error) {
 		}
 
 		messages = append(messages, llm.Message{Role: "assistant", Content: resp})
+		runtime.EventsEmit(a.ctx, "llm:status", map[string]string{"status": "done"})
 
 		if i+1 < len(chainPrompts) {
 			messages = append(messages, llm.Message{
@@ -848,6 +936,8 @@ type GenerateImageResult struct {
 
 func (a *App) GenerateImage(params GenerateImageParams) (*GenerateImageResult, error) {
 	a.log.UserAction("Generate image (preset_id=%d)", params.PresetID)
+	a.startSDPolling()
+	defer a.stopSDPolling()
 	p, err := a.presets.Get(params.PresetID)
 	if err != nil {
 		a.log.Error("Generate image: preset not found: %s", err)
@@ -973,10 +1063,16 @@ func (a *App) GenerateImage(params GenerateImageParams) (*GenerateImageResult, e
 		DoNotSaveGrid:          true,
 	})
 	if err != nil {
+		if ierr := a.checkSDInterrupted(); ierr != nil {
+			return nil, ierr
+		}
 		return nil, err
 	}
 
 	if len(result.Images) == 0 {
+		if ierr := a.checkSDInterrupted(); ierr != nil {
+			return nil, ierr
+		}
 		reason := "empty response"
 		if result.Error != "" {
 			reason = result.Error
@@ -1026,6 +1122,8 @@ type BatchProgress struct {
 }
 
 func (a *App) BatchGenerate(params BatchGenerateParams) error {
+	a.startSDPolling()
+	defer a.stopSDPolling()
 	if params.Count <= 0 || params.Count > 100 {
 		return fmt.Errorf("count must be between 1 and 100")
 	}
@@ -1156,6 +1254,14 @@ func (a *App) BatchGenerate(params BatchGenerateParams) error {
 			DoNotSaveGrid:          true,
 		})
 		if err != nil {
+			if ierr := a.checkSDInterrupted(); ierr != nil {
+				runtime.EventsEmit(a.ctx, "batch:progress", BatchProgress{
+					Current: i + 1,
+					Total:   params.Count,
+					Status:  "interrupted",
+				})
+				return ierr
+			}
 			runtime.EventsEmit(a.ctx, "batch:progress", BatchProgress{
 				Current: i + 1,
 				Total:   params.Count,
@@ -1164,6 +1270,14 @@ func (a *App) BatchGenerate(params BatchGenerateParams) error {
 			return fmt.Errorf("image %d/%d failed: %w", i+1, params.Count, err)
 		}
 		if len(result.Images) == 0 {
+			if ierr := a.checkSDInterrupted(); ierr != nil {
+				runtime.EventsEmit(a.ctx, "batch:progress", BatchProgress{
+					Current: i + 1,
+					Total:   params.Count,
+					Status:  "interrupted",
+				})
+				return ierr
+			}
 			runtime.EventsEmit(a.ctx, "batch:progress", BatchProgress{
 				Current: i + 1,
 				Total:   params.Count,
@@ -1230,6 +1344,8 @@ type TestGenerateResultItem struct {
 }
 
 func (a *App) TestGenerate(params TestGenerateParams) ([]TestGenerateResultItem, error) {
+	a.startSDPolling()
+	defer a.stopSDPolling()
 	if params.Mode != "presets" && params.Mode != "models" {
 		return nil, fmt.Errorf("mode must be 'presets' or 'models'")
 	}
@@ -1408,6 +1524,9 @@ func (a *App) TestGenerate(params TestGenerateParams) ([]TestGenerateResultItem,
 			continue
 		}
 		if len(result.Images) == 0 {
+			if ierr := a.checkSDInterrupted(); ierr != nil {
+				return nil, ierr
+			}
 			item.Error = "no image returned"
 			results = append(results, item)
 			continue
@@ -1478,6 +1597,8 @@ func (a *App) GetPresetForBatch(presetID int64, description string) (*GenerateSD
 }
 
 func (a *App) UpscaleImage(params UpscaleImageParams) (*GenerateImageResult, error) {
+	a.startSDPolling()
+	defer a.stopSDPolling()
 	if params.ImageBase64 == "" {
 		return nil, fmt.Errorf("image is required")
 	}
@@ -1601,6 +1722,9 @@ func (a *App) UpscaleImage(params UpscaleImageParams) (*GenerateImageResult, err
 	}
 
 	if len(result.Images) == 0 {
+		if ierr := a.checkSDInterrupted(); ierr != nil {
+			return nil, ierr
+		}
 		return nil, fmt.Errorf("no image generated during upscale")
 	}
 
@@ -1671,6 +1795,8 @@ type UpscalePreviewParams struct {
 }
 
 func (a *App) UpscalePreview(params UpscalePreviewParams) (*GenerateImageResult, error) {
+	a.startSDPolling()
+	defer a.stopSDPolling()
 	p, err := a.presets.Get(params.PresetID)
 	if err != nil {
 		return nil, err
@@ -1742,6 +1868,9 @@ func (a *App) UpscalePreview(params UpscalePreviewParams) (*GenerateImageResult,
 	}
 
 	if len(result.Images) == 0 {
+		if ierr := a.checkSDInterrupted(); ierr != nil {
+			return nil, ierr
+		}
 		return nil, fmt.Errorf("no image generated during upscale")
 	}
 
@@ -2672,6 +2801,8 @@ type GenerateCompoundImageParams struct {
 }
 
 func (a *App) GenerateCompoundImage(params GenerateCompoundImageParams) (*GenerateImageResult, error) {
+	a.startSDPolling()
+	defer a.stopSDPolling()
 	cp, err := a.presets.GetCompoundPreset(params.CompoundPresetID)
 	if err != nil {
 		return nil, fmt.Errorf("compound preset not found: %w", err)
@@ -2762,9 +2893,15 @@ func (a *App) GenerateCompoundImage(params GenerateCompoundImageParams) (*Genera
 				DoNotSaveGrid:   true,
 			})
 			if err != nil {
+				if ierr := a.checkSDInterrupted(); ierr != nil {
+					return nil, ierr
+				}
 				return nil, fmt.Errorf("step %d (txt2img): %w", stepIdx+1, err)
 			}
 			if len(result.Images) == 0 {
+				if ierr := a.checkSDInterrupted(); ierr != nil {
+					return nil, ierr
+				}
 				return nil, fmt.Errorf("step %d: no image returned", stepIdx+1)
 			}
 			lastImage = result.Images[0]
@@ -2795,9 +2932,15 @@ func (a *App) GenerateCompoundImage(params GenerateCompoundImageParams) (*Genera
 				DoNotSaveGrid:     true,
 			})
 			if err != nil {
+				if ierr := a.checkSDInterrupted(); ierr != nil {
+					return nil, ierr
+				}
 				return nil, fmt.Errorf("step %d (img2img): %w", stepIdx+1, err)
 			}
 			if len(result.Images) == 0 {
+				if ierr := a.checkSDInterrupted(); ierr != nil {
+					return nil, ierr
+				}
 				return nil, fmt.Errorf("step %d: no image returned", stepIdx+1)
 			}
 			lastImage = result.Images[0]
@@ -2840,6 +2983,8 @@ type GenerateFromImageParams struct {
 }
 
 func (a *App) GenerateFromImage(params GenerateFromImageParams) (*GenerateImageResult, error) {
+	a.startSDPolling()
+	defer a.stopSDPolling()
 	if params.ImageBase64 == "" {
 		return nil, fmt.Errorf("image is required")
 	}
@@ -2881,13 +3026,6 @@ func (a *App) GenerateFromImage(params GenerateFromImageParams) (*GenerateImageR
 	}
 
 	tags := params.Tags
-	if tags == "" {
-		var err error
-		tags, err = a.AnalyzeImage(params.ImageBase64)
-		if err != nil {
-			return nil, fmt.Errorf("image analysis failed: %w", err)
-		}
-	}
 
 	tags, filterErr = a.filterKidsInput(tags)
 	if filterErr != nil {
@@ -2903,91 +3041,110 @@ func (a *App) GenerateFromImage(params GenerateFromImageParams) (*GenerateImageR
 		return nil, fmt.Errorf("preset not found: %w", err)
 	}
 
-	sdPromptInstruction := config.DefaultSDPromptInstruction
-	if v, err := a.presets.GetSetting("sd_prompt_instruction"); err == nil && v != "" {
-		sdPromptInstruction = v
-	}
-
-	systemPrompt := a.applyKidsSystemPrompt(sdPromptInstruction)
-
-	maxTokens := 256
-	if v, err := a.presets.GetSetting("llm_max_tokens"); err == nil && v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			maxTokens = n
+	var prompt, negativePrompt string
+	if tags == "" {
+		prompt = p.Prompt
+		negativePrompt = p.NegativePrompt
+		if params.ExtraNegativePrompt != "" {
+			negativePrompt += ", " + params.ExtraNegativePrompt
 		}
-	}
+		negativePrompt = a.applyKidsNegative(negativePrompt)
+	} else {
+		sdPromptInstruction := config.DefaultSDPromptInstruction
+		if v, err := a.presets.GetSetting("sd_prompt_instruction"); err == nil && v != "" {
+			sdPromptInstruction = v
+		}
 
-	generateModel := a.config.SDPromptModel
-	if v, err := a.presets.GetSetting("llm_generate_model"); err == nil && v != "" {
-		generateModel = v
-	}
+		systemPrompt := a.applyKidsSystemPrompt(sdPromptInstruction)
 
-	a.applyLLMConfig("generate")
+		maxTokens := 256
+		if v, err := a.presets.GetSetting("llm_max_tokens"); err == nil && v != "" {
+			if n, err := strconv.Atoi(v); err == nil && n > 0 {
+				maxTokens = n
+			}
+		}
 
-	systemPrompt += fmt.Sprintf(`
+		generateModel := a.config.SDPromptModel
+		if v, err := a.presets.GetSetting("llm_generate_model"); err == nil && v != "" {
+			generateModel = v
+		}
+
+		a.applyLLMConfig("generate")
+
+		systemPrompt += fmt.Sprintf(`
 
 RESPONSE LENGTH: your response is limited to ~%d tokens. You MUST fit within this limit.`, maxTokens)
 
-	userParts := []string{
-		"BASE POSITIVE PROMPT: " + p.Prompt,
-		"BASE NEGATIVE PROMPT: " + p.NegativePrompt,
-		"USER DESCRIPTION (extracted from image): " + tags,
-	}
-	if params.Mode == "inpaint" {
-		userParts = []string{
-			"MODE: inpaint — user wants to REPLACE the masked area with what they describe below.",
-			"BASE POSITIVE PROMPT (style/quality reference only): " + p.Prompt,
+		userParts := []string{
+			"BASE POSITIVE PROMPT: " + p.Prompt,
 			"BASE NEGATIVE PROMPT: " + p.NegativePrompt,
-			"USER INSTRUCTION FOR MASKED AREA (THIS IS THE PRIMARY PROMPT): " + tags,
+			"USER DESCRIPTION (extracted from image): " + tags,
 		}
-	}
-	if params.Mode == "img2img" {
-		userParts = []string{
-			"MODE: img2img — user wants to TRANSFORM the image into the scene described below. Ignore what is currently in the image. Generate a NEW scene based on the user's description.",
-			"BASE POSITIVE PROMPT (style/quality reference): " + p.Prompt,
-			"BASE NEGATIVE PROMPT: " + p.NegativePrompt,
-			"USER SCENE DESCRIPTION (THIS IS THE PRIMARY PROMPT — generate exactly this scene): " + tags,
+		if params.Mode == "inpaint" {
+			userParts = []string{
+				"MODE: inpaint — user wants to REPLACE the masked area with what they describe below.",
+				"BASE POSITIVE PROMPT (style/quality reference only): " + p.Prompt,
+				"BASE NEGATIVE PROMPT: " + p.NegativePrompt,
+				"USER INSTRUCTION FOR MASKED AREA (THIS IS THE PRIMARY PROMPT): " + tags,
+			}
 		}
-	}
-	if params.ExtraNegativePrompt != "" {
-		userParts = append(userParts, "USER NEGATIVE: "+params.ExtraNegativePrompt)
-	}
-	userMessage := strings.Join(userParts, "\n\n")
-
-	raw, err := a.llm.GenerateSDPrompt(systemPrompt, userMessage, p.PresetType, generateModel, maxTokens)
-	if err != nil {
-		return nil, err
-	}
-
-	var promptResult GenerateSDPromptResult
-	jsonRaw := extractJSON(raw)
-	if err := json.Unmarshal([]byte(jsonRaw), &promptResult); err != nil {
-		promptResult = GenerateSDPromptResult{
-			Prompt:         truncateRepetitive(raw, 1000),
-			NegativePrompt: p.NegativePrompt,
+		if params.Mode == "img2img" {
+			userParts = []string{
+				"MODE: img2img — user wants to TRANSFORM the image into the scene described below. Ignore what is currently in the image. Generate a NEW scene based on the user's description.",
+				"BASE POSITIVE PROMPT (style/quality reference): " + p.Prompt,
+				"BASE NEGATIVE PROMPT: " + p.NegativePrompt,
+				"USER SCENE DESCRIPTION (THIS IS THE PRIMARY PROMPT — generate exactly this scene): " + tags,
+			}
 		}
+		if params.ExtraNegativePrompt != "" {
+			userParts = append(userParts, "USER NEGATIVE: "+params.ExtraNegativePrompt)
+		}
+		userMessage := strings.Join(userParts, "\n\n")
+
+		runtime.EventsEmit(a.ctx, "llm:status", map[string]string{"status": "thinking"})
+		raw, err := a.llm.GenerateSDPrompt(systemPrompt, userMessage, p.PresetType, generateModel, maxTokens)
+		if err != nil {
+			runtime.EventsEmit(a.ctx, "llm:status", map[string]string{"status": "done"})
+			return nil, err
+		}
+		runtime.EventsEmit(a.ctx, "llm:status", map[string]string{"status": "done"})
+
+		var promptResult GenerateSDPromptResult
+		jsonRaw := extractJSON(raw)
+		if err := json.Unmarshal([]byte(jsonRaw), &promptResult); err != nil {
+			promptResult = GenerateSDPromptResult{
+				Prompt:         truncateRepetitive(raw, 1000),
+				NegativePrompt: p.NegativePrompt,
+			}
+		}
+
+		if containsCyrillic(promptResult.Prompt) {
+			promptResult.Prompt = extractTagsFromRaw(raw)
+		}
+		if containsCyrillic(promptResult.NegativePrompt) {
+			promptResult.NegativePrompt = extractNegativeFromRaw(raw)
+		}
+
+		extractEmbeddedNegative(&promptResult)
+		promptResult.Prompt = stripJunk(promptResult.Prompt)
+		promptResult.Prompt = truncateRepetitive(promptResult.Prompt, 1000)
+		promptResult.NegativePrompt = stripJunk(promptResult.NegativePrompt)
+		promptResult.NegativePrompt = truncateRepetitive(promptResult.NegativePrompt, 500)
+
+		promptResult.Prompt = a.filterKidsOutput(promptResult.Prompt)
+		promptResult.NegativePrompt = a.filterKidsOutput(promptResult.NegativePrompt)
+
+		prompt = promptResult.Prompt
+		if params.Mode == "inpaint" {
+			prompt += ", " + tags
+		}
+		negativePrompt = promptResult.NegativePrompt
+		if params.ExtraNegativePrompt != "" {
+			negativePrompt += ", " + params.ExtraNegativePrompt
+		}
+		negativePrompt = a.applyKidsNegative(negativePrompt)
 	}
 
-	if containsCyrillic(promptResult.Prompt) {
-		promptResult.Prompt = extractTagsFromRaw(raw)
-	}
-	if containsCyrillic(promptResult.NegativePrompt) {
-		promptResult.NegativePrompt = extractNegativeFromRaw(raw)
-	}
-
-	extractEmbeddedNegative(&promptResult)
-	promptResult.Prompt = stripJunk(promptResult.Prompt)
-	promptResult.Prompt = truncateRepetitive(promptResult.Prompt, 1000)
-	promptResult.NegativePrompt = stripJunk(promptResult.NegativePrompt)
-	promptResult.NegativePrompt = truncateRepetitive(promptResult.NegativePrompt, 500)
-
-	promptResult.Prompt = a.filterKidsOutput(promptResult.Prompt)
-	promptResult.NegativePrompt = a.filterKidsOutput(promptResult.NegativePrompt)
-
-	prompt := promptResult.Prompt
-	if params.Mode == "inpaint" && tags != "" {
-		prompt += ", " + tags
-	}
 	if p.Loras != "" {
 		var loras []preset.LoRAEntry
 		if json.Unmarshal([]byte(p.Loras), &loras) == nil {
@@ -2996,12 +3153,6 @@ RESPONSE LENGTH: your response is limited to ~%d tokens. You MUST fit within thi
 			}
 		}
 	}
-
-	negativePrompt := promptResult.NegativePrompt
-	if params.ExtraNegativePrompt != "" {
-		negativePrompt += ", " + params.ExtraNegativePrompt
-	}
-	negativePrompt = a.applyKidsNegative(negativePrompt)
 
 	if p.ModelName != "" {
 		_ = a.sd.SetModel(p.ModelName)
@@ -3067,6 +3218,9 @@ RESPONSE LENGTH: your response is limited to ~%d tokens. You MUST fit within thi
 			return nil, err
 		}
 		if len(result.Images) == 0 {
+			if ierr := a.checkSDInterrupted(); ierr != nil {
+				return nil, ierr
+			}
 			return nil, fmt.Errorf("no image generated (%s)", params.Mode)
 		}
 		img := &GenerateImageResult{
@@ -3151,6 +3305,9 @@ RESPONSE LENGTH: your response is limited to ~%d tokens. You MUST fit within thi
 		return nil, err
 	}
 	if len(result.Images) == 0 {
+		if ierr := a.checkSDInterrupted(); ierr != nil {
+			return nil, ierr
+		}
 		return nil, fmt.Errorf("no image generated (txt2img)")
 	}
 
@@ -3238,10 +3395,13 @@ func (a *App) analyzeRemoveContext(imageBase64, maskBase64 string) (string, erro
 	systemPrompt := "You are a vision model analyzing images for inpainting. The red overlay marks the area to remove. Describe what should fill that area to match the surrounding context seamlessly. Output ONLY comma-separated Stable Diffusion tags for the background/content that should replace the red area. No explanation, no extra text."
 	userText := "Look at the red overlay area. What should fill this space to blend naturally with the surroundings? Output only SD tags."
 
+	runtime.EventsEmit(a.ctx, "llm:status", map[string]string{"status": "thinking"})
 	result, err := a.llm.ChatVision(model, systemPrompt, userText, overlayBase64, 0.3, 128)
 	if err != nil {
+		runtime.EventsEmit(a.ctx, "llm:status", map[string]string{"status": "done"})
 		return "", fmt.Errorf("vision analysis failed: %w", err)
 	}
+	runtime.EventsEmit(a.ctx, "llm:status", map[string]string{"status": "done"})
 
 	result = strings.TrimSpace(result)
 	result = truncateRepetitive(result, 500)
@@ -3400,6 +3560,9 @@ func (a *App) generateRemoveObject(params GenerateFromImageParams, removeDesc st
 		return nil, err
 	}
 	if len(result.Images) == 0 {
+		if ierr := a.checkSDInterrupted(); ierr != nil {
+			return nil, ierr
+		}
 		return nil, fmt.Errorf("no image generated (remove object)")
 	}
 
@@ -3462,10 +3625,13 @@ RESPONSE LENGTH: your response is limited to ~%d tokens. You MUST fit within thi
 	}
 	userMessage := strings.Join(userParts, "\n\n")
 
+	runtime.EventsEmit(a.ctx, "llm:status", map[string]string{"status": "thinking"})
 	raw, err := a.llm.GenerateSDPrompt(systemPrompt, userMessage, firstPreset.PresetType, generateModel, maxTokens)
 	if err != nil {
+		runtime.EventsEmit(a.ctx, "llm:status", map[string]string{"status": "done"})
 		return nil, err
 	}
+	runtime.EventsEmit(a.ctx, "llm:status", map[string]string{"status": "done"})
 
 	var promptResult GenerateSDPromptResult
 	jsonRaw := extractJSON(raw)
@@ -3585,9 +3751,15 @@ RESPONSE LENGTH: your response is limited to ~%d tokens. You MUST fit within thi
 				DoNotSaveGrid:     true,
 			})
 			if err != nil {
+				if ierr := a.checkSDInterrupted(); ierr != nil {
+					return nil, ierr
+				}
 				return nil, fmt.Errorf("step %d (img2img): %w", stepIdx+1, err)
 			}
 			if len(result.Images) == 0 {
+				if ierr := a.checkSDInterrupted(); ierr != nil {
+					return nil, ierr
+				}
 				return nil, fmt.Errorf("step %d: no image returned", stepIdx+1)
 			}
 			lastImage = result.Images[0]
@@ -3610,9 +3782,15 @@ RESPONSE LENGTH: your response is limited to ~%d tokens. You MUST fit within thi
 				DoNotSaveGrid:   true,
 			})
 			if err != nil {
+				if ierr := a.checkSDInterrupted(); ierr != nil {
+					return nil, ierr
+				}
 				return nil, fmt.Errorf("step %d (txt2img): %w", stepIdx+1, err)
 			}
 			if len(result.Images) == 0 {
+				if ierr := a.checkSDInterrupted(); ierr != nil {
+					return nil, ierr
+				}
 				return nil, fmt.Errorf("step %d: no image returned", stepIdx+1)
 			}
 			lastImage = result.Images[0]
@@ -3645,9 +3823,15 @@ RESPONSE LENGTH: your response is limited to ~%d tokens. You MUST fit within thi
 				DoNotSaveGrid:     true,
 			})
 			if err != nil {
+				if ierr := a.checkSDInterrupted(); ierr != nil {
+					return nil, ierr
+				}
 				return nil, fmt.Errorf("step %d (img2img): %w", stepIdx+1, err)
 			}
 			if len(result.Images) == 0 {
+				if ierr := a.checkSDInterrupted(); ierr != nil {
+					return nil, ierr
+				}
 				return nil, fmt.Errorf("step %d: no image returned", stepIdx+1)
 			}
 			lastImage = result.Images[0]
@@ -3680,6 +3864,8 @@ type BatchCompoundGenerateParams struct {
 }
 
 func (a *App) BatchCompoundGenerate(params BatchCompoundGenerateParams) error {
+	a.startSDPolling()
+	defer a.stopSDPolling()
 	if params.Count <= 0 || params.Count > 100 {
 		return fmt.Errorf("count must be between 1 and 100")
 	}
@@ -3802,9 +3988,15 @@ func (a *App) BatchCompoundGenerate(params BatchCompoundGenerateParams) error {
 					DoNotSaveGrid:   true,
 				})
 				if err != nil {
+					if ierr := a.checkSDInterrupted(); ierr != nil {
+						return ierr
+					}
 					return fmt.Errorf("batch %d, step %d (txt2img): %w", batchIdx+1, stepIdx+1, err)
 				}
 				if len(result.Images) == 0 {
+					if ierr := a.checkSDInterrupted(); ierr != nil {
+						return ierr
+					}
 					return fmt.Errorf("batch %d, step %d: no image returned", batchIdx+1, stepIdx+1)
 				}
 				lastImage = result.Images[0]
@@ -3834,9 +4026,15 @@ func (a *App) BatchCompoundGenerate(params BatchCompoundGenerateParams) error {
 					DoNotSaveGrid:     true,
 				})
 				if err != nil {
+					if ierr := a.checkSDInterrupted(); ierr != nil {
+						return ierr
+					}
 					return fmt.Errorf("batch %d, step %d (img2img): %w", batchIdx+1, stepIdx+1, err)
 				}
 				if len(result.Images) == 0 {
+					if ierr := a.checkSDInterrupted(); ierr != nil {
+						return ierr
+					}
 					return fmt.Errorf("batch %d, step %d: no image returned", batchIdx+1, stepIdx+1)
 				}
 				lastImage = result.Images[0]
@@ -3877,6 +4075,8 @@ type TestCompoundGenerateParams struct {
 }
 
 func (a *App) TestCompoundGenerate(params TestCompoundGenerateParams) ([]TestGenerateResultItem, error) {
+	a.startSDPolling()
+	defer a.stopSDPolling()
 	if len(params.SelectedIDs) == 0 {
 		return nil, fmt.Errorf("select at least one compound preset")
 	}
@@ -4104,10 +4304,13 @@ func (a *App) DecomposeScene(params DecomposeSceneParams) (*compositor.Scene, er
 
 	a.applyLLMConfig("generate")
 
+	runtime.EventsEmit(a.ctx, "llm:status", map[string]string{"status": "thinking"})
 	raw, err := a.llm.Chat(generateModel, systemPrompt, userMessage, 0.4, maxTokens)
 	if err != nil {
+		runtime.EventsEmit(a.ctx, "llm:status", map[string]string{"status": "done"})
 		return nil, fmt.Errorf("LLM decomposition failed: %w", err)
 	}
+	runtime.EventsEmit(a.ctx, "llm:status", map[string]string{"status": "done"})
 
 	scene, err := compositor.DecomposeSceneFromJSON(raw)
 	if err != nil {

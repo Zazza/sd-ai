@@ -4,6 +4,7 @@ import { EventsOn, EventsOff } from '../wailsjs/runtime/runtime'
 import { BatchGenerate, BatchCompoundGenerate, SelectFolder } from '../wailsjs/go/main/App.js'
 import { api } from '../api.js'
 import { t } from '../i18n/index.js'
+import { useGenerationProgress } from '../composables/useGenerationProgress.js'
 
 const shared = inject('sharedGenState', null)
 
@@ -17,6 +18,7 @@ const negativePrompt = ref('')
 const count = ref(4)
 const outputFolder = ref('')
 const generating = ref(false)
+const { sdProgress, interrupt: interruptGeneration, reset: resetProgress } = useGenerationProgress()
 const error = ref('')
 const progress = ref(null)
 const generatedFiles = ref([])
@@ -67,6 +69,7 @@ async function startGeneration() {
   error.value = ''
   progress.value = null
   generatedFiles.value = []
+  resetProgress()
 
   try {
     if (batchMode.value === 'compound') {
@@ -172,7 +175,18 @@ function saveBatchState() {
       <h1 class="page-title">{{ t('batch.title') }}</h1>
     </div>
 
-    <div v-if="error" class="status status-error">{{ error }}</div>
+    <div v-if="error" class="status" :class="error === 'interrupted' ? 'status-warning' : 'status-error'">{{ error }}</div>
+
+    <div v-if="generating && sdProgress && sdProgress.progress > 0" style="margin-bottom: 12px; padding: 10px 12px; background: var(--surface-2); border-radius: 6px;">
+      <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+        <span style="font-size: 13px;">SD: {{ Math.round(sdProgress.progress * 100) }}%</span>
+        <span style="font-size: 12px; color: var(--text-dim);">{{ t('progress.sd_step', { current: Math.round(sdProgress.progress * sdProgress.steps), total: sdProgress.steps }) }}</span>
+        <button class="btn btn-sm btn-secondary" @click="interruptGeneration" style="margin-left: auto; padding: 2px 8px; font-size: 11px;">{{ t('progress.btn_interrupt') }}</button>
+      </div>
+      <div style="background: var(--surface-1); border-radius: 4px; overflow: hidden; height: 4px;">
+        <div :style="{ width: (sdProgress.progress * 100) + '%', background: 'var(--accent)', height: '100%', transition: 'width 0.3s' }"></div>
+      </div>
+    </div>
 
     <div class="card" style="max-width: 700px;">
       <div style="display: flex; gap: 8px; margin-bottom: 12px;">

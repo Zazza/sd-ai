@@ -1,18 +1,20 @@
-# SD Studio — Архитектура
+[English](architecture-en.md) | [Русский](architecture-ru.md)
 
-## Стек
+# SD Studio — Architecture
 
-| Слой | Технология |
+## Stack
+
+| Layer | Technology |
 |------|-----------|
 | Backend | Go 1.25 |
 | Desktop | Wails v2 |
 | Frontend | Vue 3 + Vite |
-| БД | SQLite (modernc.org/sqlite, без ORM) |
-| AI — текст | LLM (Ollama / LM Studio / OpenAI-совместимый API) |
-| AI — изображения | Stable Diffusion WebUI API |
-| Контейнеризация | Docker |
+| Database | SQLite (modernc.org/sqlite, no ORM) |
+| AI — text | LLM (Ollama / LM Studio / OpenAI-compatible API) |
+| AI — images | Stable Diffusion WebUI API |
+| Containerization | Docker |
 
-## Структура проекта
+## Project Structure
 
 ```
 sd-ai/
@@ -40,7 +42,7 @@ sd-ai/
 
 ## Testing
 
-| Пакет | Фреймворк | Тестов | Покрытие |
+| Package | Framework | Tests | Coverage |
 |-------|-----------|--------|----------|
 | `internal/config` | Go testing | 6 | env, defaults |
 | `internal/llm` | Go testing + httptest | ~52 | Chat, GetModels, HealthCheck, CleanTags, StripThinkTags |
@@ -50,24 +52,24 @@ sd-ai/
 | Frontend | Vitest + @vue/test-utils | — | infra ready (mocks, setup) |
 ```
 
-## Архитектурные принципы
+## Architectural Principles
 
 ### Facade (app.go)
-`App` — единая точка входа для frontend. Все Wails bindings — методы на `*App` с заглавной буквы. Frontend не обращается к internal напрямую.
+`App` is the single entry point for the frontend. All Wails bindings are exported methods on `*App` (capitalized). The frontend never accesses internal packages directly.
 
-### Client (HTTP-обёртки)
-`llm.Client`, `sd.Client`, `rembg.Client` — Stateless HTTP-клиенты для внешних сервисов. Constructor injection через `New*`.
+### Client (HTTP wrappers)
+`llm.Client`, `sd.Client`, `rembg.Client` — stateless HTTP clients for external services. Constructor injection via `New*`.
 
 ### Repository (preset.DB)
-`preset.DB` инкапсулирует SQLite. Raw SQL через `database/sql`. Миграции в Go-коде (`CREATE TABLE IF NOT EXISTS`).
+`preset.DB` encapsulates SQLite. Raw SQL via `database/sql`. Migrations are defined in Go code (`CREATE TABLE IF NOT EXISTS`).
 
 ### Dependency Injection
-Все зависимости внедряются через конструкторы. `NewApp(presets, llmClient, sdClient, cfg)`.
+All dependencies are injected through constructors. `NewApp(presets, llmClient, sdClient, cfg)`.
 
 ### Events (Wails runtime)
-Backend → Frontend коммуникация через `runtime.EventsEmit(ctx, eventName, data)`.
+Backend → Frontend communication via `runtime.EventsEmit(ctx, eventName, data)`.
 
-## Диаграмма модулей
+## Module Diagram
 
 ```
 ┌─────────────────────────────────────────┐
@@ -86,7 +88,7 @@ Backend → Frontend коммуникация через `runtime.EventsEmit(ctx
 └───────────────────┴──────────┴──────────┘
 ```
 
-## Диаграмма БД
+## Database Diagram
 
 ```
 presets ────┬── preset_types (type_id)
@@ -104,17 +106,17 @@ saved_scenes
 export_presets
 ```
 
-## Конфигурация
+## Configuration
 
-Все через переменные окружения (env):
+All configuration is done via environment variables (env):
 
-| Переменная | Описание | Default |
+| Variable | Description | Default |
 |-----------|----------|---------|
-| `LLM_URL` | URL LLM API | `http://localhost:1234` |
-| `SD_URL` | URL SD WebUI API | `http://localhost:7860` |
-| `LLM_MODEL` | Модель для генерации промптов | — |
-| `LLM_BACKEND` | `ollama` или `lmstudio` | `lmstudio` |
-| `PORT` | Порт приложения | `8080` |
-| `DB_PATH` | Путь к SQLite | `data/presets.db` |
+| `LLM_URL` | LLM API URL | `http://localhost:1234` |
+| `SD_URL` | SD WebUI API URL | `http://localhost:7860` |
+| `LLM_MODEL` | Model for prompt generation | — |
+| `LLM_BACKEND` | `ollama` or `lmstudio` | `lmstudio` |
+| `PORT` | Application port | `8080` |
+| `DB_PATH` | SQLite database path | `data/presets.db` |
 
-Настройки также хранятся в таблице `settings` (key-value) и переопределяют env через UI.
+Settings are also stored in the `settings` table (key-value) and override env vars via the UI.

@@ -230,6 +230,10 @@ export function ImportPresets(arg1) {
   return window['go']['main']['App']['ImportPresets'](arg1);
 }
 
+export function InterruptGeneration() {
+  return window['go']['main']['App']['InterruptGeneration']();
+}
+
 export function IsKidsModeActive() {
   return window['go']['main']['App']['IsKidsModeActive']();
 }

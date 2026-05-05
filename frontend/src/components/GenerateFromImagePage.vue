@@ -3,6 +3,7 @@ import { ref, computed, nextTick, watch, onMounted, onUnmounted, inject } from '
 import { api } from '../api.js'
 import { t } from '../i18n/index.js'
 import { EventsOn, EventsOff } from '../wailsjs/runtime/runtime'
+import { useGenerationProgress } from '../composables/useGenerationProgress.js'
 import ImageViewer from './ImageViewer.vue'
 
 const props = defineProps({
@@ -44,6 +45,7 @@ const effectiveNegative = ref('')
 
 const analyzing = ref(false)
 const generatingImage = ref(false)
+const { llmStatus, sdProgress, preview, interrupt: interruptGeneration, reset: resetProgress } = useGenerationProgress()
 const generationStage = ref('')
 const error = ref('')
 
@@ -495,6 +497,7 @@ async function generate() {
   effectivePrompt.value = ''
   effectiveNegative.value = ''
   error.value = ''
+  resetProgress()
 
   try {
     generationStage.value = 'generating'
@@ -742,7 +745,7 @@ function onKeydown(e) {
       </div>
     </div>
 
-    <div v-if="error" class="status status-error">{{ error }}</div>
+    <div v-if="error" class="status" :class="error === 'interrupted' ? 'status-warning' : 'status-error'">{{ error }}</div>
 
     <div class="generate-layout">
       <div class="generate-section">
@@ -959,9 +962,22 @@ function onKeydown(e) {
 
       <div class="generate-section">
         <div class="generate-image-area">
-          <div v-if="generatingImage" style="text-align: center;">
-            <span class="spinner" style="width: 32px; height: 32px; border-width: 3px;"></span>
-            <p style="margin-top: 12px; color: var(--text-dim);">{{ removeStage === 'analyzing' ? t('fi.analyzing_context') : generationStage === 'analyzing' ? t('fi.analyzing_image') : t('generate.generating_image') }}</p>
+          <div v-if="generatingImage && !generatedImage" style="text-align: center; padding: 24px;">
+            <img v-if="preview && sdProgress && sdProgress.progress > 0 && sdProgress.progress < 1" :src="preview" alt="preview" style="max-width: 100%; border-radius: var(--radius-sm); opacity: 0.6; image-rendering: pixelated;" />
+            <span v-else class="spinner" style="width: 32px; height: 32px; border-width: 3px;"></span>
+            <p style="margin-top: 12px; color: var(--text-dim);">{{ llmStatus === 'thinking' ? t('progress.llm_thinking') : removeStage === 'analyzing' ? t('fi.analyzing_context') : generationStage === 'analyzing' ? t('fi.analyzing_image') : t('generate.generating_image') }}</p>
+            <div v-if="sdProgress && sdProgress.progress > 0" style="margin-top: 12px; max-width: 300px; margin-left: auto; margin-right: auto;">
+              <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                <span style="color: var(--text-dim); font-size: 12px;">{{ Math.round(sdProgress.progress * 100) }}%</span>
+                <span style="color: var(--text-dim); font-size: 12px;">{{ t('progress.sd_step', { current: Math.round(sdProgress.progress * sdProgress.steps), total: sdProgress.steps }) }}
+                  <span v-if="sdProgress.etaRelative > 0"> — ~{{ Math.ceil(sdProgress.etaRelative) }}s</span>
+                </span>
+              </div>
+              <div style="background: var(--surface-2); border-radius: 4px; overflow: hidden; height: 6px;">
+                <div :style="{ width: (sdProgress.progress * 100) + '%', background: 'var(--accent)', height: '100%', transition: 'width 0.3s' }"></div>
+              </div>
+              <button class="btn btn-sm btn-secondary" @click="interruptGeneration" style="margin-top: 8px; font-size: 11px;">{{ t('progress.btn_interrupt') }}</button>
+            </div>
           </div>
           <div v-else-if="generatedImage" style="width: 100%; padding: 12px;">
             <img :src="'data:image/png;base64,' + generatedImage" alt="Generated" class="img-fade-in" style="border-radius: var(--radius-sm); cursor: zoom-in;" @click="showViewer = true" />

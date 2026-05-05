@@ -120,6 +120,8 @@ export function HasSessionItems():Promise<boolean>;
 
 export function ImportPresets(arg1:Array<main.PresetData>):Promise<Array<preset.Preset>>;
 
+export function InterruptGeneration():Promise<void>;
+
 export function IsKidsModeActive():Promise<boolean>;
 
 export function ListCompoundPresets():Promise<Array<preset.CompoundPreset>>;

@@ -548,6 +548,13 @@ export const en = {
 
   // ImageViewer.vue
   'viewer.full_size': 'Full size',
+
+  // GenerationProgress.vue
+  'progress.llm_thinking': 'Generating prompt...',
+  'progress.sd_generating': 'Generating image',
+  'progress.sd_step': 'Step {current}/{total}',
+  'progress.btn_interrupt': 'Interrupt',
+  'progress.interrupted': 'Generation interrupted',
 }
 
 export function t(key, params) {

@@ -1,3 +1,5 @@
+[English](frontend-en.md) | [Русский](frontend-ru.md)
+
 # SD Studio — Frontend (Vue 3)
 
 ## Структура

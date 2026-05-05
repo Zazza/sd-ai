@@ -1,3 +1,5 @@
+[English](setup-en.md) | [Русский](setup-ru.md)
+
 # SD Studio — Service Setup Guide
 
 ## Contents

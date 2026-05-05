@@ -3,6 +3,7 @@ import { ref, computed, onMounted, onUnmounted, inject } from 'vue'
 import { EventsOn, EventsOff } from '../wailsjs/runtime/runtime'
 import { api } from '../api.js'
 import { t } from '../i18n/index.js'
+import { useGenerationProgress } from '../composables/useGenerationProgress.js'
 
 const shared = inject('sharedGenState', null)
 
@@ -25,6 +26,7 @@ const cfgScale = ref(7.0)
 const width = ref(512)
 const height = ref(512)
 const generating = ref(false)
+const { sdProgress, interrupt: interruptGeneration, reset: resetProgress } = useGenerationProgress()
 const error = ref('')
 const progress = ref(null)
 const results = ref([])
@@ -106,6 +108,7 @@ async function generate() {
   error.value = ''
   progress.value = null
   results.value = []
+  resetProgress()
 
   try {
     let res
@@ -204,7 +207,18 @@ function saveTestState() {
       <h1 class="page-title">{{ t('test.title') }}</h1>
     </div>
 
-    <div v-if="error" class="status status-error">{{ error }}</div>
+    <div v-if="error" class="status" :class="error === 'interrupted' ? 'status-warning' : 'status-error'">{{ error }}</div>
+
+    <div v-if="generating && sdProgress && sdProgress.progress > 0" style="margin-bottom: 12px; padding: 10px 12px; background: var(--surface-2); border-radius: 6px;">
+      <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+        <span style="font-size: 13px;">SD: {{ Math.round(sdProgress.progress * 100) }}%</span>
+        <span style="font-size: 12px; color: var(--text-dim);">{{ t('progress.sd_step', { current: Math.round(sdProgress.progress * sdProgress.steps), total: sdProgress.steps }) }}</span>
+        <button class="btn btn-sm btn-secondary" @click="interruptGeneration" style="margin-left: auto; padding: 2px 8px; font-size: 11px;">{{ t('progress.btn_interrupt') }}</button>
+      </div>
+      <div style="background: var(--surface-1); border-radius: 4px; overflow: hidden; height: 4px;">
+        <div :style="{ width: (sdProgress.progress * 100) + '%', background: 'var(--accent)', height: '100%', transition: 'width 0.3s' }"></div>
+      </div>
+    </div>
 
     <div class="card" style="max-width: 800px;">
       <div style="display: flex; gap: 8px; margin-bottom: 16px;">

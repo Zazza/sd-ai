@@ -1,8 +1,10 @@
+[English](backend-en.md) | [Русский](backend-ru.md)
+
 # SD Studio — Backend (Go)
 
-## Конструкторы (Dependency Injection)
+## Constructors (Dependency Injection)
 
-Все основные компоненты создаются в `main.go` и внедряются через конструкторы:
+All core components are created in `main.go` and injected via constructors:
 
 ```go
 cfg := config.Load()
@@ -20,7 +22,7 @@ type Config struct {
     LLMUrl         string  // env: LLM_URL
     SDUrl          string  // env: SD_URL
     LLMModel       string  // env: LLM_MODEL
-    SDPromptModel  string  // env: SD_PROMPT_MODEL (алиас для LLMModel)
+    SDPromptModel  string  // env: SD_PROMPT_MODEL (alias for LLMModel)
     VisionModel    string  // env: VISION_MODEL
     LLMBackend     string  // env: LLM_BACKEND (ollama/lmstudio)
     Port           string  // env: PORT
@@ -35,16 +37,16 @@ type Config struct {
 }
 ```
 
-### Константы промптов
-- `DefaultSDPromptInstruction` — системный промпт для генерации SD промптов
-- `DefaultAnalyzeSystemPrompt` — промпт для анализа изображений
-- `DefaultAnalyzeChainPrompts` — цепочка промптов для глубокого анализа
-- `KidsModePrompt` — промпт для безопасного режима
+### Prompt Constants
+- `DefaultSDPromptInstruction` — system prompt for SD prompt generation
+- `DefaultAnalyzeSystemPrompt` — prompt for image analysis
+- `DefaultAnalyzeChainPrompts` — chain of prompts for deep analysis
+- `KidsModePrompt` — prompt for kids mode (safe mode)
 
 ## internal/llm
 
 ### Client
-HTTP-клиент для OpenAI-совместимого API.
+HTTP client for OpenAI-compatible API.
 
 ```go
 type Client struct { ... }
@@ -62,23 +64,23 @@ func (c *Client) SetBackend(backend string)
 func (c *Client) SetBackendConfig(cfg BackendConfig)
 ```
 
-### BackendConfig (для Ollama)
+### BackendConfig (for Ollama)
 ```go
 type BackendConfig struct {
-    KeepAlive string  // "5m", "0" (выгрузить сразу)
-    NumCtx    int     // размер контекста
-    NumGPU    int     // GPU слои
+    KeepAlive string  // "5m", "0" (unload immediately)
+    NumCtx    int     // context size
+    NumGPU    int     // GPU layers
 }
 ```
 
-### Утилиты
-- `CleanTags(s string) string` — очистка и обрезка тегов
-- `stripThinkTags(s string) string` — удаление `<think/>` блоков
+### Utilities
+- `CleanTags(s string) string` — tag cleanup and trimming
+- `stripThinkTags(s string) string` — removal of `<think/>` blocks
 
 ## internal/sd
 
 ### Client
-HTTP-клиент для SD WebUI API с retry.
+HTTP client for SD WebUI API with retry support.
 
 ```go
 type Client struct {
@@ -89,8 +91,8 @@ type Client struct {
 }
 
 func New(baseURL string) *Client
-func (c *Client) Txt2Img(req Txt2ImgRequest) (*Txt2ImgResponse, error)    // с retry
-func (c *Client) Img2Img(req Img2ImgRequest) (*Txt2ImgResponse, error)    // с retry
+func (c *Client) Txt2Img(req Txt2ImgRequest) (*Txt2ImgResponse, error)    // with retry
+func (c *Client) Img2Img(req Img2ImgRequest) (*Txt2ImgResponse, error)    // with retry
 func (c *Client) GetModels() ([]SDModel, error)
 func (c *Client) GetSamplers() ([]Sampler, error)
 func (c *Client) GetSchedulers() ([]Scheduler, error)
@@ -105,12 +107,12 @@ func (c *Client) SetURL(baseURL string)
 ```
 
 ### Retry
-- `Txt2Img` и `Img2Img` используют `doPost()` с retry
+- `Txt2Img` and `Img2Img` use `doPost()` with retry
 - Retry: 500/502/503/504 + network errors
-- Max 3 attempts, exponential backoff 2s → 4s
-- При исчерпании попыток: ошибка включает тело ответа SD
+- Max 3 attempts, exponential backoff 2s -> 4s
+- When attempts are exhausted: error includes the SD response body
 
-### Запросы
+### Requests
 
 **Txt2ImgRequest:**
 ```go
@@ -124,11 +126,11 @@ type Txt2ImgRequest struct {
     ClipSkip               *int
     BatchSize, BatchCount  *int
     HiresFix               *bool
-    // ... hires параметры
+    // ... hires parameters
 }
 ```
 
-**Img2ImgRequest (дополнительно):**
+**Img2ImgRequest (additional fields):**
 ```go
 type Img2ImgRequest struct {
     InitImages             []string  // base64
@@ -137,7 +139,7 @@ type Img2ImgRequest struct {
     InpaintingFill         int       // 0=Fill, 1=Original, 2=Latent Noise
     InpaintFullRes         bool
     InpaintFullResPadding  int
-    // ... все поля Txt2ImgRequest
+    // ... all Txt2ImgRequest fields
 }
 ```
 
@@ -154,7 +156,7 @@ type Txt2ImgResponse struct {
 ## internal/preset
 
 ### DB
-SQLite CRUD для всех данных приложения.
+SQLite CRUD for all application data.
 
 ```go
 type DB struct { ... }
@@ -163,22 +165,22 @@ func Open(dbPath string) (*DB, error)
 func (db *DB) Close() error
 ```
 
-### CRUD методы
-Пресеты: `ListPresets`, `Get`, `Create`, `Update`, `Delete`, `ListByType`
-Типы: `ListPresetTypes`, `GetPresetType`, `CreatePresetType`, `UpdatePresetType`, `DeletePresetType`
+### CRUD Methods
+Presets: `ListPresets`, `Get`, `Create`, `Update`, `Delete`, `ListByType`
+Types: `ListPresetTypes`, `GetPresetType`, `CreatePresetType`, `UpdatePresetType`, `DeletePresetType`
 Compound: `ListCompoundPresets`, `GetCompoundPreset`, `CreateCompoundPreset`, `UpdateCompoundPreset`, `DeleteCompoundPreset`
 Settings: `GetSetting(key)`, `SetSetting(key, value)`
 Descriptions: `ListDescriptions`, `CreateDescription`, `UpdateDescription`, `DeleteDescription`
 Prompts: `ListPrompts`, `CreatePrompt`, `DeletePrompt`
 Scenes: `ListSavedScenes`, `GetSavedScene`, `SaveScene`, `UpdateSavedScene`, `DeleteSavedScene`
 Sessions: `CreateSession`, `ListSessions`, `SwitchSession`, `DeleteSession`, etc.
-- `AddSessionItem` деактивирует предыдущие элементы (`is_active=0`) перед вставкой нового
+- `AddSessionItem` deactivates previous items (`is_active=0`) before inserting a new one
 Export: `ListExportPresets`, `SaveExportPreset`, `DeleteExportPreset`
 
-### Миграции
-Версии 1-10 в `db.go`. Автоматически выполняются при `Open()`.
+### Migrations
+Versions 1-10 in `db.go`. Automatically executed on `Open()`.
 
-### Модели
+### Models
 
 **Preset:**
 ```go
@@ -213,7 +215,7 @@ type LoRAEntry struct {
 ## internal/compositor
 
 ### Compositor
-Multi-pass генерация сцен с персонажами.
+Multi-pass scene generation with characters.
 
 ```go
 type Compositor struct { ... }
@@ -223,7 +225,7 @@ func (c *Compositor) GenerateScene(scene Scene) (*MultiPassResult, error)
 func DecomposeSceneFromJSON(jsonStr string) (*Scene, error)
 ```
 
-### Интерфейсы
+### Interfaces
 ```go
 type SDGenerator interface {
     Txt2Img(req sd.Txt2ImgRequest) (*sd.Txt2ImgResponse, error)
@@ -245,9 +247,9 @@ type ProgressEmitter interface {
 }
 ```
 
-### Компоновка
-- `RemoveWhiteBackground(img)` — удаляет белый фон (порог 240)
-- `CompositeOver(background, character, pos, scale)` — накладывает персонажа на фон
+### Compositing
+- `RemoveWhiteBackground(img)` — removes white background (threshold 240)
+- `CompositeOver(background, character, pos, scale)` — overlays a character onto the background
 
 ## internal/rembg
 
@@ -257,12 +259,12 @@ func New(baseURL string) *Client
 func (c *Client) Remove(imageBase64 string) (string, error)
 ```
 
-## Вспомогательные функции app.go
+## app.go Helper Functions
 
 ### Preset Resolution
-Общий паттерн для всех режимов генерации:
+Common pattern for all generation modes:
 ```go
-// Загрузить пресет → извлечь параметры → установить модель/VAE
+// Load preset -> extract parameters -> set model/VAE
 p, _ := a.presets.Get(presetID)
 samplerName, steps, cfgScale, width, height = ...
 a.sd.SetModel(p.ModelName)
@@ -270,23 +272,23 @@ a.sd.SetVAE(p.VAE)
 ```
 
 ### Image Processing
-- `analyzeRemoveContext(image, mask)` — красный overlay + LLM vision
+- `analyzeRemoveContext(image, mask)` — red overlay + LLM vision
 
 ### LLM Config
-- `applyLLMConfig(mode)` — загружает Ollama-специфичные настройки из settings
-- Режимы: `"generate"` (текст), `"analyze"` (vision)
+- `applyLLMConfig(mode)` — loads Ollama-specific settings from settings
+- Modes: `"generate"` (text), `"analyze"` (vision)
 
 ### Events
 ```go
 runtime.EventsEmit(a.ctx, "event:name", data)
 ```
-- `analyze:step` — прогресс анализа
+- `analyze:step` — analysis progress
 - `remove:stage` — "analyzing" / "generating"
-- `multipass:progress` — progress multi-pass
+- `multipass:progress` — multi-pass progress
 - `batch:progress` / `batch:done` / `batch:error`
-- `session:added` — новое изображение в сессии
+- `session:added` — new image added to session
 
 ### Kids Mode
-- `isKidsMode()` — проверка включён
-- `filterKidsInput(text)` — фильтрация входных данных
-- `applyKidsSystemPrompt(prompt)` — модификация system prompt
+- `isKidsMode()` — checks if enabled
+- `filterKidsInput(text)` — input filtering
+- `applyKidsSystemPrompt(prompt)` — system prompt modification

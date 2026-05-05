@@ -10,6 +10,8 @@ type Service interface {
 	GetVAEs() ([]VAE, error)
 	GetLoRAs() ([]LoRA, error)
 	GetOptions() (map[string]interface{}, error)
+	GetProgress() (*ProgressResponse, error)
+	Interrupt() error
 	HealthCheck() error
 	SetURL(baseURL string)
 	SetModel(modelName string) error
