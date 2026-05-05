@@ -53,18 +53,15 @@ jobs:
 
       - name: Package (macOS/Linux)
         if: matrix.ext == '.tar.gz'
-        run: |
-          cd build
-          tar czf sd-studio-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz sd-studio
+        run: tar czf sd-studio-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz -C build/bin sd-studio
 
       - name: Package (Windows)
         if: matrix.ext == '.zip'
         shell: pwsh
-        run: |
-          Compress-Archive -Path build/sd-studio.exe -DestinationPath build/sd-studio-${{ matrix.goos }}-${{ matrix.goarch }}.zip
+        run: Compress-Archive -Path build/bin/sd-studio.exe -DestinationPath sd-studio-${{ matrix.goos }}-${{ matrix.goarch }}.zip
 
       - name: Upload Release Assets
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            build/sd-studio-${{ matrix.goos }}-${{ matrix.goarch }}.*
+            sd-studio-${{ matrix.goos }}-${{ matrix.goarch }}.*
