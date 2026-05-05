@@ -4,6 +4,8 @@ All notable changes to SD Studio are documented here.
 
 ## [Unreleased]
 
+## [0.5.1] — 2026-05-05
+
 ### Added
 - SD generation progress polling — real-time progress bar with ETA and live preview
 - Interrupt generation — cancel ongoing SD generation via UI button
@@ -14,6 +16,8 @@ All notable changes to SD Studio are documented here.
 - CHANGELOG.md
 - Bilingual docs — all `docs/` files split into `*-en.md` / `*-ru.md` with translations
 - `docs/screenshots/` folder for README images
+- App version in footer — injected via ldflags at build time
+- GitHub Actions release workflow — cross-platform builds (macOS, Windows, Linux) on tag push
 
 ## [0.5.0] — 2025-05-05
 

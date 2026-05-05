@@ -73,6 +73,10 @@ func (a *App) startup(ctx context.Context) {
 	a.log.SetContext(ctx)
 }
 
+func (a *App) Version() string {
+	return version
+}
+
 type SDProgressEvent struct {
 	Progress    float64 `json:"progress"`
 	ETARelative float64 `json:"eta_relative"`

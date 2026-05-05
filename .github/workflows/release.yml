@@ -1,0 +1,66 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    strategy:
+      matrix:
+        include:
+          - os: macos-latest
+            goos: darwin
+            goarch: arm64
+            ext: .tar.gz
+          - os: windows-latest
+            goos: windows
+            goarch: amd64
+            ext: .zip
+          - os: ubuntu-latest
+            goos: linux
+            goarch: amd64
+            ext: .tar.gz
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+
+      - name: Setup Wails
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: wails build -ldflags "-X main.version=${VERSION#v}"
+
+      - name: Package (macOS/Linux)
+        if: matrix.ext == '.tar.gz'
+        run: |
+          cd build
+          tar czf sd-studio-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz sd-studio
+
+      - name: Package (Windows)
+        if: matrix.ext == '.zip'
+        shell: pwsh
+        run: |
+          Compress-Archive -Path build/sd-studio.exe -DestinationPath build/sd-studio-${{ matrix.goos }}-${{ matrix.goarch }}.zip
+
+      - name: Upload Release Assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            build/sd-studio-${{ matrix.goos }}-${{ matrix.goarch }}.*

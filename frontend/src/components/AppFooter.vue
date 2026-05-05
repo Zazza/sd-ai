@@ -27,6 +27,8 @@ const renameName = ref('')
 const confirmDeleteSession = ref(false)
 let confirmDeleteTimer = null
 
+const appVersion = ref('')
+
 let observer = null
 
 const services = reactive({
@@ -298,6 +300,7 @@ onMounted(async () => {
   EventsOn('session:created', () => { loadSessions(); loadItems() })
 
   await loadSessions()
+  api.version().then(v => { appVersion.value = v }).catch(() => {})
   try {
     const item = await api.getActiveSessionItem()
     if (item && item.session_id) {
@@ -341,6 +344,7 @@ onMounted(async () => {
         </span>
       </div>
       <div class="footer-actions">
+        <span v-if="appVersion" class="footer-version">v{{ appVersion }}</span>
         <span v-if="footerError" style="color: var(--danger); font-size: 11px; margin-right: 8px;">{{ footerError }}</span>
         <button class="footer-tab-btn" :class="{ active: expanded && panel === 'session' }" @click="togglePanel('session')">
           {{ t('footer.session') }} {{ itemCount > 0 ? `(${itemCount})` : '' }}
@@ -480,6 +484,14 @@ export default { name: 'AppFooter' }
 .footer-actions {
   display: flex;
   gap: 4px;
+  align-items: center;
+}
+
+.footer-version {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-right: 4px;
+  opacity: 0.7;
 }
 
 .footer-tab-btn {

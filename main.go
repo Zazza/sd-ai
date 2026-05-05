@@ -16,6 +16,8 @@ import (
 	"go-sd/internal/sd"
 )
 
+var version = "dev"
+
 //go:embed all:frontend/dist
 var assets embed.FS
 
