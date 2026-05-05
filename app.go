@@ -3,25 +3,17 @@ package main
 import (
 	"bytes"
 	"context"
-	"crypto/rand"
-	"crypto/sha256"
-	"crypto/subtle"
 	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"image"
 	"image/color"
 	"image/draw"
-	"image/jpeg"
 	"image/png"
-	"io"
 	"math"
-	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -31,14 +23,31 @@ import (
 	xdraw "golang.org/x/image/draw"
 
 	"go-sd/internal/compositor"
+	"go-sd/internal/importexport"
+
+	"go-sd/internal/filebrowser"
+
 	"go-sd/internal/config"
 	"go-sd/internal/kids"
 	"go-sd/internal/llm"
 	"go-sd/internal/logger"
 	"go-sd/internal/preset"
+	"go-sd/internal/promptutil"
 	"go-sd/internal/rembg"
 	"go-sd/internal/sd"
+	"go-sd/internal/session"
+	"go-sd/internal/settings"
 )
+
+type appEmitter struct {
+	ctx *context.Context
+}
+
+func (e *appEmitter) Emit(event string, data ...any) {
+	if *e.ctx != nil {
+		runtime.EventsEmit(*e.ctx, event, data...)
+	}
+}
 
 type App struct {
 	ctx          context.Context
@@ -54,10 +63,15 @@ type App struct {
 	sdPollingMu     sync.Mutex
 	sdPollingCancel context.CancelFunc
 	sdInterrupted   bool
+	kidsMgr      *kids.Manager
+	sessions     *session.Service
+	settingsSvc  *settings.Service
+	ieSvc        *importexport.Service
+	emitter      appEmitter
 }
 
 func NewApp(presets *preset.DB, llmClient llm.Service, sdClient sd.Service, cfg *config.Config) *App {
-	return &App{
+	a := &App{
 		presets:     presets,
 		llm:         llmClient,
 		sd:          sdClient,
@@ -65,7 +79,13 @@ func NewApp(presets *preset.DB, llmClient llm.Service, sdClient sd.Service, cfg 
 		log:         logger.New(nil),
 		config:      cfg,
 		dataDir:     filepath.Dir(cfg.DBPath),
+		kidsMgr:     kids.NewManager(presets),
 	}
+	a.emitter = appEmitter{ctx: &a.ctx}
+	a.sessions = session.New(presets, a.dataDir, &a.emitter)
+	a.settingsSvc = settings.New(presets, llmClient, sdClient, cfg, a.rembgClient, a.log)
+	a.ieSvc = importexport.New(presets, sdClient, a.log)
+	return a
 }
 
 func (a *App) startup(ctx context.Context) {
@@ -150,302 +170,47 @@ func (a *App) checkSDInterrupted() error {
 	return nil
 }
 
-const (
-	maxPinAttempts = 5
-	pinLockoutMins = 5
-)
-
-func (a *App) isKidsMode() bool {
-	v, _ := a.presets.GetSetting("kids_mode")
-	return v == "true"
-}
+type KidsCategoryInfo = kids.CategoryInfo
 
 func (a *App) IsKidsModeActive() bool {
-	return a.isKidsMode()
-}
-
-func hashPin(pin, salt string) string {
-	h := sha256.Sum256([]byte(salt + pin))
-	return hex.EncodeToString(h[:])
-}
-
-func (a *App) verifyPin(pin string) (bool, error) {
-	storedHash, _ := a.presets.GetSetting("kids_pin_hash")
-	salt, _ := a.presets.GetSetting("kids_pin_salt")
-	if storedHash == "" || salt == "" {
-		return false, fmt.Errorf("PIN not set")
-	}
-	computed := hashPin(pin, salt)
-	return subtle.ConstantTimeCompare([]byte(computed), []byte(storedHash)) == 1, nil
-}
-
-func (a *App) storePin(pin string) error {
-	if len(pin) != 4 {
-		return fmt.Errorf("PIN must be 4 digits")
-	}
-	for _, c := range pin {
-		if c < '0' || c > '9' {
-			return fmt.Errorf("PIN must be 4 digits")
-		}
-	}
-	saltBytes := make([]byte, 16)
-	if _, err := rand.Read(saltBytes); err != nil {
-		return fmt.Errorf("failed to generate salt: %w", err)
-	}
-	salt := hex.EncodeToString(saltBytes)
-	hash := hashPin(pin, salt)
-	if err := a.presets.SetSetting("kids_pin_salt", salt); err != nil {
-		return err
-	}
-	return a.presets.SetSetting("kids_pin_hash", hash)
+	return a.kidsMgr.IsActive()
 }
 
 func (a *App) SetKidsMode(enabled bool, pin string) error {
-	if enabled {
-		if pin != "" {
-			if err := a.storePin(pin); err != nil {
-				return err
-			}
-		}
-		a.presets.SetSetting("kids_pin_attempts", "0")
-		a.presets.SetSetting("kids_pin_lockout", "")
-		return a.presets.SetSetting("kids_mode", "true")
-	}
-
-	storedHash, _ := a.presets.GetSetting("kids_pin_hash")
-	if storedHash != "" {
-		if err := a.checkPinLockout(); err != nil {
-			return err
-		}
-		if pin == "" {
-			return fmt.Errorf("PIN required")
-		}
-		ok, err := a.verifyPin(pin)
-		if err != nil {
-			return err
-		}
-		if !ok {
-			a.recordFailedPinAttempt()
-			return fmt.Errorf("incorrect PIN")
-		}
-		a.presets.SetSetting("kids_pin_attempts", "0")
-		a.presets.SetSetting("kids_pin_lockout", "")
-	}
-	return a.presets.SetSetting("kids_mode", "false")
-}
-
-type KidsCategoryInfo struct {
-	Name     string `json:"name"`
-	Label    string `json:"label"`
-	AlwaysOn bool   `json:"alwaysOn"`
-	Enabled  bool   `json:"enabled"`
+	return a.kidsMgr.SetKidsMode(enabled, pin)
 }
 
 func (a *App) GetKidsCategories() ([]KidsCategoryInfo, error) {
-	var result []KidsCategoryInfo
-	for _, cat := range kids.Categories {
-		v, _ := a.presets.GetSetting("kids_cat_" + cat.Name)
-		enabled := cat.AlwaysOn || v != "false"
-		result = append(result, KidsCategoryInfo{
-			Name:     cat.Name,
-			Label:    cat.Label,
-			AlwaysOn: cat.AlwaysOn,
-			Enabled:  enabled,
-		})
-	}
-	return result, nil
+	return a.kidsMgr.GetCategories()
 }
 
 func (a *App) SetKidsCategory(name string, enabled bool, pin string) error {
-	if !a.isKidsMode() {
-		return fmt.Errorf("Kids Mode is not active")
-	}
-	var found *kids.Category
-	for i := range kids.Categories {
-		if kids.Categories[i].Name == name {
-			found = &kids.Categories[i]
-			break
-		}
-	}
-	if found == nil {
-		return fmt.Errorf("unknown category: %s", name)
-	}
-	if found.AlwaysOn {
-		return fmt.Errorf("category %s cannot be disabled", name)
-	}
-	storedHash, _ := a.presets.GetSetting("kids_pin_hash")
-	if storedHash != "" {
-		if err := a.checkPinLockout(); err != nil {
-			return err
-		}
-		if pin == "" {
-			return fmt.Errorf("PIN required")
-		}
-		ok, err := a.verifyPin(pin)
-		if err != nil {
-			return err
-		}
-		if !ok {
-			a.recordFailedPinAttempt()
-			return fmt.Errorf("incorrect PIN")
-		}
-		a.presets.SetSetting("kids_pin_attempts", "0")
-		a.presets.SetSetting("kids_pin_lockout", "")
-	}
-	val := "true"
-	if !enabled {
-		val = "false"
-	}
-	return a.presets.SetSetting("kids_cat_"+name, val)
-}
-
-func (a *App) checkPinLockout() error {
-	lockoutStr, _ := a.presets.GetSetting("kids_pin_lockout")
-	if lockoutStr == "" {
-		return nil
-	}
-	lockoutTime, err := time.Parse(time.RFC3339, lockoutStr)
-	if err != nil {
-		a.presets.SetSetting("kids_pin_lockout", "")
-		a.presets.SetSetting("kids_pin_attempts", "0")
-		return nil
-	}
-	if time.Now().Before(lockoutTime) {
-		remaining := time.Until(lockoutTime).Truncate(time.Second)
-		return fmt.Errorf("PIN locked. Try again in %s", remaining)
-	}
-	a.presets.SetSetting("kids_pin_lockout", "")
-	a.presets.SetSetting("kids_pin_attempts", "0")
-	return nil
-}
-
-func (a *App) recordFailedPinAttempt() {
-	attemptsStr, _ := a.presets.GetSetting("kids_pin_attempts")
-	attempts := 0
-	if n, err := strconv.Atoi(attemptsStr); err == nil {
-		attempts = n
-	}
-	attempts++
-	a.presets.SetSetting("kids_pin_attempts", strconv.Itoa(attempts))
-	if attempts >= maxPinAttempts {
-		lockoutUntil := time.Now().Add(pinLockoutMins * time.Minute).Format(time.RFC3339)
-		a.presets.SetSetting("kids_pin_lockout", lockoutUntil)
-	}
-}
-
-func (a *App) getKidsDisabledCategories() map[string]bool {
-	disabled := make(map[string]bool)
-	for _, cat := range kids.Categories {
-		if cat.AlwaysOn {
-			continue
-		}
-		v, _ := a.presets.GetSetting("kids_cat_" + cat.Name)
-		if v == "false" {
-			disabled[cat.Name] = true
-		}
-	}
-	return disabled
+	return a.kidsMgr.SetCategory(name, enabled, pin)
 }
 
 func (a *App) applyKidsSystemPrompt(systemPrompt string) string {
-	if !a.isKidsMode() {
-		return systemPrompt
-	}
-	return systemPrompt + config.KidsModePrompt
+	return a.kidsMgr.ApplySystemPrompt(systemPrompt)
 }
 
 func (a *App) applyKidsNegative(negativePrompt string) string {
-	if !a.isKidsMode() {
-		return negativePrompt
-	}
-	disabled := a.getKidsDisabledCategories()
-	kidsNeg := kids.NegativePrompt(disabled)
-	if negativePrompt != "" {
-		return negativePrompt + ", " + kidsNeg
-	}
-	return kidsNeg
+	return a.kidsMgr.ApplyNegative(negativePrompt)
 }
 
 func (a *App) filterKidsInput(text string) (string, error) {
-	if !a.isKidsMode() {
-		return text, nil
-	}
-	return kids.FilterInput(text, a.getKidsDisabledCategories())
+	return a.kidsMgr.FilterInput(text)
 }
 
 func (a *App) filterKidsOutput(text string) string {
-	if !a.isKidsMode() {
-		return text
-	}
-	return kids.FilterOutput(text, a.getKidsDisabledCategories())
+	return a.kidsMgr.FilterOutput(text)
 }
 
 // --- Service Status ---
 
-type ServiceInfo struct {
-	Available   bool   `json:"available"`
-	Model       string `json:"model"`
-	VisionModel string `json:"vision_model,omitempty"`
-}
-
-type ServiceStatus struct {
-	LLM ServiceInfo `json:"llm"`
-	SD  ServiceInfo `json:"sd"`
-}
+type ServiceInfo = settings.ServiceInfo
+type ServiceStatus = settings.ServiceStatus
 
 func (a *App) CheckServices() ServiceStatus {
-	var status ServiceStatus
-	var mu sync.Mutex
-	var wg sync.WaitGroup
-	wg.Add(2)
-
-	go func() {
-		defer wg.Done()
-		var info ServiceInfo
-		if err := a.llm.HealthCheck(); err != nil {
-			info.Available = false
-			a.log.Warn("LLM unavailable: %s", err)
-		} else {
-			info.Available = true
-			if v, err := a.presets.GetSetting("llm_generate_model"); err == nil && v != "" {
-				info.Model = v
-			} else {
-				info.Model = a.config.SDPromptModel
-			}
-			if v, err := a.presets.GetSetting("llm_analyze_model"); err == nil && v != "" {
-				info.VisionModel = v
-			} else {
-				info.VisionModel = a.config.VisionModel
-			}
-		}
-		mu.Lock()
-		status.LLM = info
-		mu.Unlock()
-	}()
-
-	go func() {
-		defer wg.Done()
-		var info ServiceInfo
-		if err := a.sd.HealthCheck(); err != nil {
-			info.Available = false
-			a.log.Warn("SD unavailable: %s", err)
-		} else {
-			info.Available = true
-			opts, err := a.sd.GetOptions()
-			if err == nil {
-				if m, ok := opts["sd_model_checkpoint"].(string); ok {
-					info.Model = m
-				}
-			}
-		}
-		mu.Lock()
-		status.SD = info
-		mu.Unlock()
-	}()
-
-	wg.Wait()
-	a.log.Debug("Service check: LLM=%v SD=%v", status.LLM.Available, status.SD.Available)
-	return status
+	return a.settingsSvc.CheckServices()
 }
 
 // --- Presets ---
@@ -628,27 +393,27 @@ RESPONSE LENGTH: your response is limited to ~%d tokens. You MUST fit within thi
 	runtime.EventsEmit(a.ctx, "llm:status", map[string]string{"status": "done"})
 
 	var result GenerateSDPromptResult
-	jsonRaw := extractJSON(raw)
+	jsonRaw := promptutil.ExtractJSON(raw)
 	if err := json.Unmarshal([]byte(jsonRaw), &result); err != nil {
 		result = GenerateSDPromptResult{
-			Prompt:         truncateRepetitive(raw, 1000),
+			Prompt:         promptutil.TruncateRepetitive(raw, 1000),
 			NegativePrompt: p.NegativePrompt,
 		}
 		}
 
-	if containsCyrillic(result.Prompt) {
-		result.Prompt = extractTagsFromRaw(raw)
+	if promptutil.ContainsCyrillic(result.Prompt) {
+		result.Prompt = promptutil.ExtractTagsFromRaw(raw)
 	}
-	if containsCyrillic(result.NegativePrompt) {
-		result.NegativePrompt = extractNegativeFromRaw(raw)
+	if promptutil.ContainsCyrillic(result.NegativePrompt) {
+		result.NegativePrompt = promptutil.ExtractNegativeFromRaw(raw)
 	}
 
 	extractEmbeddedNegative(&result)
 
-	result.Prompt = stripJunk(result.Prompt)
-	result.Prompt = truncateRepetitive(result.Prompt, 1000)
-	result.NegativePrompt = stripJunk(result.NegativePrompt)
-	result.NegativePrompt = truncateRepetitive(result.NegativePrompt, 500)
+	result.Prompt = promptutil.StripJunk(result.Prompt)
+	result.Prompt = promptutil.TruncateRepetitive(result.Prompt, 1000)
+	result.NegativePrompt = promptutil.StripJunk(result.NegativePrompt)
+	result.NegativePrompt = promptutil.TruncateRepetitive(result.NegativePrompt, 500)
 
 	result.Prompt = a.filterKidsOutput(result.Prompt)
 	result.NegativePrompt = a.filterKidsOutput(result.NegativePrompt)
@@ -735,7 +500,7 @@ OUTPUT — valid JSON only, no markdown:
 	runtime.EventsEmit(a.ctx, "llm:status", map[string]string{"status": "done"})
 
 	var result RecommendPresetResult
-	if err := json.Unmarshal([]byte(extractJSON(raw)), &result); err != nil {
+	if err := json.Unmarshal([]byte(promptutil.ExtractJSON(raw)), &result); err != nil {
 		return nil, fmt.Errorf("failed to parse LLM response: %w", err)
 	}
 
@@ -1640,7 +1405,7 @@ func (a *App) UpscaleImage(params UpscaleImageParams) (*GenerateImageResult, err
 
 	negativePrompt = a.applyKidsNegative(negativePrompt)
 
-	samplerName, scheduler := splitCompositeSampler(info.SamplerName, info.Scheduler)
+	samplerName, scheduler := promptutil.SplitCompositeSampler(info.SamplerName, info.Scheduler)
 	steps := 30
 	if info.Steps > 0 {
 		steps = info.Steps
@@ -1919,164 +1684,15 @@ func (a *App) GetLLMModels() ([]llm.LLMModel, error) {
 // --- Settings ---
 
 func (a *App) GetSettings() (map[string]string, error) {
-	settings, err := a.presets.GetAllSettings()
-	if err != nil {
-		return nil, err
-	}
-
-	defaults := map[string]string{
-		"llm_url":                   a.config.LLMUrl,
-		"sd_url":                    a.config.SDUrl,
-		"llm_model":                 a.config.LLMModel,
-		"sd_prompt_model":           a.config.SDPromptModel,
-		"vision_model":              a.config.VisionModel,
-		"llm_backend":               a.config.LLMBackend,
-		"llm_keep_alive":            "5m",
-		"llm_num_ctx":               "4096",
-		"llm_num_gpu":               "0",
-		"llm_max_tokens":            "256",
-		"llm_generate_model":        a.config.SDPromptModel,
-		"llm_analyze_model":         a.config.VisionModel,
-		"llm_generate_temperature":  "0.4",
-		"llm_generate_num_ctx":      "4096",
-		"llm_generate_num_predict":  "256",
-		"llm_generate_top_p":        "0.9",
-		"llm_generate_num_thread":   "0",
-		"llm_analyze_temperature":   "0.4",
-		"llm_analyze_num_ctx":       "4096",
-		"llm_analyze_num_predict":   "256",
-		"llm_analyze_top_p":         "0.9",
-		"llm_analyze_num_thread":    "0",
-		"kids_mode":                 "false",
-		"kids_cat_violence":         "true",
-		"kids_cat_horror":           "true",
-		"kids_cat_weapons":          "true",
-		"kids_cat_substances":       "true",
-		"kids_cat_mature":           "true",
-		"rembg_url":                 "",
-		"preview_mode":              "false",
-		"preview_width":             "512",
-		"preview_height":            "512",
-	}
-	for k, v := range defaults {
-		if _, ok := settings[k]; !ok {
-			settings[k] = v
-		}
-	}
-	return settings, nil
+	return a.settingsSvc.GetSettings()
 }
 
 func (a *App) UpdateSettings(data map[string]string) error {
-	urlFields := map[string]bool{"llm_url": true, "sd_url": true, "rembg_url": true}
-	for k, v := range data {
-		if urlFields[k] && v != "" {
-			if _, err := url.Parse(v); err != nil {
-				return fmt.Errorf("invalid %s: %w", k, err)
-			}
-		}
-	}
-
-	numericFields := map[string]bool{
-		"llm_num_ctx": true, "llm_num_gpu": true, "llm_max_tokens": true,
-		"preview_width": true, "preview_height": true,
-	}
-	for k, v := range data {
-		if numericFields[k] {
-			if v == "" {
-				data[k] = "0"
-			} else if n, err := strconv.Atoi(v); err != nil || n < 0 {
-				data[k] = "0"
-			}
-		}
-	}
-
-	for k, v := range data {
-		if !config.AllowedSettings[k] {
-			continue
-		}
-		if err := a.presets.SetSetting(k, v); err != nil {
-			return err
-		}
-	}
-
-	if v, ok := data["llm_url"]; ok {
-		a.llm.SetURL(v)
-		a.config.LLMUrl = v
-	}
-	if v, ok := data["sd_url"]; ok {
-		a.sd.SetURL(v)
-		a.config.SDUrl = v
-	}
-	if v, ok := data["llm_model"]; ok {
-		a.config.LLMModel = v
-	}
-	if v, ok := data["sd_prompt_model"]; ok {
-		a.config.SDPromptModel = v
-	}
-	if v, ok := data["vision_model"]; ok {
-		a.config.VisionModel = v
-	}
-	if v, ok := data["llm_backend"]; ok {
-		a.llm.SetBackend(v)
-		a.config.LLMBackend = v
-	}
-	if v, ok := data["llm_generate_model"]; ok {
-		a.config.SDPromptModel = v
-	}
-	if v, ok := data["llm_analyze_model"]; ok {
-		a.config.VisionModel = v
-	}
-	if v, ok := data["rembg_url"]; ok {
-		a.rembgClient.SetURL(v)
-	}
-
-	var changed []string
-	for k := range data {
-		if config.AllowedSettings[k] {
-			changed = append(changed, k)
-		}
-	}
-	a.log.UserAction("Settings updated: %s", strings.Join(changed, ", "))
-
-	return nil
+	return a.settingsSvc.UpdateSettings(data)
 }
 
 func (a *App) applyLLMConfig(mode string) {
-	prefix := "llm_generate_"
-	if mode == "analyze" {
-		prefix = "llm_analyze_"
-	}
-
-	var cfg llm.BackendConfig
-	if v, err := a.presets.GetSetting("llm_keep_alive"); err == nil {
-		cfg.KeepAlive = v
-	}
-	if v, err := a.presets.GetSetting(prefix + "num_ctx"); err == nil && v != "" {
-		if n, err := strconv.Atoi(v); err == nil {
-			cfg.NumCtx = n
-		}
-	}
-	if v, err := a.presets.GetSetting(prefix + "num_predict"); err == nil && v != "" {
-		if n, err := strconv.Atoi(v); err == nil {
-			cfg.NumPredict = n
-		}
-	}
-	if v, err := a.presets.GetSetting(prefix + "top_p"); err == nil && v != "" {
-		if n, err := strconv.ParseFloat(v, 64); err == nil {
-			cfg.TopP = n
-		}
-	}
-	if v, err := a.presets.GetSetting(prefix + "num_thread"); err == nil && v != "" {
-		if n, err := strconv.Atoi(v); err == nil {
-			cfg.NumThread = n
-		}
-	}
-	if v, err := a.presets.GetSetting("llm_num_gpu"); err == nil && v != "" {
-		if n, err := strconv.Atoi(v); err == nil {
-			cfg.NumGPU = n
-		}
-	}
-	a.llm.SetBackendConfig(cfg)
+	a.settingsSvc.ApplyLLMConfig(mode)
 }
 
 // --- Saved Descriptions ---
@@ -2248,107 +1864,19 @@ func (a *App) SaveImage(base64Data, defaultName string) (string, error) {
 
 // --- Preset Export/Import ---
 
-type PresetExportFile struct {
-	Version    int          `json:"version"`
-	ExportedAt time.Time    `json:"exported_at"`
-	Presets    []PresetData `json:"presets"`
-}
-
-type PresetData struct {
-	Name           string  `json:"name"`
-	PresetType     string  `json:"preset_type"`
-	TypeName       string  `json:"type_name"`
-	Prompt         string  `json:"prompt"`
-	NegativePrompt string  `json:"negative_prompt"`
-	Sampler        string  `json:"sampler"`
-	ScheduleType   string  `json:"schedule_type"`
-	Steps          int     `json:"steps"`
-	CfgScale       float64 `json:"cfg_scale"`
-	Width          int     `json:"width"`
-	Height         int     `json:"height"`
-	ModelName      string  `json:"model_name"`
-	Seed                   *int64   `json:"seed"`
-	DenoisingStrength      *float64 `json:"denoising_strength"`
-	ClipSkip               *int     `json:"clip_skip"`
-	BatchSize              *int     `json:"batch_size"`
-	BatchCount             *int     `json:"batch_count"`
-	HiresFix               *bool    `json:"hires_fix"`
-	HiresUpscale           *float64 `json:"hires_upscale"`
-	HiresDenoisingStrength *float64 `json:"hires_denoising_strength"`
-	HiresUpscaler          string   `json:"hires_upscaler"`
-	VAE                    string   `json:"vae"`
-	Tags                   string   `json:"tags"`
-	Loras                  string   `json:"loras"`
-	SourceFile             string   `json:"source_file,omitempty"`
-}
-
-type ImportPreview struct {
-	Presets []PresetData `json:"presets"`
-	Total   int          `json:"total"`
-}
+type PresetExportFile = importexport.ExportFile
+type PresetData = importexport.PresetData
+type ImportPreview = importexport.ImportPreview
 
 func (a *App) ExportPresets(ids []int64) (string, error) {
-	if len(ids) == 0 {
-		return "", fmt.Errorf("no presets selected")
-	}
-
-	selected, err := a.presets.GetByIDs(ids)
+	presets, err := a.ieSvc.PrepareExportData(ids)
 	if err != nil {
 		return "", err
 	}
-
-	data := PresetExportFile{
-		Version:    2,
-		ExportedAt: time.Now().UTC(),
-		Presets:    make([]PresetData, len(selected)),
-	}
-
-	typeMap := make(map[int64]string)
-	types, _ := a.presets.ListPresetTypes()
-	for _, t := range types {
-		typeMap[t.ID] = t.Name
-	}
-
-	for i, p := range selected {
-		typeName := p.PresetType
-		if p.TypeID != nil {
-			if n, ok := typeMap[*p.TypeID]; ok {
-				typeName = n
-			}
-		}
-		data.Presets[i] = PresetData{
-			Name:                   p.Name,
-			PresetType:             p.PresetType,
-			TypeName:               typeName,
-			Prompt:                 p.Prompt,
-			NegativePrompt:         p.NegativePrompt,
-			Sampler:                p.Sampler,
-			ScheduleType:           p.ScheduleType,
-			Steps:                  p.Steps,
-			CfgScale:               p.CfgScale,
-			Width:                  p.Width,
-			Height:                 p.Height,
-			ModelName:              p.ModelName,
-			Seed:                   p.Seed,
-			DenoisingStrength:      p.DenoisingStrength,
-			ClipSkip:               p.ClipSkip,
-			BatchSize:              p.BatchSize,
-			BatchCount:             p.BatchCount,
-			HiresFix:               p.HiresFix,
-			HiresUpscale:           p.HiresUpscale,
-			HiresDenoisingStrength: p.HiresDenoisingStrength,
-			HiresUpscaler:          p.HiresUpscaler,
-			VAE:                    p.VAE,
-			Tags:                   p.Tags,
-			Loras:                  p.Loras,
-		}
-	}
-
-	jsonBytes, err := json.MarshalIndent(data, "", "  ")
+	jsonBytes, err := a.ieSvc.BuildExportFile(presets)
 	if err != nil {
 		return "", err
 	}
-
 	path, err := runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{
 		DefaultFilename: "sd-studio-presets.json",
 		Filters: []runtime.FileFilter{
@@ -2358,12 +1886,7 @@ func (a *App) ExportPresets(ids []int64) (string, error) {
 	if err != nil || path == "" {
 		return "", err
 	}
-
-	if err := os.WriteFile(path, jsonBytes, 0o644); err != nil {
-		return "", err
-	}
-
-	return path, nil
+	return path, os.WriteFile(path, jsonBytes, 0o644)
 }
 
 func (a *App) OpenImportFile() (*ImportPreview, error) {
@@ -2375,134 +1898,25 @@ func (a *App) OpenImportFile() (*ImportPreview, error) {
 	if err != nil || len(paths) == 0 {
 		return nil, err
 	}
-
 	var allPresets []PresetData
-	for _, path := range paths {
-		info, err := os.Stat(path)
+	for _, p := range paths {
+		parsed, err := a.ieSvc.ParseImportFile(p)
 		if err != nil {
 			continue
 		}
-		if info.Size() > 10*1024*1024 {
-			continue
-		}
-
-		jsonBytes, err := os.ReadFile(path)
-		if err != nil {
-			continue
-		}
-
-		var data PresetExportFile
-		if err := json.Unmarshal(jsonBytes, &data); err != nil {
-			continue
-		}
-		if data.Version < 1 || data.Version > 2 {
-			continue
-		}
-
-		fileName := filepath.Base(path)
-		for i := range data.Presets {
-			data.Presets[i].SourceFile = fileName
-		}
-		allPresets = append(allPresets, data.Presets...)
+		allPresets = append(allPresets, parsed...)
 	}
-
 	if len(allPresets) == 0 {
 		return nil, fmt.Errorf("no presets found in selected files")
 	}
-
-	return &ImportPreview{
-		Presets: allPresets,
-		Total:   len(allPresets),
-	}, nil
+	return &ImportPreview{Presets: allPresets, Total: len(allPresets)}, nil
 }
 
-type ValidationWarning struct {
-	PresetName string   `json:"preset_name"`
-	Warnings   []string `json:"warnings"`
-}
+type ValidationWarning = importexport.ValidationWarning
 
 func (a *App) ValidateImportModels(items []PresetData) ([]ValidationWarning, error) {
-	if len(items) == 0 {
-		return nil, nil
-	}
-
-	var warnings []ValidationWarning
-
-	sdModels, _ := a.sd.GetModels()
-	modelSet := make(map[string]bool)
-	for _, m := range sdModels {
-		modelSet[m.Name] = true
-	}
-
-	loras, _ := a.sd.GetLoRAs()
-	loraSet := make(map[string]bool)
-	for _, l := range loras {
-		loraSet[l.Name] = true
-	}
-
-	for _, item := range items {
-		var w []string
-		if item.ModelName != "" && !modelSet[item.ModelName] {
-			w = append(w, "Model not found: "+item.ModelName)
-		}
-		if item.Loras != "" {
-			var loraEntries []preset.LoRAEntry
-			if err := json.Unmarshal([]byte(item.Loras), &loraEntries); err == nil {
-				for _, l := range loraEntries {
-					if !loraSet[l.Name] {
-						w = append(w, "LoRA not found: "+l.Name)
-					}
-				}
-			}
-		}
-		if len(w) > 0 {
-			warnings = append(warnings, ValidationWarning{
-				PresetName: item.Name,
-				Warnings:   w,
-			})
-		}
-	}
-
-	return warnings, nil
+	return a.ieSvc.ValidateModels(items)
 }
-
-var reCyrillicCheck = regexp.MustCompile(`[а-яА-ЯёЁ]`)
-
-func containsCyrillic(s string) bool {
-	return reCyrillicCheck.MatchString(s)
-}
-
-func extractTagsFromRaw(raw string) string {
-	var best string
-	for _, m := range reQuotedStrings.FindAllString(raw, -1) {
-		m = strings.Trim(m, `"`)
-		m = strings.TrimSpace(m)
-		if len(m) > len(best) && !strings.Contains(m, `"`) && !containsCyrillic(m) && (strings.Contains(m, ", ") || strings.Contains(m, "quality")) {
-			best = m
-		}
-	}
-	return best
-}
-
-func extractNegativeFromRaw(raw string) string {
-	jsonRaw := extractJSON(raw)
-	if jsonRaw == "" {
-		return ""
-	}
-	var obj map[string]string
-	if err := json.Unmarshal([]byte(jsonRaw), &obj); err != nil {
-		return ""
-	}
-	if np, ok := obj["negative_prompt"]; ok && !containsCyrillic(np) {
-		return np
-	}
-	return ""
-}
-
-var reJunkLabels = regexp.MustCompile(`(?i)\b(BASE (POSITIVE|NEGATIVE) PROMPT|USER DESCRIPTION|USER NEGATIVE|MERGED PROMPT|NEGATIVE[_ ]PROMPT|Translation of non-English text|translates to|Merged Prompt)\s*:\s*`)
-var reJSONFragments = regexp.MustCompile(`\{[^{}]*"(prompt|negative_prompt)"[^{}]*\}`)
-var reQuotedStrings = regexp.MustCompile(`"[^"]{0,500}"`)
-var reCyrillic = regexp.MustCompile(`[а-яА-ЯёЁ]+[^,(\[<]*,?`)
 
 func extractEmbeddedNegative(result *GenerateSDPromptResult) {
 	idx := strings.Index(result.Prompt, "negative_prompt")
@@ -2525,214 +1939,8 @@ func extractEmbeddedNegative(result *GenerateSDPromptResult) {
 	}
 }
 
-func stripJunk(s string) string {
-	if s == "" {
-		return s
-	}
-	for reJunkLabels.MatchString(s) {
-		s = reJunkLabels.ReplaceAllString(s, "")
-	}
-	for reJSONFragments.MatchString(s) {
-		s = reJSONFragments.ReplaceAllString(s, "")
-	}
-	for strings.Contains(s, `"prompt"`) || strings.Contains(s, `"negative_prompt"`) {
-		s = reQuotedStrings.ReplaceAllString(s, "")
-	}
-	for strings.Contains(s, "  ") {
-		s = strings.ReplaceAll(s, "  ", " ")
-	}
-	s = strings.ReplaceAll(s, ", ,", ",")
-	s = strings.ReplaceAll(s, ",,", ",")
-	s = strings.Trim(s, " ,.\n\r")
-	return s
-}
-
-func extractJSON(s string) string {
-	s = strings.TrimSpace(s)
-	s = strings.TrimPrefix(s, "```json")
-	s = strings.TrimPrefix(s, "```")
-	s = strings.TrimSuffix(s, "```")
-	s = strings.TrimSpace(s)
-	s = strings.ReplaceAll(s, `\_`, "_")
-	start := strings.Index(s, "{")
-	if start < 0 {
-		return s
-	}
-	end := strings.LastIndex(s, "}")
-	if end <= start {
-		return s
-	}
-	return s[start : end+1]
-}
-
-func truncateRepetitive(s string, maxLen int) string {
-	if s == "" {
-		return s
-	}
-	parts := strings.Split(s, ", ")
-	result := make([]string, 0, len(parts))
-	prevPrefix := ""
-	repeatCount := 0
-	for _, part := range parts {
-		prefix := part
-		if idx := strings.Index(part, ":"); idx > 0 {
-			prefix = part[:idx]
-		}
-		prefix = strings.ToLower(strings.TrimSpace(prefix))
-		if prefix == prevPrefix && prefix != "" {
-			repeatCount++
-			if repeatCount >= 3 {
-				break
-			}
-		} else {
-			prevPrefix = prefix
-			repeatCount = 0
-		}
-		result = append(result, part)
-	}
-	s = strings.Join(result, ", ")
-	if len(s) > maxLen {
-		if idx := strings.LastIndex(s[:maxLen], ","); idx > 0 {
-			s = s[:idx]
-		} else {
-			s = s[:maxLen]
-		}
-	}
-	s = strings.TrimRight(s, " ,.")
-	return s
-}
-
-func splitCompositeSampler(sampler, scheduleType string) (string, string) {
-	if scheduleType != "" {
-		return sampler, scheduleType
-	}
-	knownSchedulers := []string{"Karras", "Exponential", "Polyexponential"}
-	for _, s := range knownSchedulers {
-		if strings.HasSuffix(sampler, " "+s) {
-			return sampler[:len(sampler)-len(s)-1], s
-		}
-	}
-	return sampler, ""
-}
-
 func (a *App) ImportPresets(items []PresetData) ([]preset.Preset, error) {
-	if len(items) == 0 {
-		return nil, fmt.Errorf("no presets selected")
-	}
-	if len(items) > 500 {
-		return nil, fmt.Errorf("too many presets (max 500)")
-	}
-
-	for _, item := range items {
-		if strings.TrimSpace(item.Name) == "" {
-			return nil, fmt.Errorf("preset name is required")
-		}
-		if item.Steps < 1 || item.Steps > 150 {
-			return nil, fmt.Errorf("invalid steps for %q: must be 1-150", item.Name)
-		}
-		if item.Width < 64 || item.Width > 2048 || item.Height < 64 || item.Height > 2048 {
-			return nil, fmt.Errorf("invalid dimensions for %q: must be 64-2048", item.Name)
-		}
-		if item.CfgScale < 0 || item.CfgScale > 30 {
-			return nil, fmt.Errorf("invalid cfg_scale for %q: must be 0-30", item.Name)
-		}
-
-		if item.DenoisingStrength != nil && (*item.DenoisingStrength < 0 || *item.DenoisingStrength > 1) {
-			return nil, fmt.Errorf("invalid denoising_strength for %q: must be 0-1", item.Name)
-		}
-		if item.ClipSkip != nil && (*item.ClipSkip < 1 || *item.ClipSkip > 12) {
-			return nil, fmt.Errorf("invalid clip_skip for %q: must be 1-12", item.Name)
-		}
-		if item.BatchSize != nil && (*item.BatchSize < 1 || *item.BatchSize > 8) {
-			return nil, fmt.Errorf("invalid batch_size for %q: must be 1-8", item.Name)
-		}
-		if item.BatchCount != nil && (*item.BatchCount < 1 || *item.BatchCount > 8) {
-			return nil, fmt.Errorf("invalid batch_count for %q: must be 1-8", item.Name)
-		}
-		if item.HiresUpscale != nil && (*item.HiresUpscale < 1 || *item.HiresUpscale > 4) {
-			return nil, fmt.Errorf("invalid hires_upscale for %q: must be 1-4", item.Name)
-		}
-		if item.HiresDenoisingStrength != nil && (*item.HiresDenoisingStrength < 0 || *item.HiresDenoisingStrength > 1) {
-			return nil, fmt.Errorf("invalid hires_denoising_strength for %q: must be 0-1", item.Name)
-		}
-	}
-
-	typeCache := make(map[string]*int64)
-	for _, item := range items {
-		typeName := item.TypeName
-		if typeName == "" {
-			typeName = item.PresetType
-		}
-		if typeName == "" {
-			continue
-		}
-		if _, ok := typeCache[typeName]; ok {
-			continue
-		}
-		existing, err := a.presets.ListPresetTypes()
-		if err == nil {
-			for _, t := range existing {
-				if t.Name == typeName {
-					typeCache[typeName] = &t.ID
-					break
-				}
-			}
-		}
-		if _, ok := typeCache[typeName]; !ok {
-			pt := &preset.PresetType{Name: typeName}
-			if err := a.presets.CreatePresetType(pt); err == nil {
-				typeCache[typeName] = &pt.ID
-			}
-		}
-	}
-
-	batch := make([]preset.Preset, len(items))
-	for i, item := range items {
-		sampler, scheduleType := splitCompositeSampler(item.Sampler, item.ScheduleType)
-		p := preset.Preset{
-			Name:                   item.Name,
-			PresetType:             item.PresetType,
-			Prompt:                 item.Prompt,
-			NegativePrompt:         item.NegativePrompt,
-			Sampler:                sampler,
-			ScheduleType:           scheduleType,
-			Steps:                  item.Steps,
-			CfgScale:               item.CfgScale,
-			Width:                  item.Width,
-			Height:                 item.Height,
-			ModelName:              item.ModelName,
-			Seed:                   item.Seed,
-			DenoisingStrength:      item.DenoisingStrength,
-			ClipSkip:               item.ClipSkip,
-			BatchSize:              item.BatchSize,
-			BatchCount:             item.BatchCount,
-			HiresFix:               item.HiresFix,
-			HiresUpscale:           item.HiresUpscale,
-			HiresDenoisingStrength: item.HiresDenoisingStrength,
-			HiresUpscaler:          item.HiresUpscaler,
-			VAE:                    item.VAE,
-			Tags:                   item.Tags,
-			Loras:                  item.Loras,
-		}
-
-		typeName := item.TypeName
-		if typeName == "" {
-			typeName = item.PresetType
-		}
-		if typeName != "" {
-			if id, ok := typeCache[typeName]; ok {
-				p.TypeID = id
-			}
-		}
-
-		batch[i] = p
-	}
-
-	created, err := a.presets.CreateBatch(batch)
-	if err != nil {
-		return nil, err
-	}
-	return created, nil
+	return a.ieSvc.ImportItems(items)
 }
 
 func (a *App) ListCompoundPresets() ([]preset.CompoundPreset, error) {
@@ -3114,26 +2322,26 @@ RESPONSE LENGTH: your response is limited to ~%d tokens. You MUST fit within thi
 		runtime.EventsEmit(a.ctx, "llm:status", map[string]string{"status": "done"})
 
 		var promptResult GenerateSDPromptResult
-		jsonRaw := extractJSON(raw)
+		jsonRaw := promptutil.ExtractJSON(raw)
 		if err := json.Unmarshal([]byte(jsonRaw), &promptResult); err != nil {
 			promptResult = GenerateSDPromptResult{
-				Prompt:         truncateRepetitive(raw, 1000),
+				Prompt:         promptutil.TruncateRepetitive(raw, 1000),
 				NegativePrompt: p.NegativePrompt,
 			}
 		}
 
-		if containsCyrillic(promptResult.Prompt) {
-			promptResult.Prompt = extractTagsFromRaw(raw)
+		if promptutil.ContainsCyrillic(promptResult.Prompt) {
+			promptResult.Prompt = promptutil.ExtractTagsFromRaw(raw)
 		}
-		if containsCyrillic(promptResult.NegativePrompt) {
-			promptResult.NegativePrompt = extractNegativeFromRaw(raw)
+		if promptutil.ContainsCyrillic(promptResult.NegativePrompt) {
+			promptResult.NegativePrompt = promptutil.ExtractNegativeFromRaw(raw)
 		}
 
 		extractEmbeddedNegative(&promptResult)
-		promptResult.Prompt = stripJunk(promptResult.Prompt)
-		promptResult.Prompt = truncateRepetitive(promptResult.Prompt, 1000)
-		promptResult.NegativePrompt = stripJunk(promptResult.NegativePrompt)
-		promptResult.NegativePrompt = truncateRepetitive(promptResult.NegativePrompt, 500)
+		promptResult.Prompt = promptutil.StripJunk(promptResult.Prompt)
+		promptResult.Prompt = promptutil.TruncateRepetitive(promptResult.Prompt, 1000)
+		promptResult.NegativePrompt = promptutil.StripJunk(promptResult.NegativePrompt)
+		promptResult.NegativePrompt = promptutil.TruncateRepetitive(promptResult.NegativePrompt, 500)
 
 		promptResult.Prompt = a.filterKidsOutput(promptResult.Prompt)
 		promptResult.NegativePrompt = a.filterKidsOutput(promptResult.NegativePrompt)
@@ -3179,7 +2387,7 @@ RESPONSE LENGTH: your response is limited to ~%d tokens. You MUST fit within thi
 	batchCount := 1
 
 	if params.Mode == "img2img" || params.Mode == "inpaint" {
-		imgW, imgH := decodeImageSize(params.ImageBase64)
+		imgW, imgH := filebrowser.DecodeImageSize(params.ImageBase64)
 		if imgW > 0 && imgH > 0 {
 			imgW = imgW / 8 * 8
 			imgH = imgH / 8 * 8
@@ -3408,7 +2616,7 @@ func (a *App) analyzeRemoveContext(imageBase64, maskBase64 string) (string, erro
 	runtime.EventsEmit(a.ctx, "llm:status", map[string]string{"status": "done"})
 
 	result = strings.TrimSpace(result)
-	result = truncateRepetitive(result, 500)
+	result = promptutil.TruncateRepetitive(result, 500)
 	return result, nil
 }
 
@@ -3638,22 +2846,22 @@ RESPONSE LENGTH: your response is limited to ~%d tokens. You MUST fit within thi
 	runtime.EventsEmit(a.ctx, "llm:status", map[string]string{"status": "done"})
 
 	var promptResult GenerateSDPromptResult
-	jsonRaw := extractJSON(raw)
+	jsonRaw := promptutil.ExtractJSON(raw)
 	if err := json.Unmarshal([]byte(jsonRaw), &promptResult); err != nil {
 		promptResult = GenerateSDPromptResult{
-			Prompt:         truncateRepetitive(raw, 1000),
+			Prompt:         promptutil.TruncateRepetitive(raw, 1000),
 			NegativePrompt: firstPreset.NegativePrompt,
 		}
 	}
 
-	if containsCyrillic(promptResult.Prompt) {
-		promptResult.Prompt = extractTagsFromRaw(raw)
+	if promptutil.ContainsCyrillic(promptResult.Prompt) {
+		promptResult.Prompt = promptutil.ExtractTagsFromRaw(raw)
 	}
 	extractEmbeddedNegative(&promptResult)
-	promptResult.Prompt = stripJunk(promptResult.Prompt)
-	promptResult.Prompt = truncateRepetitive(promptResult.Prompt, 1000)
-	promptResult.NegativePrompt = stripJunk(promptResult.NegativePrompt)
-	promptResult.NegativePrompt = truncateRepetitive(promptResult.NegativePrompt, 500)
+	promptResult.Prompt = promptutil.StripJunk(promptResult.Prompt)
+	promptResult.Prompt = promptutil.TruncateRepetitive(promptResult.Prompt, 1000)
+	promptResult.NegativePrompt = promptutil.StripJunk(promptResult.NegativePrompt)
+	promptResult.NegativePrompt = promptutil.TruncateRepetitive(promptResult.NegativePrompt, 500)
 
 	promptResult.Prompt = a.filterKidsOutput(promptResult.Prompt)
 	promptResult.NegativePrompt = a.filterKidsOutput(promptResult.NegativePrompt)
@@ -3661,7 +2869,7 @@ RESPONSE LENGTH: your response is limited to ~%d tokens. You MUST fit within thi
 	var lastImage string
 	var lastInfo json.RawMessage
 
-	imgW, imgH := decodeImageSize(params.ImageBase64)
+	imgW, imgH := filebrowser.DecodeImageSize(params.ImageBase64)
 	if imgW > 0 && imgH > 0 {
 		imgW = imgW / 8 * 8
 		imgH = imgH / 8 * 8
@@ -4270,7 +3478,7 @@ type DecomposeSceneParams struct {
 }
 
 func (a *App) DecomposeScene(params DecomposeSceneParams) (*compositor.Scene, error) {
-	a.log.UserAction("Decompose scene: %s", truncate(params.Description, 80))
+	a.log.UserAction("Decompose scene: %s", promptutil.Truncate(params.Description, 80))
 	if params.Description == "" {
 		return nil, fmt.Errorf("description is required")
 	}
@@ -4374,18 +3582,7 @@ func (a *App) GenerateMultiPass(scene compositor.Scene) (*compositor.MultiPassRe
 }
 
 func (a *App) CheckRembg() error {
-	rembgURL, _ := a.presets.GetSetting("rembg_url")
-	if rembgURL == "" {
-		return fmt.Errorf("rembg URL not configured")
-	}
-	a.rembgClient.SetURL(rembgURL)
-	err := a.rembgClient.HealthCheck()
-	if err != nil {
-		a.log.Error("Rembg check failed: %s", err)
-	} else {
-		a.log.Info("Rembg connected: %s", rembgURL)
-	}
-	return err
+	return a.settingsSvc.CheckRembg()
 }
 
 func (a *App) ListSavedScenes() ([]preset.SavedScene, error) {
@@ -4430,131 +3627,15 @@ func (a *App) DeleteSavedScene(id int64) error {
 	return a.presets.DeleteSavedScene(id)
 }
 
-func truncate(s string, n int) string {
-	if len(s) <= n {
-		return s
-	}
-	return s[:n] + "..."
-}
 
 // --- Export ---
 
-type ExportImageParams struct {
-	ImageBase64   string `json:"image_base64"`
-	Format        string `json:"format"`
-	Width         int    `json:"width"`
-	Height        int    `json:"height"`
-	LockRatio     bool   `json:"lock_ratio"`
-	Quality       int    `json:"quality"`
-	Interpolation string `json:"interpolation"`
-	Filename      string `json:"filename"`
-}
+type ExportImageParams = importexport.ExportImageParams
 
 func (a *App) ExportImage(params ExportImageParams) (string, error) {
-	if params.ImageBase64 == "" {
-		return "", fmt.Errorf("no image provided")
-	}
-
-	switch params.Format {
-	case "png", "jpeg", "webp":
-	default:
-		return "", fmt.Errorf("unsupported format: %s", params.Format)
-	}
-	switch params.Interpolation {
-	case "nearest", "linear", "lanczos", "":
-	default:
-		return "", fmt.Errorf("unsupported interpolation: %s", params.Interpolation)
-	}
-
-	const maxBase64Len = 22 * 1024 * 1024 // ~16 MB decoded
-	if len(params.ImageBase64) > maxBase64Len {
-		return "", fmt.Errorf("image too large (max 16 MB)")
-	}
-
-	imgData, err := base64.StdEncoding.DecodeString(params.ImageBase64)
+	processed, err := a.ieSvc.ProcessExportImage(params)
 	if err != nil {
-		return "", fmt.Errorf("decode base64: %w", err)
-	}
-
-	img, _, err := image.Decode(bytes.NewReader(imgData))
-	if err != nil {
-		return "", fmt.Errorf("decode image: %w", err)
-	}
-
-	const maxDim = 8192
-	origBounds := img.Bounds()
-	origW := origBounds.Dx()
-	origH := origBounds.Dy()
-	targetW := params.Width
-	targetH := params.Height
-
-	if targetW == 0 && targetH == 0 {
-		targetW = origW
-		targetH = origH
-	} else if params.LockRatio {
-		if targetW > 0 && targetH == 0 {
-			longSide := float64(targetW)
-			if origH > origW {
-				ratio := longSide / float64(origH)
-				targetW = int(float64(origW) * ratio)
-				targetH = int(longSide)
-			} else {
-				ratio := longSide / float64(origW)
-				targetH = int(float64(origH) * ratio)
-			}
-		} else if targetH > 0 && targetW == 0 {
-			longSide := float64(targetH)
-			if origW > origH {
-				ratio := longSide / float64(origW)
-				targetH = int(float64(origH) * ratio)
-				targetW = int(longSide)
-			} else {
-				ratio := longSide / float64(origH)
-				targetW = int(float64(origW) * ratio)
-			}
-		} else {
-			ratio := math.Min(float64(targetW)/float64(origW), float64(targetH)/float64(origH))
-			ratio = math.Min(ratio, 1.0)
-			targetW = int(float64(origW) * ratio)
-			targetH = int(float64(origH) * ratio)
-		}
-	}
-
-	if targetW > maxDim {
-		targetW = maxDim
-	}
-	if targetH > maxDim {
-		targetH = maxDim
-	}
-	if targetW < 1 {
-		targetW = 1
-	}
-	if targetH < 1 {
-		targetH = 1
-	}
-
-	var result image.Image
-	if targetW != origW || targetH != origH {
-		dst := image.NewRGBA(image.Rect(0, 0, targetW, targetH))
-		var scaler xdraw.Scaler
-		switch params.Interpolation {
-		case "nearest":
-			scaler = xdraw.NearestNeighbor
-		case "linear":
-			scaler = xdraw.BiLinear
-		case "lanczos", "":
-			scaler = xdraw.CatmullRom
-		default:
-			scaler = xdraw.CatmullRom
-		}
-		scaler.Scale(dst, dst.Bounds(), img, origBounds, xdraw.Over, nil)
-		result = dst
-	} else {
-		result = img
-	}
-
-	if params.Quality <= 0 {
-		params.Quality = 90
+		return "", err
 	}
 
 	ext := "." + params.Format
@@ -4586,139 +3667,29 @@ func (a *App) ExportImage(params ExportImageParams) (string, error) {
 		return "", err
 	}
 
-	var buf bytes.Buffer
-	switch params.Format {
-	case "jpeg":
-		err = jpeg.Encode(&buf, result, &jpeg.Options{Quality: params.Quality})
-	case "webp":
-		webpData, encErr := encodeWebp(result, params.Quality)
-		if encErr != nil {
-			return "", fmt.Errorf("encode webp: %w", encErr)
-		}
-		buf.Write(webpData)
-	default:
-		err = png.Encode(&buf, result)
-	}
-	if err != nil {
-		return "", fmt.Errorf("encode %s: %w", params.Format, err)
-	}
-
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return "", err
-	}
-	if err := os.WriteFile(path, buf.Bytes(), 0o644); err != nil {
-		return "", err
-	}
-
-	return path, nil
+	return path, importexport.WriteImageToPath(processed, path)
 }
 
 func (a *App) ListExportPresets() ([]preset.ExportPreset, error) {
-	return a.presets.ListExportPresets()
+	return a.ieSvc.ListExportPresets()
 }
 
 func (a *App) SaveExportPreset(ep preset.ExportPreset) (*preset.ExportPreset, error) {
-	if ep.ID > 0 {
-		if err := a.presets.UpdateExportPreset(&ep); err != nil {
-			return nil, err
-		}
-	} else {
-		if err := a.presets.CreateExportPreset(&ep); err != nil {
-			return nil, err
-		}
-	}
-	return &ep, nil
+	return a.ieSvc.SaveExportPreset(ep)
 }
 
 func (a *App) DeleteExportPreset(id int64) error {
-	return a.presets.DeleteExportPreset(id)
+	return a.ieSvc.DeleteExportPreset(id)
 }
 
-type FileEntry struct {
-	Name    string `json:"name"`
-	Path    string `json:"path"`
-	IsDir   bool   `json:"is_dir"`
-	Size    int64  `json:"size"`
-	ModTime string `json:"mod_time"`
-}
-
-func decodeImageSize(b64 string) (int, int) {
-	data, err := base64.StdEncoding.DecodeString(b64)
-	if err != nil {
-		return 0, 0
-	}
-	cfg, _, err := image.DecodeConfig(bytes.NewReader(data))
-	if err != nil {
-		return 0, 0
-	}
-	return cfg.Width, cfg.Height
-}
-
-var imageExts = map[string]bool{
-	".png":  true,
-	".jpg":  true,
-	".jpeg": true,
-	".webp": true,
-}
+type FileEntry = filebrowser.FileEntry
 
 func (a *App) BrowseDirectory(dirPath string) ([]FileEntry, error) {
-	if dirPath == "" {
-		return []FileEntry{}, nil
-	}
-	entries, err := os.ReadDir(dirPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read directory: %w", err)
-	}
-	var result []FileEntry
-	for _, e := range entries {
-		name := e.Name()
-		ext := strings.ToLower(filepath.Ext(name))
-		if e.IsDir() {
-			result = append(result, FileEntry{
-				Name:  name,
-				Path:  filepath.Join(dirPath, name),
-				IsDir: true,
-			})
-			continue
-		}
-		if !imageExts[ext] {
-			continue
-		}
-		info, err := e.Info()
-		if err != nil {
-			continue
-		}
-		result = append(result, FileEntry{
-			Name:    name,
-			Path:    filepath.Join(dirPath, name),
-			IsDir:   false,
-			Size:    info.Size(),
-			ModTime: info.ModTime().Format("2006-01-02 15:04"),
-		})
-	}
-	return result, nil
+	return filebrowser.BrowseDirectory(dirPath)
 }
 
 func (a *App) ReadFileAsBase64(filePath string) (string, error) {
-	if filePath == "" {
-		return "", nil
-	}
-	ext := strings.ToLower(filepath.Ext(filePath))
-	if !imageExts[ext] {
-		return "", fmt.Errorf("unsupported file type: %s", ext)
-	}
-	info, err := os.Stat(filePath)
-	if err != nil {
-		return "", fmt.Errorf("failed to read file: %w", err)
-	}
-	if info.Size() > 16*1024*1024 {
-		return "", fmt.Errorf("image too large (max 16 MB)")
-	}
-	data, err := os.ReadFile(filePath)
-	if err != nil {
-		return "", fmt.Errorf("failed to read file: %w", err)
-	}
-	return base64.StdEncoding.EncodeToString(data), nil
+	return filebrowser.ReadFileAsBase64(filePath)
 }
 
 func (a *App) SelectBrowserFolder() (string, error) {
@@ -4746,390 +3717,69 @@ func (a *App) SetLastImage(base64Data string) error {
 }
 
 func (a *App) ReadThumbnail(filePath string) (string, error) {
-	if filePath == "" {
-		return "", nil
-	}
-	ext := strings.ToLower(filepath.Ext(filePath))
-	if !imageExts[ext] {
-		return "", fmt.Errorf("unsupported file type: %s", ext)
-	}
-	info, err := os.Stat(filePath)
-	if err != nil {
-		return "", fmt.Errorf("failed to read file: %w", err)
-	}
-	if info.Size() > 16*1024*1024 {
-		return "", fmt.Errorf("image too large (max 16 MB)")
-	}
-	data, err := os.ReadFile(filePath)
-	if err != nil {
-		return "", fmt.Errorf("failed to read file: %w", err)
-	}
-
-	img, _, err := image.Decode(bytes.NewReader(data))
-	if err != nil {
-		return "", fmt.Errorf("decode image: %w", err)
-	}
-
-	const thumbSize = 256
-	origW := img.Bounds().Dx()
-	origH := img.Bounds().Dy()
-	if origW <= thumbSize && origH <= thumbSize {
-		return base64.StdEncoding.EncodeToString(data), nil
-	}
-
-	ratio := math.Min(float64(thumbSize)/float64(origW), float64(thumbSize)/float64(origH))
-	tw := int(float64(origW) * ratio)
-	th := int(float64(origH) * ratio)
-	if tw < 1 {
-		tw = 1
-	}
-	if th < 1 {
-		th = 1
-	}
-
-	dst := image.NewRGBA(image.Rect(0, 0, tw, th))
-	xdraw.CatmullRom.Scale(dst, dst.Bounds(), img, img.Bounds(), xdraw.Over, nil)
-
-	var buf bytes.Buffer
-	switch ext {
-	case ".jpg", ".jpeg":
-		err = jpeg.Encode(&buf, dst, &jpeg.Options{Quality: 80})
-	case ".webp":
-		webpData, webpErr := encodeWebp(dst, 80)
-		if webpErr != nil {
-			return "", fmt.Errorf("encode thumbnail: %w", webpErr)
-		}
-		buf.Write(webpData)
-	default:
-		err = png.Encode(&buf, dst)
-	}
-	if err != nil {
-		return "", fmt.Errorf("encode thumbnail: %w", err)
-	}
-
-	return base64.StdEncoding.EncodeToString(buf.Bytes()), nil
+	return filebrowser.ReadThumbnail(filePath)
 }
 
 // --- Session management ---
 
-type sdInfo struct {
-	Prompt         string  `json:"prompt"`
-	NegativePrompt string  `json:"negative_prompt"`
-	SamplerName    string  `json:"sampler_name"`
-	Steps          int     `json:"steps"`
-	CfgScale       float64 `json:"cfg_scale"`
-	Seed           int64   `json:"seed"`
-	Width          int     `json:"width"`
-	Height         int     `json:"height"`
-	Denoising      float64 `json:"denoising_strength"`
-}
-
 func (a *App) addToSession(imageBase64 string, info json.RawMessage, source string, isPreview bool, presetID *int64) int64 {
-	if len(imageBase64) > 50*1024*1024 {
-		return 0
-	}
-
-	sessionID, err := a.presets.GetActiveSessionID()
-	if err != nil || sessionID == 0 {
-		return 0
-	}
-
-	imgData, err := base64.StdEncoding.DecodeString(imageBase64)
-	if err != nil {
-		return 0
-	}
-
-	img, _, err := image.Decode(bytes.NewReader(imgData))
-	if err != nil {
-		return 0
-	}
-
-	item := &preset.SessionItem{
-		SessionID: sessionID,
-		Source:    source,
-		IsPreview: isPreview,
-		PresetID:  presetID,
-		Width:     img.Bounds().Dx(),
-		Height:    img.Bounds().Dy(),
-	}
-
-	if info != nil {
-		var sd sdInfo
-		if json.Unmarshal(info, &sd) == nil {
-			item.Prompt = sd.Prompt
-			item.NegativePrompt = sd.NegativePrompt
-			item.Sampler = sd.SamplerName
-			item.Steps = sd.Steps
-			item.CfgScale = sd.CfgScale
-			item.Seed = &sd.Seed
-			item.Denoising = sd.Denoising
-			if sd.Width > 0 {
-				item.Width = sd.Width
-			}
-			if sd.Height > 0 {
-				item.Height = sd.Height
-			}
-		}
-	}
-
-	itemID, err := a.presets.AddSessionItem(item)
-	if err != nil {
-		return 0
-	}
-
-	sessionDir := filepath.Join(a.dataDir, "sessions", strconv.FormatInt(sessionID, 10))
-	thumbDir := filepath.Join(a.dataDir, "thumbs", strconv.FormatInt(sessionID, 10))
-	os.MkdirAll(sessionDir, 0o755)
-	os.MkdirAll(thumbDir, 0o755)
-
-	fileName := strconv.FormatInt(itemID, 10) + ".jpg"
-	filePath := filepath.Join(sessionDir, fileName)
-
-	f, err := os.Create(filePath)
-	if err == nil {
-		jpeg.Encode(f, img, &jpeg.Options{Quality: 95})
-		f.Close()
-	}
-
-	thumbName := fileName
-	thumbPath := filepath.Join(thumbDir, thumbName)
-	const thumbSize = 128
-	origW := img.Bounds().Dx()
-	origH := img.Bounds().Dy()
-	if origW > thumbSize || origH > thumbSize {
-		ratio := math.Min(float64(thumbSize)/float64(origW), float64(thumbSize)/float64(origH))
-		tw := int(float64(origW) * ratio)
-		th := int(float64(origH) * ratio)
-		if tw < 1 {
-			tw = 1
-		}
-		if th < 1 {
-			th = 1
-		}
-		dst := image.NewRGBA(image.Rect(0, 0, tw, th))
-		xdraw.CatmullRom.Scale(dst, dst.Bounds(), img, img.Bounds(), xdraw.Over, nil)
-		tf, err := os.Create(thumbPath)
-		if err == nil {
-			jpeg.Encode(tf, dst, &jpeg.Options{Quality: 80})
-			tf.Close()
-		}
-	} else {
-		srcF, _ := os.Open(filePath)
-		dstF, _ := os.Create(thumbPath)
-		if srcF != nil && dstF != nil {
-			io.Copy(dstF, srcF)
-		}
-		if srcF != nil {
-			srcF.Close()
-		}
-		if dstF != nil {
-			dstF.Close()
-		}
-	}
-
-	a.presets.UpdateSessionItemPaths(itemID, fileName, thumbName)
-	a.presets.SetActiveItem(itemID, sessionID)
-
-	if a.ctx != nil {
-		runtime.EventsEmit(a.ctx, "session:added", map[string]int64{"id": itemID})
-		runtime.EventsEmit(a.ctx, "session:active", map[string]int64{"id": itemID})
-	}
-
-	return itemID
+	return a.sessions.AddToSession(imageBase64, info, source, isPreview, presetID)
 }
 
 func (a *App) CreateSession(name string) (*preset.SessionInfo, error) {
-	s, err := a.presets.CreateSession(name)
-	if err != nil {
-		return nil, err
-	}
-	if err := a.presets.SetActiveSession(s.ID); err != nil {
-		return nil, err
-	}
-	if a.ctx != nil {
-		runtime.EventsEmit(a.ctx, "session:created", map[string]any{"session_id": s.ID, "name": s.Name})
-		runtime.EventsEmit(a.ctx, "session:switched", map[string]int64{"session_id": s.ID})
-	}
-	return s, nil
+	return a.sessions.CreateSession(name)
 }
 
 func (a *App) ListSessions() ([]preset.SessionInfo, error) {
-	return a.presets.ListSessions()
+	return a.sessions.ListSessions()
 }
 
 func (a *App) SwitchSession(id int64) error {
-	if err := a.presets.SetActiveSession(id); err != nil {
-		return err
-	}
-	if a.ctx != nil {
-		runtime.EventsEmit(a.ctx, "session:switched", map[string]int64{"session_id": id})
-	}
-	return nil
+	return a.sessions.SwitchSession(id)
 }
 
 func (a *App) RenameSession(id int64, name string) error {
-	return a.presets.RenameSession(id, name)
+	return a.sessions.RenameSession(id, name)
 }
 
 func (a *App) DeleteSession(id int64) error {
-	sessions, err := a.presets.ListSessions()
-	if err != nil {
-		return err
-	}
-	if len(sessions) <= 1 {
-		return fmt.Errorf("cannot delete the last session")
-	}
-
-	activeID, _ := a.presets.GetActiveSessionID()
-	if err := a.presets.DeleteSession(id); err != nil {
-		return err
-	}
-
-	sessionDir := filepath.Join(a.dataDir, "sessions", strconv.FormatInt(id, 10))
-	thumbDir := filepath.Join(a.dataDir, "thumbs", strconv.FormatInt(id, 10))
-	os.RemoveAll(sessionDir)
-	os.RemoveAll(thumbDir)
-
-	if activeID == id {
-		for _, s := range sessions {
-			if s.ID != id {
-				a.presets.SetActiveSession(s.ID)
-				break
-			}
-		}
-	}
-
-	if a.ctx != nil {
-		runtime.EventsEmit(a.ctx, "session:deleted", map[string]int64{"session_id": id})
-	}
-	return nil
+	return a.sessions.DeleteSession(id)
 }
 
 func (a *App) GetSessionItems() ([]preset.SessionItem, error) {
-	sessionID, err := a.presets.GetActiveSessionID()
-	if err != nil {
-		return nil, err
-	}
-	if sessionID == 0 {
-		return []preset.SessionItem{}, nil
-	}
-	return a.presets.GetSessionItems(sessionID)
+	return a.sessions.GetSessionItems()
 }
 
 func (a *App) GetActiveSessionItem() (*preset.SessionItem, error) {
-	sessionID, err := a.presets.GetActiveSessionID()
-	if err != nil {
-		return nil, err
-	}
-	if sessionID == 0 {
-		return nil, nil
-	}
-	return a.presets.GetActiveItem(sessionID)
+	return a.sessions.GetActiveSessionItem()
 }
 
 func (a *App) SetActiveSessionItem(id int64) error {
-	sessionID, err := a.presets.GetActiveSessionID()
-	if err != nil {
-		return err
-	}
-	if err := a.presets.SetActiveItem(id, sessionID); err != nil {
-		return err
-	}
-	if a.ctx != nil {
-		runtime.EventsEmit(a.ctx, "session:active", map[string]int64{"id": id})
-	}
-	return nil
+	return a.sessions.SetActiveSessionItem(id)
 }
 
 func (a *App) DeleteSessionItem(id int64) error {
-	item, err := a.presets.GetSessionItem(id)
-	if err != nil {
-		return err
-	}
-	if item == nil {
-		return nil
-	}
-	sessionDir := filepath.Join(a.dataDir, "sessions", strconv.FormatInt(item.SessionID, 10))
-	thumbDir := filepath.Join(a.dataDir, "thumbs", strconv.FormatInt(item.SessionID, 10))
-	if item.FileName != "" {
-		os.Remove(filepath.Join(sessionDir, item.FileName))
-	}
-	if item.ThumbName != "" {
-		os.Remove(filepath.Join(thumbDir, item.ThumbName))
-	}
-	if err := a.presets.DeleteSessionItem(id); err != nil {
-		return err
-	}
-	if a.ctx != nil {
-		runtime.EventsEmit(a.ctx, "session:removed", map[string]int64{"id": id})
-	}
-	return nil
+	return a.sessions.DeleteSessionItem(id)
 }
 
 func (a *App) ClearSession() error {
-	sessionID, err := a.presets.GetActiveSessionID()
-	if err != nil {
-		return err
-	}
-	if sessionID == 0 {
-		return nil
-	}
-	sessionDir := filepath.Join(a.dataDir, "sessions", strconv.FormatInt(sessionID, 10))
-	thumbDir := filepath.Join(a.dataDir, "thumbs", strconv.FormatInt(sessionID, 10))
-	os.RemoveAll(sessionDir)
-	os.RemoveAll(thumbDir)
-	os.MkdirAll(sessionDir, 0o755)
-	os.MkdirAll(thumbDir, 0o755)
-	if err := a.presets.ClearSessionItems(sessionID); err != nil {
-		return err
-	}
-	if a.ctx != nil {
-		runtime.EventsEmit(a.ctx, "session:cleared")
-	}
-	return nil
+	return a.sessions.ClearSession()
 }
 
 func (a *App) GetSessionImage(id int64) (string, error) {
-	item, err := a.presets.GetSessionItem(id)
-	if err != nil || item == nil {
-		return "", fmt.Errorf("session item not found")
-	}
-	sessionDir := filepath.Join(a.dataDir, "sessions", strconv.FormatInt(item.SessionID, 10))
-	data, err := os.ReadFile(filepath.Join(sessionDir, item.FileName))
-	if err != nil {
-		return "", fmt.Errorf("read image: %w", err)
-	}
-	return base64.StdEncoding.EncodeToString(data), nil
+	return a.sessions.GetSessionImage(id)
 }
 
 func (a *App) GetSessionThumb(id int64) (string, error) {
-	item, err := a.presets.GetSessionItem(id)
-	if err != nil || item == nil {
-		return "", fmt.Errorf("session item not found")
-	}
-	thumbDir := filepath.Join(a.dataDir, "thumbs", strconv.FormatInt(item.SessionID, 10))
-	data, err := os.ReadFile(filepath.Join(thumbDir, item.ThumbName))
-	if err != nil {
-		return "", fmt.Errorf("read thumbnail: %w", err)
-	}
-	return base64.StdEncoding.EncodeToString(data), nil
+	return a.sessions.GetSessionThumb(id)
 }
 
 func (a *App) HasSessionItems() (bool, error) {
-	return a.presets.HasAnyItems()
+	return a.sessions.HasSessionItems()
 }
 
 func (a *App) ConfirmClose(action string) {
-	if action == "discard" {
-		sessions, _ := a.presets.ListSessions()
-		for _, s := range sessions {
-			sessionDir := filepath.Join(a.dataDir, "sessions", strconv.FormatInt(s.ID, 10))
-			thumbDir := filepath.Join(a.dataDir, "thumbs", strconv.FormatInt(s.ID, 10))
-			os.RemoveAll(sessionDir)
-			os.RemoveAll(thumbDir)
-		}
-		a.presets.DeleteAllSessions()
-	}
+	a.sessions.ConfirmClose(action)
 	if a.ctx != nil {
 		runtime.Quit(a.ctx)
 	}
