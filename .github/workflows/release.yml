@@ -51,8 +51,12 @@ jobs:
           VERSION: ${{ github.ref_name }}
         run: wails build -ldflags "-X main.version=${VERSION#v}"
 
-      - name: Package (macOS/Linux)
-        if: matrix.ext == '.tar.gz'
+      - name: Package (macOS)
+        if: matrix.goos == 'darwin'
+        run: tar czf sd-studio-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz -C build/bin sd-studio.app
+
+      - name: Package (Linux)
+        if: matrix.goos == 'linux'
         run: tar czf sd-studio-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz -C build/bin sd-studio
 
       - name: Package (Windows)
