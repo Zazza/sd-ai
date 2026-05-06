@@ -13,8 +13,8 @@ const compoundPresets = ref([])
 const selectedPresetId = ref(null)
 const selectedCompoundPresetId = ref(null)
 const batchMode = ref('preset')
-const prompt = ref('')
-const negativePrompt = ref('')
+const description = ref('')
+const negative = ref('')
 const count = ref(4)
 const outputFolder = ref('')
 const generating = ref(false)
@@ -24,7 +24,7 @@ const progress = ref(null)
 const generatedFiles = ref([])
 
 const props = defineProps({
-  prefillPrompt: { type: String, default: '' },
+  prefillDescription: { type: String, default: '' },
   prefillNegative: { type: String, default: '' },
   prefillPresetId: { type: Number, default: null },
   prefillCompoundPresetId: { type: Number, default: null },
@@ -52,7 +52,7 @@ async function selectFolder() {
 }
 
 async function startGeneration() {
-  if (!prompt.value.trim()) {
+  if (!description.value.trim()) {
     error.value = t('batch.error_prompt_required')
     return
   }
@@ -72,19 +72,47 @@ async function startGeneration() {
   resetProgress()
 
   try {
+    let batchPrompt = ''
+    let batchNegative = ''
+
+    let llmPresetId = selectedPresetId.value
+    if (batchMode.value === 'compound') {
+      const cp = compoundPresets.value.find(c => c.id === selectedCompoundPresetId.value)
+      if (cp && cp.steps && cp.steps.length > 0) {
+        llmPresetId = cp.steps[0].preset_id
+      }
+    }
+
+    if (llmPresetId) {
+      const promptResult = await api.generateSdPrompt({
+        preset_id: llmPresetId,
+        description: description.value,
+        negative: negative.value,
+      })
+      if (promptResult && promptResult.prompt) {
+        batchPrompt = promptResult.prompt
+        batchNegative = promptResult.negative_prompt || ''
+      }
+    }
+
+    if (!batchPrompt) {
+      batchPrompt = description.value
+      batchNegative = negative.value
+    }
+
     if (batchMode.value === 'compound') {
       await BatchCompoundGenerate({
         compound_preset_id: selectedCompoundPresetId.value,
-        extra_prompt: prompt.value,
-        extra_negative_prompt: negativePrompt.value,
+        extra_prompt: batchPrompt,
+        extra_negative_prompt: batchNegative,
         count: count.value,
         output_folder: outputFolder.value,
       })
     } else {
       await BatchGenerate({
         preset_id: selectedPresetId.value || 0,
-        prompt: prompt.value,
-        negative_prompt: negativePrompt.value,
+        prompt: batchPrompt,
+        negative_prompt: batchNegative,
         count: count.value,
         output_folder: outputFolder.value,
       })
@@ -107,11 +135,11 @@ onMounted(async () => {
   loadPresets()
   EventsOn('batch:progress', onBatchProgress)
 
-  if (props.prefillPrompt) {
-    prompt.value = props.prefillPrompt
+  if (props.prefillDescription) {
+    description.value = props.prefillDescription
   }
   if (props.prefillNegative) {
-    negativePrompt.value = props.prefillNegative
+    negative.value = props.prefillNegative
   }
   if (props.prefillPresetId) {
     selectedPresetId.value = props.prefillPresetId
@@ -123,8 +151,8 @@ onMounted(async () => {
 
   try {
     const s = await api.getSettings()
-    if (!props.prefillPrompt && s.batch_prompt) prompt.value = s.batch_prompt
-    if (!props.prefillNegative && s.batch_negative) negativePrompt.value = s.batch_negative
+    if (!props.prefillDescription && s.batch_prompt) description.value = s.batch_prompt
+    if (!props.prefillNegative && s.batch_negative) negative.value = s.batch_negative
     if (!props.prefillPresetId && s.batch_preset_id) selectedPresetId.value = Number(s.batch_preset_id)
     if (!props.prefillCompoundPresetId && s.batch_compound_preset_id) {
       selectedCompoundPresetId.value = Number(s.batch_compound_preset_id)
@@ -139,8 +167,8 @@ onMounted(async () => {
     if (shared.selectedPresetId) selectedPresetId.value = shared.selectedPresetId
     if (shared.selectedCompoundPresetId) selectedCompoundPresetId.value = shared.selectedCompoundPresetId
     if (shared.genMode) batchMode.value = shared.genMode
-    if (!props.prefillPrompt && shared.description) prompt.value = shared.description
-    if (!props.prefillNegative && shared.negative) negativePrompt.value = shared.negative
+    if (!props.prefillDescription && shared.description) description.value = shared.description
+    if (!props.prefillNegative && shared.negative) negative.value = shared.negative
   }
 })
 
@@ -151,8 +179,8 @@ onUnmounted(() => {
     shared.selectedPresetId = selectedPresetId.value
     shared.selectedCompoundPresetId = selectedCompoundPresetId.value
     shared.genMode = batchMode.value
-    if (prompt.value) shared.description = prompt.value
-    if (negativePrompt.value) shared.negative = negativePrompt.value
+    if (description.value) shared.description = description.value
+    if (negative.value) shared.negative = negative.value
   }
 })
 
@@ -161,8 +189,8 @@ function saveBatchState() {
     batch_preset_id: String(selectedPresetId.value || ''),
     batch_compound_preset_id: String(selectedCompoundPresetId.value || ''),
     batch_mode: batchMode.value,
-    batch_prompt: prompt.value || '',
-    batch_negative: negativePrompt.value || '',
+    batch_prompt: description.value || '',
+    batch_negative: negative.value || '',
     batch_count: String(count.value || ''),
     batch_output_folder: outputFolder.value || '',
   }).catch(() => {})
@@ -212,12 +240,12 @@ function saveBatchState() {
 
       <div class="form-group">
         <label class="form-label">{{ t('batch.label_prompt') }}</label>
-        <textarea class="form-textarea" v-model="prompt" rows="5" :placeholder="t('batch.placeholder_prompt')" :disabled="generating"></textarea>
+        <textarea class="form-textarea" v-model="description" rows="5" :placeholder="t('batch.placeholder_prompt')" :disabled="generating"></textarea>
       </div>
 
       <div class="form-group">
         <label class="form-label">{{ t('batch.label_negative') }}</label>
-        <textarea class="form-textarea" v-model="negativePrompt" rows="2" :placeholder="t('batch.placeholder_negative')" :disabled="generating"></textarea>
+        <textarea class="form-textarea" v-model="negative" rows="2" :placeholder="t('batch.placeholder_negative')" :disabled="generating"></textarea>
       </div>
 
       <div style="display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: end;">
@@ -234,7 +262,7 @@ function saveBatchState() {
         </div>
       </div>
 
-      <button class="btn btn-primary" style="width: 100%; justify-content: center; padding: 12px; margin-top: 12px;" @click="startGeneration" :disabled="generating || !prompt.trim() || !outputFolder.trim() || (batchMode === 'compound' && !selectedCompoundPresetId)">
+      <button class="btn btn-primary" style="width: 100%; justify-content: center; padding: 12px; margin-top: 12px;" @click="startGeneration" :disabled="generating || !description.trim() || !outputFolder.trim() || (batchMode === 'compound' && !selectedCompoundPresetId)">
         <span v-if="generating" style="display: inline-flex; align-items: center; gap: 6px;">
           <span class="spinner" style="width: 14px; height: 14px; border-width: 2px;"></span>
           Generating {{ progress ? `${progress.current}/${progress.total}` : t('settings.btn_loading') }}

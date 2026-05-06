@@ -23,6 +23,7 @@ const genInfo = ref(null)
 const sourceImage = ref('')
 const sourceGenInfo = ref(null)
 const isPreview = ref(false)
+const hiresSkipped = ref(false)
 const savedPreview = ref(null)
 const upscaling = ref(false)
 const upscalingX2 = ref(false)
@@ -143,6 +144,7 @@ async function sendToSD() {
   generatedImage.value = ''
   genInfo.value = null
   isPreview.value = false
+  hiresSkipped.value = false
   savedPreview.value = null
   effectivePrompt.value = ''
   effectiveNegative.value = ''
@@ -165,6 +167,7 @@ async function sendToSD() {
       sourceImage.value = result.image
       sourceGenInfo.value = result.info
       isPreview.value = result.is_preview || false
+      hiresSkipped.value = result.hires_fix_skipped || false
       effectivePrompt.value = result.effective_prompt || ''
       effectiveNegative.value = result.effective_negative_prompt || ''
     }
@@ -187,42 +190,52 @@ async function generateImage() {
   }
   saveGenState()
   resetProgress()
-
-  if (genMode.value === 'preset' && description.value.trim() && promptDirty) {
-    generationStage.value = 'prompt'
-    error.value = ''
-    try {
-      const promptResult = await api.generateSdPrompt({
-        preset_id: selectedPresetId.value,
-        description: description.value,
-        negative: negative.value,
-      })
-      if (promptResult && promptResult.prompt) {
-        extraPrompt.value = promptResult.prompt
-        extraNegativePrompt.value = promptResult.negative_prompt || ''
-        promptDirty = false
-      } else {
-        error.value = t('generate.error_empty_llm')
-        generatingImage.value = false
-        generationStage.value = ''
-        return
-      }
-    } catch (e) {
-      error.value = t('generate.error_prompt_gen', { error: String(e) })
-      generatingImage.value = false
-      generationStage.value = ''
-      return
-    }
-  }
-
-  generationStage.value = 'image'
   generatingImage.value = true
   generatedImage.value = ''
   genInfo.value = null
   isPreview.value = false
+  hiresSkipped.value = false
   savedPreview.value = null
   effectivePrompt.value = ''
   effectiveNegative.value = ''
+
+  if (description.value.trim() && promptDirty) {
+    let llmPresetId = selectedPresetId.value
+    if (genMode.value === 'compound') {
+      const cp = compoundPresets.value.find(c => c.id === selectedCompoundPresetId.value)
+      if (cp && cp.steps && cp.steps.length > 0) {
+        llmPresetId = cp.steps[0].preset_id
+      }
+    }
+    if (llmPresetId && (genMode.value === 'preset' || genMode.value === 'compound')) {
+      generationStage.value = 'prompt'
+      error.value = ''
+      try {
+        const promptResult = await api.generateSdPrompt({
+          preset_id: llmPresetId,
+          description: description.value,
+          negative: negative.value,
+        })
+        if (promptResult && promptResult.prompt) {
+          extraPrompt.value = promptResult.prompt
+          extraNegativePrompt.value = promptResult.negative_prompt || ''
+          promptDirty = false
+        } else {
+          error.value = t('generate.error_empty_llm')
+          generatingImage.value = false
+          generationStage.value = ''
+          return
+        }
+      } catch (e) {
+        error.value = t('generate.error_prompt_gen', { error: String(e) })
+        generatingImage.value = false
+        generationStage.value = ''
+        return
+      }
+    }
+  }
+
+  generationStage.value = 'image'
   try {
     let result
     if (genMode.value === 'compound') {
@@ -242,6 +255,7 @@ async function generateImage() {
       sourceImage.value = result.image
       sourceGenInfo.value = result.info
       isPreview.value = result.is_preview || false
+      hiresSkipped.value = result.hires_fix_skipped || false
       effectivePrompt.value = result.effective_prompt || ''
       effectiveNegative.value = result.effective_negative_prompt || ''
     }
@@ -398,11 +412,11 @@ function copyPrompt() {
 }
 
 async function openBatchGeneration() {
-  if (!extraPrompt.value) return
+  if (!description.value.trim()) return
 
   EventsEmit('navigate:batch', {
-    prefillPrompt: extraPrompt.value,
-    prefillNegative: extraNegativePrompt.value || '',
+    prefillDescription: description.value,
+    prefillNegative: negative.value || '',
     prefillPresetId: genMode.value === 'preset' ? selectedPresetId.value || null : null,
     prefillCompoundPresetId: genMode.value === 'compound' ? selectedCompoundPresetId.value || null : null,
   })
@@ -558,7 +572,7 @@ function onKeydown(e) {
             </span>
             <span v-else>{{ t('generate.btn_generate') }}</span>
           </button>
-          <button class="btn btn-secondary" style="width: 100%; justify-content: center; padding: 8px; margin-top: 6px;" @click="openBatchGeneration" :disabled="generatingImage || !extraPrompt || (genMode === 'preset' ? !selectedPresetId : !selectedCompoundPresetId)">
+          <button class="btn btn-secondary" style="width: 100%; justify-content: center; padding: 8px; margin-top: 6px;" @click="openBatchGeneration" :disabled="generatingImage || !description.trim() || (genMode === 'preset' ? !selectedPresetId : !selectedCompoundPresetId)">
             {{ t('generate.btn_batch_generation') }}
           </button>
 
@@ -606,6 +620,9 @@ function onKeydown(e) {
           <div v-else-if="generatedImage" style="width: 100%; padding: 12px;">
             <div v-if="isPreview && previewMode" class="status status-info" style="margin-bottom: 8px; text-align: center;">
               {{ t('generate.preview_info') }}
+            </div>
+            <div v-if="hiresSkipped" class="status status-warning" style="margin-bottom: 8px; text-align: center;">
+              {{ t('generate.hires_skipped') }}
             </div>
             <img :src="'data:image/png;base64,' + generatedImage" alt="Generated" class="img-fade-in" style="border-radius: var(--radius-sm); cursor: zoom-in;" @click="showViewer = true" />
             <div style="display: flex; gap: 8px; margin-top: 12px; justify-content: center;">

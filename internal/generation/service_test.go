@@ -1987,3 +1987,133 @@ func TestTestCompoundGenerate_Success(t *testing.T) {
 	assert.Equal(t, "result-img", results[0].Image)
 	assert.Empty(t, results[0].Error)
 }
+
+func floatPtr(v float64) *float64 { return &v }
+
+func TestGenerateImage_ForgeHiresFallback(t *testing.T) {
+	t.Parallel()
+	hf := true
+	db := openTestDB(t)
+	makeTestPreset(t, db, &preset.Preset{
+		Name:                    "forge-preset",
+		Prompt:                  "1girl, masterpiece",
+		NegativePrompt:          "lowres",
+		Sampler:                 "Euler a",
+		Steps:                   20,
+		CfgScale:                7.0,
+		Width:                   512,
+		Height:                  512,
+		HiresFix:               &hf,
+		HiresUpscale:           floatPtr(2.0),
+		HiresDenoisingStrength: floatPtr(0.5),
+		HiresUpscaler:          "Latent",
+	})
+
+	callCount := 0
+	var firstCallReq, secondCallReq sd.Txt2ImgRequest
+	sdSvc := &mockSD{
+		txt2img: func(req sd.Txt2ImgRequest) (*sd.Txt2ImgResponse, error) {
+			callCount++
+			if callCount == 1 {
+				firstCallReq = req
+				return nil, fmt.Errorf(
+					"request failed after 3 attempts: status 500\nSD response: {\"error\":\"TypeError\",\"detail\":\"\",\"body\":\"\",\"message\":\"argument of type 'NoneType' is not iterable\"}",
+				)
+			}
+			secondCallReq = req
+			return &sd.Txt2ImgResponse{
+				Images:     []string{"fallback-image-data"},
+				Info:       json.RawMessage(`{"seed":123}`),
+				Parameters: json.RawMessage(`{}`),
+			}, nil
+		},
+	}
+
+	svc := newTestService(t, db, &mockLLM{}, sdSvc)
+	svc.ctx = context.Background()
+
+	result, err := svc.GenerateImage(GenerateImageParams{PresetID: 1})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, "fallback-image-data", result.Image)
+	assert.Equal(t, 2, callCount)
+
+	assert.NotNil(t, firstCallReq.HiresFix)
+	assert.True(t, *firstCallReq.HiresFix)
+	assert.NotNil(t, firstCallReq.HiresUpscale)
+	assert.NotNil(t, firstCallReq.HiresDenoisingStrength)
+	assert.Equal(t, "Latent", firstCallReq.HiresUpscaler)
+
+	assert.Nil(t, secondCallReq.HiresFix)
+	assert.Nil(t, secondCallReq.HiresUpscale)
+	assert.Nil(t, secondCallReq.HiresDenoisingStrength)
+	assert.Equal(t, "", secondCallReq.HiresUpscaler)
+	assert.Zero(t, secondCallReq.HiresResizeX)
+	assert.Zero(t, secondCallReq.HiresResizeY)
+	assert.Zero(t, secondCallReq.HiresSecondPassSteps)
+}
+
+func TestGenerateImage_ForgeErrorNoHiresFix(t *testing.T) {
+	t.Parallel()
+	db := openTestDB(t)
+	makeTestPreset(t, db, &preset.Preset{
+		Name:           "no-hires-preset",
+		Prompt:         "1girl",
+		NegativePrompt: "lowres",
+		Sampler:        "Euler a",
+		Steps:          20,
+		CfgScale:       7.0,
+		Width:          512,
+		Height:         512,
+	})
+
+	callCount := 0
+	sdSvc := &mockSD{
+		txt2img: func(req sd.Txt2ImgRequest) (*sd.Txt2ImgResponse, error) {
+			callCount++
+			return nil, fmt.Errorf(
+				"request failed after 3 attempts: status 500\nSD response: {\"error\":\"TypeError\",\"detail\":\"\",\"body\":\"\",\"message\":\"argument of type 'NoneType' is not iterable\"}",
+			)
+		},
+	}
+
+	svc := newTestService(t, db, &mockLLM{}, sdSvc)
+	svc.ctx = context.Background()
+
+	_, err := svc.GenerateImage(GenerateImageParams{PresetID: 1})
+	assert.Error(t, err)
+	assert.Equal(t, 1, callCount)
+}
+
+func TestGenerateImage_HiresFallbackStillFails(t *testing.T) {
+	t.Parallel()
+	hf := true
+	db := openTestDB(t)
+	makeTestPreset(t, db, &preset.Preset{
+		Name:           "hires-fail-preset",
+		Prompt:         "1girl",
+		NegativePrompt: "lowres",
+		Sampler:        "Euler a",
+		Steps:          20,
+		CfgScale:       7.0,
+		Width:          512,
+		Height:         512,
+		HiresFix:      &hf,
+	})
+
+	callCount := 0
+	sdSvc := &mockSD{
+		txt2img: func(req sd.Txt2ImgRequest) (*sd.Txt2ImgResponse, error) {
+			callCount++
+			return nil, fmt.Errorf("SD server error")
+		},
+	}
+
+	svc := newTestService(t, db, &mockLLM{}, sdSvc)
+	svc.ctx = context.Background()
+
+	_, err := svc.GenerateImage(GenerateImageParams{PresetID: 1})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "SD server error")
+	assert.Equal(t, 2, callCount)
+}

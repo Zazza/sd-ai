@@ -31,7 +31,7 @@ provide('sharedGenState', shared)
 
 function onNavigateToBatch(data) {
   batchProps.value = {
-    prefillPrompt: data?.prefillPrompt || '',
+    prefillDescription: data?.prefillDescription || '',
     prefillNegative: data?.prefillNegative || '',
     prefillPresetId: data?.prefillPresetId || null,
     prefillCompoundPresetId: data?.prefillCompoundPresetId || null,

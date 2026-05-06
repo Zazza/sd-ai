@@ -14,9 +14,9 @@
 
 ## Stable Diffusion WebUI
 
-Движок генерации изображений. SD Studio подключается через REST API.
+Движок генерации изображений. SD Studio подключается через REST API. Поддерживаются два варианта: **A1111** (стандартный) и **Forge** (ускоренный).
 
-### Установка (Python + Git)
+### Вариант 1: A1111 (стандартный, рекомендуется)
 
 ```bash
 git clone https://github.com/AUTOMATIC1111/stable-diffusion-webui.git
@@ -30,6 +30,25 @@ Windows:
 ```bat
 webui.bat --listen --api --enable-insecure-extension-access
 ```
+
+### Вариант 2: Forge (быстрее, с известными ограничениями)
+
+[Stable Diffusion WebUI Forge](https://github.com/lllyasviel/stable-diffusion-webui-forge) — оптимизированный форк A1111, работает значительно быстрее.
+
+```bash
+git clone https://github.com/lllyasviel/stable-diffusion-webui-forge.git
+cd stable-diffusion-webui-forge
+
+# Запуск с сетевым доступом
+./webui.sh --listen --api --enable-insecure-extension-access
+```
+
+Windows:
+```bat
+webui.bat --listen --api --enable-insecure-extension-access
+```
+
+> **Известная проблема Forge:** Hires Fix может вызывать ошибку `argument of type 'NoneType' is not iterable`. SD Studio автоматически повторит генерацию без Hires Fix и покажет предупреждение. Для полноценной работы Hires Fix используйте A1111.
 
 ### Флаги
 

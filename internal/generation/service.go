@@ -91,6 +91,7 @@ type GenerateImageResult struct {
 	Parameters              any    `json:"parameters"`
 	Info                    any    `json:"info"`
 	IsPreview               bool   `json:"is_preview"`
+	HiresFixSkipped         bool   `json:"hires_fix_skipped"`
 	EffectivePrompt         string `json:"effective_prompt"`
 	EffectiveNegativePrompt string `json:"effective_negative_prompt"`
 }
@@ -721,7 +722,7 @@ func (s *Service) GenerateImage(params GenerateImageParams) (*GenerateImageResul
 		hiresFix = nil
 	}
 
-	result, err := s.sd.Txt2Img(sd.Txt2ImgRequest{
+	req := sd.Txt2ImgRequest{
 		Prompt:                 prompt,
 		NegativePrompt:         negativePrompt,
 		SamplerName:            samplerName,
@@ -741,12 +742,30 @@ func (s *Service) GenerateImage(params GenerateImageParams) (*GenerateImageResul
 		HiresUpscaler:          p.HiresUpscaler,
 		DoNotSaveImages:        true,
 		DoNotSaveGrid:          true,
-	})
+	}
+
+	result, err := s.sd.Txt2Img(req)
+	hiresSkipped := false
 	if err != nil {
 		if ierr := s.checkSDInterrupted(); ierr != nil {
 			return nil, ierr
 		}
-		return nil, err
+		if hiresFix != nil {
+			s.log.Warn("SD error with hires fix enabled, retrying without hires fix: %s", err)
+			time.Sleep(3 * time.Second)
+			req.HiresFix = nil
+			req.HiresUpscale = nil
+			req.HiresDenoisingStrength = nil
+			req.HiresUpscaler = ""
+			req.HiresResizeX = 0
+			req.HiresResizeY = 0
+			req.HiresSecondPassSteps = 0
+			result, err = s.sd.Txt2Img(req)
+			hiresSkipped = true
+		}
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	if len(result.Images) == 0 {
@@ -773,6 +792,7 @@ func (s *Service) GenerateImage(params GenerateImageParams) (*GenerateImageResul
 		Parameters:              result.Parameters,
 		Info:                    result.Info,
 		IsPreview:               isPreview,
+		HiresFixSkipped:         hiresSkipped,
 		EffectivePrompt:         prompt,
 		EffectiveNegativePrompt: negativePrompt,
 	}
@@ -882,7 +902,7 @@ func (s *Service) BatchGenerate(params BatchGenerateParams) error {
 			Status:  "generating",
 		})
 
-		result, err := s.sd.Txt2Img(sd.Txt2ImgRequest{
+		req := sd.Txt2ImgRequest{
 			Prompt:                 prompt,
 			NegativePrompt:         negativePrompt,
 			SamplerName:            samplerName,
@@ -902,7 +922,9 @@ func (s *Service) BatchGenerate(params BatchGenerateParams) error {
 			HiresUpscaler:          p.HiresUpscaler,
 			DoNotSaveImages:        true,
 			DoNotSaveGrid:          true,
-		})
+		}
+
+		result, err := s.sd.Txt2Img(req)
 		if err != nil {
 			if ierr := s.checkSDInterrupted(); ierr != nil {
 				s.emitter.Emit("batch:progress", BatchProgress{
@@ -912,12 +934,26 @@ func (s *Service) BatchGenerate(params BatchGenerateParams) error {
 				})
 				return ierr
 			}
-			s.emitter.Emit("batch:progress", BatchProgress{
-				Current: i + 1,
-				Total:   params.Count,
-				Status:  fmt.Sprintf("error: image %d failed", i+1),
-			})
-			return fmt.Errorf("image %d/%d failed: %w", i+1, params.Count, err)
+			if hiresFix != nil {
+				s.log.Warn("SD error with hires fix enabled, retrying without hires fix: %s", err)
+				time.Sleep(3 * time.Second)
+				req.HiresFix = nil
+				req.HiresUpscale = nil
+				req.HiresDenoisingStrength = nil
+				req.HiresUpscaler = ""
+				req.HiresResizeX = 0
+				req.HiresResizeY = 0
+				req.HiresSecondPassSteps = 0
+				result, err = s.sd.Txt2Img(req)
+			}
+			if err != nil {
+				s.emitter.Emit("batch:progress", BatchProgress{
+					Current: i + 1,
+					Total:   params.Count,
+					Status:  fmt.Sprintf("error: image %d failed", i+1),
+				})
+				return fmt.Errorf("image %d/%d failed: %w", i+1, params.Count, err)
+			}
 		}
 		if len(result.Images) == 0 {
 			if ierr := s.checkSDInterrupted(); ierr != nil {

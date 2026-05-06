@@ -6,7 +6,7 @@
 
 SD Studio bridges your local Stable Diffusion and LLM into a single workflow: describe what you want in plain language, get a properly crafted SD prompt, and generate — no manual tag wrangling. Built for power users who want full control over their local pipeline.
 
-> **Note:** SD Studio connects to your local [Stable Diffusion WebUI](https://github.com/AUTOMATIC1111/stable-diffusion-webui) and an [OpenAI-compatible LLM](https://ollama.com). Both run on your hardware — no cloud, no subscriptions, no data leaving your machine.
+> **Note:** SD Studio connects to your local [Stable Diffusion WebUI](https://github.com/AUTOMATIC1111/stable-diffusion-webui) and an [OpenAI-compatible LLM](https://ollama.com). Both run on your hardware — no cloud, no subscriptions, no data leaving your machine. You can also use [Stable Diffusion WebUI Forge](https://github.com/lllyasviel/stable-diffusion-webui-forge) for faster generation (see [Setup Guide](docs/setup-en.md) for details and known limitations).
 
 ---
 
@@ -77,7 +77,7 @@ SD Studio bridges your local Stable Diffusion and LLM into a single workflow: de
 
 SD Studio connects to two services on your local network:
 
-- **Stable Diffusion WebUI** (A1111) — runs with `--api` flag. [Setup guide](https://github.com/AUTOMATIC1111/stable-diffusion-webui). Default: `http://localhost:7860`
+- **Stable Diffusion WebUI** (A1111 or [Forge](https://github.com/lllyasviel/stable-diffusion-webui-forge)) — runs with `--api` flag. [Setup guide](docs/setup-en.md). Default: `http://localhost:7860`
 - **LLM API** — any OpenAI-compatible server: [Ollama](https://ollama.com/), [llama.cpp](https://github.com/ggerganov/llama.cpp), or [LM Studio](https://lmstudio.ai/). Default: `http://localhost:11434/v1`
 
 Optional: [Rembg](https://github.com/danielgatis/rembg) for background removal in multi-scene mode.
@@ -93,6 +93,10 @@ Optional: [Rembg](https://github.com/danielgatis/rembg) for background removal i
 | macOS | Xcode CLI tools (`xcode-select --install`), 10.15+ |
 | Linux | `libgtk-3-dev`, `libwebkit2gtk-4.1-dev` |
 | Windows | [WebView2](https://developer.microsoft.com/en-us/microsoft-edge/webview2/) (built into Win 10/11) |
+
+## Download
+
+Pre-built releases are available on the [Releases page](https://github.com/Zazza/sd-ai/releases).
 
 ## Quick Start
 

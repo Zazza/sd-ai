@@ -4,6 +4,26 @@ All notable changes to SD Studio are documented here.
 
 ## [Unreleased]
 
+## [0.5.3] — 2026-05-06
+
+### Added
+- SD Forge compatibility — automatic fallback when Hires Fix fails (retry without Hires Fix)
+- Hires Fix skipped warning in UI when fallback triggers
+- Generate page: immediate spinner/status on Generate button click (covers LLM prompt phase)
+- Batch page: LLM prompt generation — Description and Negative fields now go through LLM before batch SD generation
+- Pipeline mode: description is now sent to LLM for prompt generation (was ignored before)
+- Setup docs: two installation variants — A1111 (standard) and Forge (faster, with known limitations note)
+- README: Forge support mention, pre-built releases download link
+
+### Fixed
+- SD Forge: Hires Fix causing `NoneType` error or connection reset — graceful fallback without Hires Fix
+- Generate page: no visual feedback during LLM prompt generation phase
+- Batch page: raw description was copied into prompt field instead of being processed by LLM
+- Pipeline mode on Generate page: description and negative were ignored, previous prompt sent directly to SD
+
+### Tests
+- 3 regression tests for Hires Fix fallback (fallback success, no fallback without HiresFix, fallback still fails)
+
 ## [0.5.2] — 2026-05-06
 
 ### Changed

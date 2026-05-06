@@ -51,6 +51,7 @@ export const en = {
   'generate.upscaling_x2': 'Upscaling x2...',
   'generate.upscaling_full': 'Upscaling to full resolution...',
   'generate.preview_info': 'Preview \u2014 click Upscale for full resolution. Tip: switch preset before upscale for style transfer.',
+  'generate.hires_skipped': 'Hires Fix was disabled due to SD backend error. Image generated without upscaling.',
   'generate.btn_upscale_full': 'Upscale to Full Size',
   'generate.btn_back_preview': '\u2190 Back to Preview',
   'generate.btn_upscale_x2': 'Upscale x2',
