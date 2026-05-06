@@ -238,8 +238,6 @@ func (s *Service) generateRemoveObject(params GenerateFromImageParams) (*Generat
 	var width, height int
 	var seed *int64
 	var clipSkip int
-	var modelName, vae string
-	var loras string
 
 	imgData, _ := base64.StdEncoding.DecodeString(params.ImageBase64)
 	if imgCfg, _, err := image.DecodeConfig(bytes.NewReader(imgData)); err == nil {
@@ -247,52 +245,8 @@ func (s *Service) generateRemoveObject(params GenerateFromImageParams) (*Generat
 		height = imgCfg.Height
 	}
 
-	if params.PresetID > 0 {
-		p, err := s.db.Get(params.PresetID)
-		if err == nil {
-			if p.Prompt != "" {
-				prompt = p.Prompt + ", " + removeDesc + ", seamless background, clean, natural, consistent with surroundings"
-			} else {
-				prompt = removeDesc + ", seamless background, clean, natural, consistent with surroundings"
-			}
-			negativePrompt = p.NegativePrompt
-			if negativePrompt != "" {
-				negativePrompt += ", "
-			}
-			negativePrompt += removeNegative
-
-			samplerName = p.Sampler
-			if p.ScheduleType != "" {
-				st := strings.ToUpper(p.ScheduleType[:1]) + p.ScheduleType[1:]
-				samplerName = p.Sampler + " " + st
-			}
-			scheduler = p.ScheduleType
-			steps = p.Steps
-			cfgScale = p.CfgScale
-			if p.Width > 0 {
-				width = p.Width
-			}
-			if p.Height > 0 {
-				height = p.Height
-			}
-			seed = p.Seed
-			if p.ClipSkip != nil {
-				clipSkip = *p.ClipSkip
-			}
-			modelName = p.ModelName
-			vae = p.VAE
-			loras = p.Loras
-		}
-	}
-
-	if prompt == "" {
-		prompt = removeDesc + ", seamless background, clean, natural, consistent with surroundings"
-	}
-	if negativePrompt == "" {
-		negativePrompt = removeNegative
-	}
-
-	prompt = appendLorasToPrompt(prompt, loras)
+	prompt = removeDesc + ", seamless background, clean, natural, consistent with surroundings"
+	negativePrompt = removeNegative
 
 	if samplerName == "" {
 		samplerName = "Euler a"
@@ -308,13 +262,6 @@ func (s *Service) generateRemoveObject(params GenerateFromImageParams) (*Generat
 	}
 	if height == 0 {
 		height = 512
-	}
-
-	if modelName != "" {
-		_ = s.sd.SetModel(modelName)
-	}
-	if vae != "" {
-		_ = s.sd.SetVAE(vae)
 	}
 
 	denoising := params.DenoisingStrength

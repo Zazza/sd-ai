@@ -871,12 +871,12 @@ function onKeydown(e) {
             </div>
           </div>
 
-          <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+          <div v-if="mode !== 'remove'" style="display: flex; gap: 8px; margin-bottom: 12px;">
             <button class="btn btn-sm" :class="genMode === 'preset' ? 'btn-primary' : 'btn-secondary'" @click="genMode = 'preset'">{{ t('fi.btn_preset') }}</button>
             <button class="btn btn-sm" :class="genMode === 'compound' ? 'btn-primary' : 'btn-secondary'" @click="genMode = 'compound'">{{ t('fi.btn_pipeline') }}</button>
           </div>
 
-          <div v-if="genMode === 'preset'" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div v-if="mode !== 'remove' && genMode === 'preset'" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
             <div class="form-group">
               <label class="form-label">{{ t('fi.label_type') }}</label>
               <select class="form-select" v-model="selectedTypeId" :disabled="generatingImage">
@@ -893,7 +893,7 @@ function onKeydown(e) {
             </div>
           </div>
 
-          <div v-if="genMode === 'compound'" class="form-group">
+          <div v-if="mode !== 'remove' && genMode === 'compound'" class="form-group">
             <label class="form-label">{{ t('fi.label_pipeline') }}</label>
             <select class="form-select" v-model="selectedCompoundPresetId" :disabled="generatingImage">
               <option :value="null" disabled>{{ t('fi.select_pipeline') }}</option>
