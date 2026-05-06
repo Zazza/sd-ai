@@ -3,7 +3,6 @@ module go-sd
 go 1.25.0
 
 require (
-	github.com/chai2010/webp v1.4.0
 	github.com/stretchr/testify v1.10.0
 	github.com/wailsapp/wails/v2 v2.12.0
 	golang.org/x/image v0.39.0

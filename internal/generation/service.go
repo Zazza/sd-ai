@@ -501,7 +501,10 @@ func (s *Service) GenerateSDPrompt(params GenerateSDPromptParams) (*GenerateSDPr
 	negative := strings.TrimSpace(params.Negative)
 
 	if description == "" && negative == "" {
-		return nil, nil
+		return &GenerateSDPromptResult{
+			Prompt:         p.Prompt,
+			NegativePrompt: p.NegativePrompt,
+		}, nil
 	}
 
 	systemPrompt := s.getSDPromptInstruction()

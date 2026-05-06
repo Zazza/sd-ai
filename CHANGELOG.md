@@ -4,6 +4,21 @@ All notable changes to SD Studio are documented here.
 
 ## [Unreleased]
 
+## [0.5.4] — 2026-05-06
+
+### Added
+- Fast Save button on generated image — modal dialog with filename input, saves directly to FileBrowser folder
+- Fast Save format selector: JPG (default) / PNG
+- FileBrowser: directory path now persisted between sessions
+- Clearing description/negative triggers prompt regeneration via LLM (or returns preset base prompt)
+- Changing preset or pipeline also triggers prompt regeneration
+
+### Changed
+- Removed WebP support across entire app (export, file browser, DB defaults, dependencies)
+
+### Fixed
+- Fast Save: auto-detects image format from SD (PNG or JPEG) instead of assuming PNG
+
 ## [0.5.3] — 2026-05-06
 
 ### Added

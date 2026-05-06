@@ -66,6 +66,8 @@ export function ExportImage(arg1:importexport.ExportImageParams):Promise<string>
 
 export function ExportPresets(arg1:Array<number>):Promise<string>;
 
+export function FastSaveImage(arg1:string,arg2:string,arg3:string):Promise<string>;
+
 export function GenerateCompoundImage(arg1:generation.GenerateCompoundImageParams):Promise<generation.GenerateImageResult>;
 
 export function GenerateFromImage(arg1:generation.GenerateFromImageParams):Promise<generation.GenerateImageResult>;

@@ -1,9 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"fmt"
+	"image"
+	"image/jpeg"
+	_ "image/png"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -317,7 +321,7 @@ func (a *App) GenerateMultiPass(scene compositor.Scene) (*compositor.MultiPassRe
 func (a *App) ReadImageFile() (string, error) {
 	path, err := runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{
 		Filters: []runtime.FileFilter{
-			{DisplayName: "Images", Pattern: "*.png;*.jpg;*.jpeg;*.webp"},
+			{DisplayName: "Images", Pattern: "*.png;*.jpg;*.jpeg"},
 		},
 	})
 	if err != nil || path == "" {
@@ -411,6 +415,72 @@ func (a *App) SaveImage(base64Data, defaultName string) (string, error) {
 
 	a.log.UserAction("Image saved: %s", path)
 	return path, nil
+}
+
+func (a *App) FastSaveImage(base64Data, filename, format string) (string, error) {
+	if base64Data == "" {
+		return "", fmt.Errorf("no image data")
+	}
+	dir, err := a.presets.GetSetting("file_browser_path")
+	if err != nil || dir == "" {
+		return "", fmt.Errorf("no save directory set — open File Browser and select a folder first")
+	}
+
+	if filename == "" {
+		filename = "sd-studio-image"
+	}
+
+	ext := ".jpg"
+	if format == "png" {
+		ext = ".png"
+	}
+	filename = sanitizeFilename(filename) + ext
+
+	path := filepath.Join(dir, filename)
+	if _, err := os.Stat(path); err == nil {
+		base := filename[:len(filename)-len(ext)]
+		for i := 1; ; i++ {
+			path = filepath.Join(dir, fmt.Sprintf("%s_%d%s", base, i, ext))
+			if _, err := os.Stat(path); err != nil {
+				break
+			}
+		}
+	}
+
+	data, err := base64.StdEncoding.DecodeString(base64Data)
+	if err != nil {
+		return "", err
+	}
+
+	if format == "jpg" {
+		img, _, err := image.Decode(bytes.NewReader(data))
+		if err == nil {
+			var buf bytes.Buffer
+			if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: 95}); err != nil {
+				return "", err
+			}
+			data = buf.Bytes()
+		}
+	}
+
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		return "", err
+	}
+
+	a.log.UserAction("Fast save: %s", path)
+	return path, nil
+}
+
+func sanitizeFilename(name string) string {
+	r := strings.NewReplacer(
+		"/", "_", "\\", "_", ":", "_", "*", "_",
+		"?", "_", "\"", "_", "<", "_", ">", "_", "|", "_",
+	)
+	result := r.Replace(name)
+	if len(result) > 200 {
+		result = result[:200]
+	}
+	return result
 }
 
 // --- SD Info ---
@@ -665,9 +735,6 @@ func (a *App) ExportImage(params ExportImageParams) (string, error) {
 	case "jpeg":
 		filterName = "JPEG Image"
 		filterPattern = "*.jpg"
-	case "webp":
-		filterName = "WebP Image"
-		filterPattern = "*.webp"
 	}
 
 	path, err := runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{

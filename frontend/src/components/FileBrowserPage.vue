@@ -82,6 +82,7 @@ async function loadPath() {
     entries.value = []
   } finally {
     loading.value = false
+    api.updateSettings({ file_browser_path: currentPath.value }).catch(() => {})
   }
 }
 
@@ -173,7 +174,6 @@ function formatSize(bytes) {
 function mimeForEntry(entry) {
   const ext = (entry.name.split('.').pop() || '').toLowerCase()
   if (ext === 'jpg' || ext === 'jpeg') return 'image/jpeg'
-  if (ext === 'webp') return 'image/webp'
   return 'image/png'
 }
 

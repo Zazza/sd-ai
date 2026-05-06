@@ -357,7 +357,7 @@ func (s *Service) ProcessExportImage(params ExportImageParams) (*ProcessedImage,
 	}
 
 	switch params.Format {
-	case "png", "jpeg", "webp":
+	case "png", "jpeg":
 	default:
 		return nil, fmt.Errorf("unsupported format: %s", params.Format)
 	}
@@ -470,12 +470,6 @@ func (s *Service) ProcessExportImage(params ExportImageParams) (*ProcessedImage,
 	switch params.Format {
 	case "jpeg":
 		err = jpeg.Encode(&buf, result, &jpeg.Options{Quality: params.Quality})
-	case "webp":
-		webpData, encErr := encodeWebp(result, params.Quality)
-		if encErr != nil {
-			return nil, fmt.Errorf("encode webp: %w", encErr)
-		}
-		buf.Write(webpData)
 	default:
 		err = png.Encode(&buf, result)
 	}

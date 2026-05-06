@@ -29,7 +29,6 @@ const showPresetForm = ref(false)
 const formats = [
   { value: 'png', label: 'PNG' },
   { value: 'jpeg', label: 'JPEG' },
-  { value: 'webp', label: 'WebP' },
 ]
 
 const interpolations = [

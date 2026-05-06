@@ -1,6 +1,6 @@
 import {
   ListPresets, ListPresetsByType, CreatePreset, UpdatePreset, DeletePreset,
-  GenerateSDPrompt, GenerateImage, UpscaleImage, UpscalePreview, SaveImage, GetLastImage,
+  GenerateSDPrompt, GenerateImage, UpscaleImage, UpscalePreview, SaveImage, FastSaveImage, GetLastImage,
   GetSDModels, GetSDSamplers, GetSDSchedulers, GetSDUpscalers, GetSDVAEs, GetLLMModels,
   GetSettings, UpdateSettings, CheckServices,
   ListDescriptions, CreateDescription, CreateDescriptionFull, UpdateDescription, DeleteDescription,
@@ -43,6 +43,7 @@ export const api = {
   upscaleImage: (imageBase64, genInfo, presetId) =>
     UpscaleImage({ image_base64: imageBase64, gen_info: typeof genInfo === 'string' ? genInfo : JSON.stringify(genInfo || {}), preset_id: presetId || 0 }),
   saveImage: (base64Data, defaultName) => SaveImage(base64Data, defaultName),
+  fastSaveImage: (base64Data, filename, format) => FastSaveImage(base64Data, filename, format),
   getLastImage: () => GetLastImage(),
   getModels: () => GetSDModels(),
   getSamplers: () => GetSDSamplers(),

@@ -859,9 +859,9 @@ func migrateV9(db *sql.DB) error {
 
 	defaults := []ExportPreset{
 		{Name: "Quality Photo", Format: "png", Width: 0, Height: 0, LockRatio: true, Quality: 0, Interpolation: "lanczos"},
-		{Name: "Web Optimized", Format: "webp", Width: 1920, Height: 0, LockRatio: true, Quality: 85, Interpolation: "lanczos"},
+		{Name: "Web Optimized", Format: "jpeg", Width: 1920, Height: 0, LockRatio: true, Quality: 85, Interpolation: "lanczos"},
 		{Name: "Social Media", Format: "jpeg", Width: 1080, Height: 1080, LockRatio: false, Quality: 90, Interpolation: "lanczos"},
-		{Name: "Thumbnail", Format: "webp", Width: 256, Height: 256, LockRatio: false, Quality: 75, Interpolation: "lanczos"},
+		{Name: "Thumbnail", Format: "jpeg", Width: 256, Height: 256, LockRatio: false, Quality: 75, Interpolation: "lanczos"},
 	}
 	for _, d := range defaults {
 		_, err := db.Exec(

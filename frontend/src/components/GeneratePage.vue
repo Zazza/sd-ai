@@ -31,6 +31,11 @@ const previewMode = ref(false)
 const effectivePrompt = ref('')
 const effectiveNegative = ref('')
 
+const showFastSaveModal = ref(false)
+const fastSaveFilename = ref('')
+const fastSaveFormat = ref('jpg')
+const fastSaveLoading = ref(false)
+
 const generatingImage = ref(false)
 const { llmStatus, sdProgress, preview, interrupt: interruptGeneration, reset: resetProgress } = useGenerationProgress()
 const generationStage = ref('')
@@ -64,7 +69,7 @@ const formattedGenInfo = computed(() => {
   }
 })
 
-watch([description, negative], () => {
+watch([description, negative, selectedPresetId, selectedCompoundPresetId], () => {
   promptDirty = true
 })
 
@@ -199,7 +204,7 @@ async function generateImage() {
   effectivePrompt.value = ''
   effectiveNegative.value = ''
 
-  if (description.value.trim() && promptDirty) {
+  if (promptDirty) {
     let llmPresetId = selectedPresetId.value
     if (genMode.value === 'compound') {
       const cp = compoundPresets.value.find(c => c.id === selectedCompoundPresetId.value)
@@ -401,6 +406,27 @@ async function downloadImage() {
     }
   } catch (e) {
     error.value = t('generate.error_save', { error: String(e) })
+  }
+}
+
+function openFastSaveModal() {
+  fastSaveFilename.value = 'sd-studio-' + Date.now()
+  showFastSaveModal.value = true
+}
+
+async function confirmFastSave() {
+  if (!fastSaveFilename.value.trim() || !generatedImage.value) return
+  fastSaveLoading.value = true
+  try {
+    const savedPath = await api.fastSaveImage(generatedImage.value, fastSaveFilename.value.trim(), fastSaveFormat.value)
+    if (savedPath) {
+      showFastSaveModal.value = false
+      error.value = ''
+    }
+  } catch (e) {
+    error.value = t('generate.error_fast_save', { error: String(e) })
+  } finally {
+    fastSaveLoading.value = false
   }
 }
 
@@ -630,6 +656,7 @@ function onKeydown(e) {
               <button v-if="!isPreview && savedPreview" class="btn btn-secondary btn-sm" @click="backToPreview">{{ t('generate.btn_back_preview') }}</button>
               <button v-if="generatedImage && !isPreview" class="btn btn-secondary btn-sm" @click="upscaleImageX2" :disabled="upscalingX2">{{ t('generate.btn_upscale_x2') }}</button>
               <button class="btn btn-secondary btn-sm" @click="downloadImage" data-tooltip="Download">{{ t('generate.btn_download') }}</button>
+              <button v-if="generatedImage" class="btn btn-secondary btn-sm" @click="openFastSaveModal">{{ t('generate.btn_fast_save') }}</button>
               <button class="btn btn-secondary btn-sm" @click="copyPrompt" data-tooltip="Copy prompt">{{ t('generate.btn_copy') }}</button>
               <button class="btn btn-secondary btn-sm" @click="generateImage" data-tooltip="Regenerate">{{ t('generate.btn_regenerate') }}</button>
             </div>
@@ -670,5 +697,29 @@ function onKeydown(e) {
     />
 
     <ImageViewer v-if="showViewer" :image-base64="generatedImage" @close="showViewer = false" />
+
+    <div v-if="showFastSaveModal" class="modal-overlay">
+      <div class="modal-content" style="max-width: 400px;">
+        <h3 style="margin: 0 0 12px;">{{ t('generate.fast_save_title') }}</h3>
+        <div class="form-group">
+          <label class="form-label">{{ t('generate.fast_save_filename') }}</label>
+          <input class="form-input" v-model="fastSaveFilename" @keydown.enter="confirmFastSave" :disabled="fastSaveLoading" autofocus />
+        </div>
+        <div class="form-group" style="margin-top: 8px;">
+          <label class="form-label">{{ t('generate.fast_save_format') }}</label>
+          <div style="display: flex; gap: 8px;">
+            <button class="btn btn-sm" :class="fastSaveFormat === 'jpg' ? 'btn-primary' : 'btn-secondary'" @click="fastSaveFormat = 'jpg'">JPG</button>
+            <button class="btn btn-sm" :class="fastSaveFormat === 'png' ? 'btn-primary' : 'btn-secondary'" @click="fastSaveFormat = 'png'">PNG</button>
+          </div>
+        </div>
+        <div style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px;">
+          <button class="btn btn-secondary" @click="showFastSaveModal = false" :disabled="fastSaveLoading">{{ t('generate.fast_save_cancel') }}</button>
+          <button class="btn btn-primary" @click="confirmFastSave" :disabled="!fastSaveFilename.trim() || fastSaveLoading">
+            <span v-if="fastSaveLoading" class="spinner" style="width: 14px; height: 14px; border-width: 2px; display: inline-block; vertical-align: middle; margin-right: 4px;"></span>
+            {{ t('generate.fast_save_btn') }}
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>

@@ -19,7 +19,6 @@ var imageExts = map[string]bool{
 	".png":  true,
 	".jpg":  true,
 	".jpeg": true,
-	".webp": true,
 }
 
 type FileEntry struct {
@@ -139,8 +138,6 @@ func ReadThumbnail(filePath string) (string, error) {
 	switch ext {
 	case ".jpg", ".jpeg":
 		err = jpeg.Encode(&buf, dst, &jpeg.Options{Quality: 80})
-	case ".webp":
-		return "", fmt.Errorf("webp thumbnails not supported in this context")
 	default:
 		err = png.Encode(&buf, dst)
 	}
