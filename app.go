@@ -1,38 +1,26 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
-	"image"
-	"image/color"
-	"image/draw"
-	"image/png"
-	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
-	xdraw "golang.org/x/image/draw"
 
 	"go-sd/internal/compositor"
-	"go-sd/internal/importexport"
-
-	"go-sd/internal/filebrowser"
-
 	"go-sd/internal/config"
+	"go-sd/internal/filebrowser"
+	"go-sd/internal/generation"
+	"go-sd/internal/importexport"
 	"go-sd/internal/kids"
 	"go-sd/internal/llm"
 	"go-sd/internal/logger"
 	"go-sd/internal/preset"
-	"go-sd/internal/promptutil"
 	"go-sd/internal/rembg"
 	"go-sd/internal/sd"
 	"go-sd/internal/session"
@@ -50,24 +38,21 @@ func (e *appEmitter) Emit(event string, data ...any) {
 }
 
 type App struct {
-	ctx          context.Context
-	presets      *preset.DB
-	llm          llm.Service
-	sd           sd.Service
-	rembgClient  *rembg.Client
-	log          *logger.Logger
-	config       *config.Config
-	dataDir      string
-	batchMu      sync.Mutex
-	batchRunning bool
-	sdPollingMu     sync.Mutex
-	sdPollingCancel context.CancelFunc
-	sdInterrupted   bool
-	kidsMgr      *kids.Manager
-	sessions     *session.Service
-	settingsSvc  *settings.Service
-	ieSvc        *importexport.Service
-	emitter      appEmitter
+	ctx         context.Context
+	presets     *preset.DB
+	llm         llm.Service
+	sd          sd.Service
+	rembgClient *rembg.Client
+	log         *logger.Logger
+	config      *config.Config
+	dataDir     string
+
+	kidsMgr     *kids.Manager
+	sessions    *session.Service
+	settingsSvc *settings.Service
+	ieSvc       *importexport.Service
+	gen         *generation.Service
+	emitter     appEmitter
 }
 
 func NewApp(presets *preset.DB, llmClient llm.Service, sdClient sd.Service, cfg *config.Config) *App {
@@ -85,90 +70,25 @@ func NewApp(presets *preset.DB, llmClient llm.Service, sdClient sd.Service, cfg 
 	a.sessions = session.New(presets, a.dataDir, &a.emitter)
 	a.settingsSvc = settings.New(presets, llmClient, sdClient, cfg, a.rembgClient, a.log)
 	a.ieSvc = importexport.New(presets, sdClient, a.log)
+	a.gen = generation.New(
+		presets, llmClient, sdClient, cfg,
+		a.rembgClient, a.dataDir,
+		&a.emitter, a.kidsMgr, a.sessions, a.settingsSvc, a.log,
+	)
 	return a
 }
 
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 	a.log.SetContext(ctx)
+	a.gen.SetContext(ctx)
 }
 
 func (a *App) Version() string {
 	return version
 }
 
-type SDProgressEvent struct {
-	Progress    float64 `json:"progress"`
-	ETARelative float64 `json:"eta_relative"`
-	Job         string  `json:"job"`
-	JobCount    int     `json:"job_count"`
-	JobNo       int     `json:"job_no"`
-	Steps       int     `json:"steps"`
-	SamplerName string  `json:"sampler_name"`
-	Preview     string  `json:"preview,omitempty"`
-}
-
-func (a *App) startSDPolling() {
-	a.sdPollingMu.Lock()
-	defer a.sdPollingMu.Unlock()
-	a.sdInterrupted = false
-	if a.sdPollingCancel != nil {
-		return
-	}
-	ctx, cancel := context.WithCancel(a.ctx)
-	a.sdPollingCancel = cancel
-	go func() {
-		ticker := time.NewTicker(500 * time.Millisecond)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				prog, err := a.sd.GetProgress()
-				if err != nil {
-					continue
-				}
-				runtime.EventsEmit(a.ctx, "sd:progress", SDProgressEvent{
-					Progress:    prog.Progress,
-					ETARelative: prog.ETARelative,
-					Job:         prog.State.Job,
-					JobCount:    prog.State.JobCount,
-					JobNo:       prog.State.JobNo,
-					Steps:       prog.State.Sampling.Steps,
-					SamplerName: prog.State.Sampling.SamplerName,
-					Preview:     prog.CurrentImage,
-				})
-			}
-		}
-	}()
-}
-
-func (a *App) stopSDPolling() {
-	a.sdPollingMu.Lock()
-	defer a.sdPollingMu.Unlock()
-	if a.sdPollingCancel != nil {
-		a.sdPollingCancel()
-		a.sdPollingCancel = nil
-	}
-}
-
-func (a *App) InterruptGeneration() error {
-	a.sdPollingMu.Lock()
-	a.sdInterrupted = true
-	a.sdPollingMu.Unlock()
-	return a.sd.Interrupt()
-}
-
-func (a *App) checkSDInterrupted() error {
-	a.sdPollingMu.Lock()
-	interrupted := a.sdInterrupted
-	a.sdPollingMu.Unlock()
-	if interrupted {
-		return fmt.Errorf("interrupted")
-	}
-	return nil
-}
+// --- Kids Mode ---
 
 type KidsCategoryInfo = kids.CategoryInfo
 
@@ -188,22 +108,6 @@ func (a *App) SetKidsCategory(name string, enabled bool, pin string) error {
 	return a.kidsMgr.SetCategory(name, enabled, pin)
 }
 
-func (a *App) applyKidsSystemPrompt(systemPrompt string) string {
-	return a.kidsMgr.ApplySystemPrompt(systemPrompt)
-}
-
-func (a *App) applyKidsNegative(negativePrompt string) string {
-	return a.kidsMgr.ApplyNegative(negativePrompt)
-}
-
-func (a *App) filterKidsInput(text string) (string, error) {
-	return a.kidsMgr.FilterInput(text)
-}
-
-func (a *App) filterKidsOutput(text string) string {
-	return a.kidsMgr.FilterOutput(text)
-}
-
 // --- Service Status ---
 
 type ServiceInfo = settings.ServiceInfo
@@ -211,6 +115,10 @@ type ServiceStatus = settings.ServiceStatus
 
 func (a *App) CheckServices() ServiceStatus {
 	return a.settingsSvc.CheckServices()
+}
+
+func (a *App) CheckRembg() error {
+	return a.settingsSvc.CheckRembg()
 }
 
 // --- Presets ---
@@ -303,340 +211,108 @@ func (a *App) GetAllTags() ([]string, error) {
 	return tags, nil
 }
 
-func (a *App) GetSDLoRAs() ([]sd.LoRA, error) {
-	return a.sd.GetLoRAs()
-}
+// --- Generation (delegates) ---
 
-// --- Generation ---
-
-type GenerateSDPromptParams struct {
-	PresetID    int64  `json:"preset_id"`
-	Description string `json:"description"`
-	Negative    string `json:"negative"`
-}
-
-type GenerateSDPromptResult struct {
-	Prompt         string `json:"prompt"`
-	NegativePrompt string `json:"negative_prompt"`
-}
+type SDProgressEvent = generation.SDProgressEvent
+type GenerateSDPromptParams = generation.GenerateSDPromptParams
+type GenerateSDPromptResult = generation.GenerateSDPromptResult
+type GenerateImageParams = generation.GenerateImageParams
+type GenerateImageResult = generation.GenerateImageResult
+type RecommendPresetResult = generation.RecommendPresetResult
+type AnalyzePrompts = generation.AnalyzePrompts
+type UpscaleImageParams = generation.UpscaleImageParams
+type BatchGenerateParams = generation.BatchGenerateParams
+type BatchProgress = generation.BatchProgress
+type TestGenerateParams = generation.TestGenerateParams
+type TestGenerateResultItem = generation.TestGenerateResultItem
+type UpscalePreviewParams = generation.UpscalePreviewParams
+type GenerateCompoundImageParams = generation.GenerateCompoundImageParams
+type GenerateFromImageParams = generation.GenerateFromImageParams
+type BatchCompoundGenerateParams = generation.BatchCompoundGenerateParams
+type TestCompoundGenerateParams = generation.TestCompoundGenerateParams
+type DecomposeSceneParams = generation.DecomposeSceneParams
 
 func (a *App) GenerateSDPrompt(params GenerateSDPromptParams) (*GenerateSDPromptResult, error) {
-	if params.PresetID <= 0 {
-		return nil, fmt.Errorf("preset is required")
-	}
-
-	p, err := a.presets.Get(params.PresetID)
-	if err != nil {
-		return nil, fmt.Errorf("preset not found: %w", err)
-	}
-
-	description := strings.TrimSpace(params.Description)
-	negative := strings.TrimSpace(params.Negative)
-
-	if description == "" && negative == "" {
-		return nil, nil
-	}
-
-	sdPromptInstruction := config.DefaultSDPromptInstruction
-	if v, err := a.presets.GetSetting("sd_prompt_instruction"); err == nil && v != "" {
-		sdPromptInstruction = v
-	}
-
-	systemPrompt := sdPromptInstruction
-
-	var filterErr error
-	description, filterErr = a.filterKidsInput(description)
-	if filterErr != nil {
-		return nil, filterErr
-	}
-	negative, filterErr = a.filterKidsInput(negative)
-	if filterErr != nil {
-		return nil, filterErr
-	}
-	systemPrompt = a.applyKidsSystemPrompt(systemPrompt)
-
-	maxTokens := 256
-	if v, err := a.presets.GetSetting("llm_max_tokens"); err == nil && v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			maxTokens = n
-		}
-	}
-
-	generateModel := a.config.SDPromptModel
-	if v, err := a.presets.GetSetting("llm_generate_model"); err == nil && v != "" {
-		generateModel = v
-	}
-
-	a.applyLLMConfig("generate")
-
-	systemPrompt += fmt.Sprintf(`
-
-RESPONSE LENGTH: your response is limited to ~%d tokens. You MUST fit within this limit.`, maxTokens)
-
-	var userParts []string
-	userParts = append(userParts, "BASE POSITIVE PROMPT: "+p.Prompt)
-	userParts = append(userParts, "BASE NEGATIVE PROMPT: "+p.NegativePrompt)
-	if description != "" {
-		userParts = append(userParts, "USER DESCRIPTION: "+description)
-	}
-	if negative != "" {
-		userParts = append(userParts, "USER NEGATIVE: "+negative)
-	}
-	userMessage := strings.Join(userParts, "\n\n")
-
-	runtime.EventsEmit(a.ctx, "llm:status", map[string]string{"status": "thinking"})
-	raw, err := a.llm.GenerateSDPrompt(systemPrompt, userMessage, p.PresetType, generateModel, maxTokens)
-	if err != nil {
-		runtime.EventsEmit(a.ctx, "llm:status", map[string]string{"status": "done"})
-		return nil, err
-	}
-	runtime.EventsEmit(a.ctx, "llm:status", map[string]string{"status": "done"})
-
-	var result GenerateSDPromptResult
-	jsonRaw := promptutil.ExtractJSON(raw)
-	if err := json.Unmarshal([]byte(jsonRaw), &result); err != nil {
-		result = GenerateSDPromptResult{
-			Prompt:         promptutil.TruncateRepetitive(raw, 1000),
-			NegativePrompt: p.NegativePrompt,
-		}
-		}
-
-	if promptutil.ContainsCyrillic(result.Prompt) {
-		result.Prompt = promptutil.ExtractTagsFromRaw(raw)
-	}
-	if promptutil.ContainsCyrillic(result.NegativePrompt) {
-		result.NegativePrompt = promptutil.ExtractNegativeFromRaw(raw)
-	}
-
-	extractEmbeddedNegative(&result)
-
-	result.Prompt = promptutil.StripJunk(result.Prompt)
-	result.Prompt = promptutil.TruncateRepetitive(result.Prompt, 1000)
-	result.NegativePrompt = promptutil.StripJunk(result.NegativePrompt)
-	result.NegativePrompt = promptutil.TruncateRepetitive(result.NegativePrompt, 500)
-
-	result.Prompt = a.filterKidsOutput(result.Prompt)
-	result.NegativePrompt = a.filterKidsOutput(result.NegativePrompt)
-
-	return &result, nil
+	return a.gen.GenerateSDPrompt(params)
 }
 
 func (a *App) GetDefaultPromptInstruction() string {
-	return config.DefaultSDPromptInstruction
-}
-
-type RecommendPresetResult struct {
-	PresetID    int64  `json:"preset_id"`
-	PresetName  string `json:"preset_name"`
-	ExtraPrompt string `json:"extra_prompt"`
-	Reasoning   string `json:"reasoning"`
+	return a.gen.GetDefaultPromptInstruction()
 }
 
 func (a *App) RecommendPreset(description string) (*RecommendPresetResult, error) {
-	if strings.TrimSpace(description) == "" {
-		return nil, fmt.Errorf("description is required")
-	}
-
-	allPresets, err := a.presets.List()
-	if err != nil {
-		return nil, fmt.Errorf("load presets: %w", err)
-	}
-	if len(allPresets) == 0 {
-		return nil, fmt.Errorf("no presets available")
-	}
-
-	typesMap := make(map[int64]string)
-	types, _ := a.presets.ListPresetTypes()
-	if types != nil {
-		for _, t := range types {
-			typesMap[t.ID] = t.Name
-		}
-	}
-
-	var presetList []string
-	for _, p := range allPresets {
-		typeName := ""
-		if p.TypeID != nil {
-			typeName = typesMap[*p.TypeID]
-		}
-		entry := fmt.Sprintf("ID:%d | Name:%q | Type:%q | Tags:%q", p.ID, p.Name, typeName, p.Tags)
-		presetList = append(presetList, entry)
-	}
-
-	systemPrompt := `You are a Stable Diffusion preset recommender. Given a user's description of what they want to generate, you must select the BEST matching preset from the available list and suggest any additional prompt enhancements.
-
-RULES:
-1. Select EXACTLY ONE preset that best matches the user's description
-2. Consider: subject matter, style, quality, and technical aspects
-3. In extra_prompt, suggest additional SD tags that would improve the result based on the user's description
-4. Keep extra_prompt as comma-separated SD tags only
-5. Translate non-English to English
-
-OUTPUT — valid JSON only, no markdown:
-{"preset_id": 123, "preset_name": "exact name", "extra_prompt": "additional tags", "reasoning": "why this preset"}`
-
-	userMessage := "AVAILABLE PRESETS:\n" + strings.Join(presetList, "\n") + "\n\nUSER DESCRIPTION: " + strings.TrimSpace(description)
-
-	generateModel := a.config.SDPromptModel
-	if v, err := a.presets.GetSetting("llm_generate_model"); err == nil && v != "" {
-		generateModel = v
-	}
-
-	a.applyLLMConfig("generate")
-
-	maxTokens := 512
-	if v, err := a.presets.GetSetting("llm_max_tokens"); err == nil && v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			maxTokens = n
-		}
-	}
-
-	runtime.EventsEmit(a.ctx, "llm:status", map[string]string{"status": "thinking"})
-	raw, err := a.llm.GenerateSDPrompt(systemPrompt, userMessage, "", generateModel, maxTokens)
-	if err != nil {
-		runtime.EventsEmit(a.ctx, "llm:status", map[string]string{"status": "done"})
-		return nil, err
-	}
-	runtime.EventsEmit(a.ctx, "llm:status", map[string]string{"status": "done"})
-
-	var result RecommendPresetResult
-	if err := json.Unmarshal([]byte(promptutil.ExtractJSON(raw)), &result); err != nil {
-		return nil, fmt.Errorf("failed to parse LLM response: %w", err)
-	}
-
-	return &result, nil
+	return a.gen.RecommendPreset(description)
 }
 
 func (a *App) AnalyzeImage(imageBase64 string) (string, error) {
-	if imageBase64 == "" {
-		return "", fmt.Errorf("image is required")
-	}
-	if len(imageBase64) > 22*1024*1024 {
-		return "", fmt.Errorf("image too large (max 16 MB)")
-	}
-
-	model := a.config.VisionModel
-	if v, err := a.presets.GetSetting("llm_analyze_model"); err == nil && v != "" {
-		model = v
-	}
-	if model == "" {
-		model = a.config.SDPromptModel
-		if v, err := a.presets.GetSetting("llm_generate_model"); err == nil && v != "" {
-			model = v
-		}
-	}
-
-	a.applyLLMConfig("analyze")
-
-	systemPrompt, _ := a.presets.GetSetting("analyze_system_prompt")
-	if systemPrompt == "" {
-		systemPrompt = config.DefaultAnalyzeSystemPrompt
-	}
-
-	maxTokens := 256
-	if v, err := a.presets.GetSetting("llm_max_tokens"); err == nil && v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			maxTokens = n
-		}
-	}
-
-	useChain := true
-	if v, err := a.presets.GetSetting("analyze_use_chain"); err == nil {
-		useChain = v != "false"
-	}
-
-	if !useChain {
-		prompt, _ := a.presets.GetSetting("analyze_prompt")
-		if prompt == "" {
-			prompt = config.DefaultAnalyzePrompt
-		}
-		runtime.EventsEmit(a.ctx, "llm:status", map[string]string{"status": "thinking"})
-		tags, err := a.llm.AnalyzeImage(model, systemPrompt+"\n\n"+prompt, imageBase64, maxTokens)
-		if err != nil {
-			runtime.EventsEmit(a.ctx, "llm:status", map[string]string{"status": "done"})
-			return "", err
-		}
-		runtime.EventsEmit(a.ctx, "llm:status", map[string]string{"status": "done"})
-		tags = a.filterKidsOutput(tags)
-		return tags, nil
-	}
-
-	chainPrompts := a.getAnalyzeChainPrompts()
-	messages := []llm.Message{
-		{Role: "system", Content: systemPrompt},
-		{Role: "user", Content: []llm.ContentPart{
-			{Type: "text", Text: chainPrompts[0]},
-			{Type: "image_url", ImageURL: &llm.ImageURLPart{URL: "data:image/png;base64," + imageBase64}},
-		}},
-	}
-
-	for i := 0; i < len(chainPrompts); i++ {
-		runtime.EventsEmit(a.ctx, "llm:status", map[string]string{"status": "thinking"})
-		resp, err := a.llm.ChatWithMessages(model, messages, 0.4, maxTokens)
-		if err != nil {
-			runtime.EventsEmit(a.ctx, "llm:status", map[string]string{"status": "done"})
-			if i == 0 {
-				return "", err
-			}
-			break
-		}
-
-		messages = append(messages, llm.Message{Role: "assistant", Content: resp})
-		runtime.EventsEmit(a.ctx, "llm:status", map[string]string{"status": "done"})
-
-		if i+1 < len(chainPrompts) {
-			messages = append(messages, llm.Message{
-				Role:    "user",
-				Content: chainPrompts[i+1],
-			})
-		}
-
-		if a.ctx != nil {
-			runtime.EventsEmit(a.ctx, "analyze:step", i+1, len(chainPrompts))
-		}
-	}
-
-	lastResp := ""
-	for j := len(messages) - 1; j >= 0; j-- {
-		if messages[j].Role == "assistant" {
-			if s, ok := messages[j].Content.(string); ok {
-				lastResp = s
-			}
-			break
-		}
-	}
-
-	tags := llm.CleanTags(lastResp)
-	tags = a.filterKidsOutput(tags)
-	return tags, nil
-}
-
-func (a *App) getAnalyzeChainPrompts() []string {
-	prompts := make([]string, 4)
-	for i := range prompts {
-		key := "analyze_chain_" + strconv.Itoa(i+1)
-		if v, err := a.presets.GetSetting(key); err == nil && v != "" {
-			prompts[i] = v
-		} else if i < len(config.DefaultAnalyzeChainPrompts) {
-			prompts[i] = config.DefaultAnalyzeChainPrompts[i]
-		}
-	}
-	return prompts
-}
-
-type AnalyzePrompts struct {
-	SystemPrompt string   `json:"system_prompt"`
-	SinglePrompt string   `json:"single_prompt"`
-	ChainPrompts []string `json:"chain_prompts"`
+	return a.gen.AnalyzeImage(imageBase64)
 }
 
 func (a *App) GetDefaultAnalyzePrompts() *AnalyzePrompts {
-	return &AnalyzePrompts{
-		SystemPrompt: config.DefaultAnalyzeSystemPrompt,
-		SinglePrompt: config.DefaultAnalyzePrompt,
-		ChainPrompts: config.DefaultAnalyzeChainPrompts,
-	}
+	return a.gen.GetDefaultAnalyzePrompts()
 }
+
+func (a *App) GenerateImage(params GenerateImageParams) (*GenerateImageResult, error) {
+	return a.gen.GenerateImage(params)
+}
+
+func (a *App) BatchGenerate(params BatchGenerateParams) error {
+	return a.gen.BatchGenerate(params)
+}
+
+func (a *App) TestGenerate(params TestGenerateParams) ([]TestGenerateResultItem, error) {
+	return a.gen.TestGenerate(params)
+}
+
+func (a *App) GetPresetForBatch(presetID int64, description string) (*GenerateSDPromptResult, error) {
+	return a.gen.GetPresetForBatch(presetID, description)
+}
+
+func (a *App) UpscaleImage(params UpscaleImageParams) (*GenerateImageResult, error) {
+	return a.gen.UpscaleImage(params)
+}
+
+func (a *App) UpscalePreview(params UpscalePreviewParams) (*GenerateImageResult, error) {
+	return a.gen.UpscalePreview(params)
+}
+
+func (a *App) GetLastImage() (*GenerateImageResult, error) {
+	return a.gen.GetLastImage()
+}
+
+func (a *App) ClearLastImage() {
+	a.gen.ClearLastImage()
+}
+
+func (a *App) InterruptGeneration() error {
+	return a.gen.InterruptGeneration()
+}
+
+func (a *App) GenerateCompoundImage(params GenerateCompoundImageParams) (*GenerateImageResult, error) {
+	return a.gen.GenerateCompoundImage(params)
+}
+
+func (a *App) GenerateFromImage(params GenerateFromImageParams) (*GenerateImageResult, error) {
+	return a.gen.GenerateFromImage(params)
+}
+
+func (a *App) BatchCompoundGenerate(params BatchCompoundGenerateParams) error {
+	return a.gen.BatchCompoundGenerate(params)
+}
+
+func (a *App) TestCompoundGenerate(params TestCompoundGenerateParams) ([]TestGenerateResultItem, error) {
+	return a.gen.TestCompoundGenerate(params)
+}
+
+func (a *App) DecomposeScene(params DecomposeSceneParams) (*compositor.Scene, error) {
+	return a.gen.DecomposeScene(params)
+}
+
+func (a *App) GenerateMultiPass(scene compositor.Scene) (*compositor.MultiPassResult, error) {
+	return a.gen.GenerateMultiPass(scene)
+}
+
+// --- File/Clipboard (Wails runtime) ---
 
 func (a *App) ReadImageFile() (string, error) {
 	path, err := runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{
@@ -688,654 +364,6 @@ func (a *App) ReadClipboardImage() (string, error) {
 	return base64.StdEncoding.EncodeToString(data), nil
 }
 
-type GenerateImageParams struct {
-	PresetID            int64  `json:"preset_id"`
-	ExtraPrompt         string `json:"extra_prompt"`
-	ExtraNegativePrompt string `json:"extra_negative_prompt"`
-}
-
-type GenerateImageResult struct {
-	Image                   any    `json:"image"`
-	Parameters              any    `json:"parameters"`
-	Info                    any    `json:"info"`
-	IsPreview               bool   `json:"is_preview"`
-	EffectivePrompt         string `json:"effective_prompt"`
-	EffectiveNegativePrompt string `json:"effective_negative_prompt"`
-}
-
-func (a *App) GenerateImage(params GenerateImageParams) (*GenerateImageResult, error) {
-	a.log.UserAction("Generate image (preset_id=%d)", params.PresetID)
-	a.startSDPolling()
-	defer a.stopSDPolling()
-	p, err := a.presets.Get(params.PresetID)
-	if err != nil {
-		a.log.Error("Generate image: preset not found: %s", err)
-		return nil, err
-	}
-
-	prompt := p.Prompt
-	if params.ExtraPrompt != "" {
-		prompt = params.ExtraPrompt
-	}
-	if p.Loras != "" {
-		var loras []preset.LoRAEntry
-		if err := json.Unmarshal([]byte(p.Loras), &loras); err == nil {
-			for _, l := range loras {
-				prompt += fmt.Sprintf(" <lora:%s:%g>", l.Name, l.Weight)
-			}
-		}
-	}
-
-	negativePrompt := p.NegativePrompt
-	if params.ExtraNegativePrompt != "" {
-		negativePrompt = params.ExtraNegativePrompt
-	}
-
-	negativePrompt = a.applyKidsNegative(negativePrompt)
-
-	if p.ModelName != "" {
-		_ = a.sd.SetModel(p.ModelName)
-	}
-
-	if p.VAE != "" {
-		_ = a.sd.SetVAE(p.VAE)
-	}
-
-	samplerName := p.Sampler
-	if p.ScheduleType != "" {
-		st := strings.ToUpper(p.ScheduleType[:1]) + p.ScheduleType[1:]
-		samplerName = p.Sampler + " " + st
-	}
-
-	batchSize := 1
-	if p.BatchSize != nil {
-		batchSize = *p.BatchSize
-	}
-	batchCount := 1
-	if p.BatchCount != nil {
-		batchCount = *p.BatchCount
-	}
-	clipSkip := 1
-	if p.ClipSkip != nil {
-		clipSkip = *p.ClipSkip
-	}
-
-	denoisingStrength := p.DenoisingStrength
-	if denoisingStrength == nil && p.HiresFix != nil && *p.HiresFix {
-		ds := 0.5
-		if p.HiresDenoisingStrength != nil {
-			ds = *p.HiresDenoisingStrength
-		}
-		denoisingStrength = &ds
-	}
-
-	isPreview := false
-	width := p.Width
-	height := p.Height
-	var hiresFix *bool
-	if p.HiresFix != nil {
-		hiresFix = p.HiresFix
-	}
-
-	if v, _ := a.presets.GetSetting("preview_mode"); v == "true" {
-		isPreview = true
-		maxW, maxH := 512, 512
-		if pw, _ := a.presets.GetSetting("preview_width"); pw != "" {
-			if n, err := strconv.Atoi(pw); err == nil && n > 0 {
-				maxW = n
-			}
-		}
-		if ph, _ := a.presets.GetSetting("preview_height"); ph != "" {
-			if n, err := strconv.Atoi(ph); err == nil && n > 0 {
-				maxH = n
-			}
-		}
-		targetRatio := float64(p.Width) / float64(p.Height)
-		maxRatio := float64(maxW) / float64(maxH)
-		if maxRatio > targetRatio {
-			height = maxH
-			width = int(float64(maxH) * targetRatio)
-		} else {
-			width = maxW
-			height = int(float64(maxW) / targetRatio)
-		}
-		width = (width / 8) * 8
-		height = (height / 8) * 8
-		if width < 64 {
-			width = 64
-		}
-		if height < 64 {
-			height = 64
-		}
-		hiresFix = nil
-	}
-
-	result, err := a.sd.Txt2Img(sd.Txt2ImgRequest{
-		Prompt:                 prompt,
-		NegativePrompt:         negativePrompt,
-		SamplerName:            samplerName,
-		Scheduler:              p.ScheduleType,
-		Steps:                  p.Steps,
-		CfgScale:               p.CfgScale,
-		Width:                  width,
-		Height:                 height,
-		Seed:                   p.Seed,
-		DenoisingStrength:      denoisingStrength,
-		ClipSkip:               &clipSkip,
-		BatchSize:              &batchSize,
-		BatchCount:             &batchCount,
-		HiresFix:               hiresFix,
-		HiresUpscale:           p.HiresUpscale,
-		HiresDenoisingStrength: p.HiresDenoisingStrength,
-		HiresUpscaler:          p.HiresUpscaler,
-		DoNotSaveImages:        true,
-		DoNotSaveGrid:          true,
-	})
-	if err != nil {
-		if ierr := a.checkSDInterrupted(); ierr != nil {
-			return nil, ierr
-		}
-		return nil, err
-	}
-
-	if len(result.Images) == 0 {
-		if ierr := a.checkSDInterrupted(); ierr != nil {
-			return nil, ierr
-		}
-		reason := "empty response"
-		if result.Error != "" {
-			reason = result.Error
-		} else if len(result.Info) > 0 {
-			var info struct {
-				Reason string `json:"reason"`
-			}
-			if json.Unmarshal(result.Info, &info) == nil && info.Reason != "" {
-				reason = info.Reason
-			}
-		}
-		return nil, fmt.Errorf("no image generated: %s (sampler=%s, scheduler=%s, model=%s)",
-			reason, p.Sampler, p.ScheduleType, p.ModelName)
-	}
-
-	img := &GenerateImageResult{
-		Image:                   result.Images[0],
-		Parameters:              result.Parameters,
-		Info:                    result.Info,
-		IsPreview:               isPreview,
-		EffectivePrompt:         prompt,
-		EffectiveNegativePrompt: negativePrompt,
-	}
-	a.addToSession(result.Images[0], result.Info, "generate", isPreview, nil)
-	return img, nil
-}
-
-type UpscaleImageParams struct {
-	ImageBase64 string `json:"image_base64"`
-	GenInfo     string `json:"gen_info"`
-	PresetID    int64  `json:"preset_id"`
-}
-
-type BatchGenerateParams struct {
-	PresetID        int64  `json:"preset_id"`
-	Prompt          string `json:"prompt"`
-	NegativePrompt  string `json:"negative_prompt"`
-	Count           int    `json:"count"`
-	OutputFolder    string `json:"output_folder"`
-}
-
-type BatchProgress struct {
-	Current   int    `json:"current"`
-	Total     int    `json:"total"`
-	FilePath  string `json:"file_path"`
-	Status    string `json:"status"`
-}
-
-func (a *App) BatchGenerate(params BatchGenerateParams) error {
-	a.startSDPolling()
-	defer a.stopSDPolling()
-	if params.Count <= 0 || params.Count > 100 {
-		return fmt.Errorf("count must be between 1 and 100")
-	}
-	if params.OutputFolder == "" {
-		return fmt.Errorf("output folder is required")
-	}
-	if params.Prompt == "" {
-		return fmt.Errorf("prompt is required")
-	}
-
-	a.batchMu.Lock()
-	if a.batchRunning {
-		a.batchMu.Unlock()
-		return fmt.Errorf("batch generation is already running")
-	}
-	a.batchRunning = true
-	a.batchMu.Unlock()
-	defer func() {
-		a.batchMu.Lock()
-		a.batchRunning = false
-		a.batchMu.Unlock()
-	}()
-
-	if err := os.MkdirAll(params.OutputFolder, 0755); err != nil {
-		return fmt.Errorf("create output folder: %w", err)
-	}
-
-	p := &preset.Preset{
-		Prompt:         "",
-		NegativePrompt: "",
-		Sampler:        "Euler a",
-		Steps:          20,
-		CfgScale:       7.0,
-		Width:          512,
-		Height:         512,
-	}
-	if params.PresetID > 0 {
-		var err error
-		p, err = a.presets.Get(params.PresetID)
-		if err != nil {
-			return fmt.Errorf("preset not found: %w", err)
-		}
-	}
-
-	prompt := params.Prompt
-	var filterErr error
-	prompt, filterErr = a.filterKidsInput(prompt)
-	if filterErr != nil {
-		return filterErr
-	}
-	if p.Loras != "" {
-		var loras []preset.LoRAEntry
-		if err := json.Unmarshal([]byte(p.Loras), &loras); err == nil {
-			for _, l := range loras {
-				prompt += fmt.Sprintf(" <lora:%s:%g>", l.Name, l.Weight)
-			}
-		}
-	}
-
-	negativePrompt := params.NegativePrompt
-	negativePrompt, filterErr = a.filterKidsInput(negativePrompt)
-	if filterErr != nil {
-		return filterErr
-	}
-	negativePrompt = a.applyKidsNegative(negativePrompt)
-
-	if p.ModelName != "" {
-		_ = a.sd.SetModel(p.ModelName)
-	}
-	if p.VAE != "" {
-		_ = a.sd.SetVAE(p.VAE)
-	}
-
-	samplerName := p.Sampler
-	if len(p.ScheduleType) > 0 {
-		st := strings.ToUpper(p.ScheduleType[:1]) + p.ScheduleType[1:]
-		samplerName = p.Sampler + " " + st
-	}
-
-	clipSkip := 1
-	if p.ClipSkip != nil {
-		clipSkip = *p.ClipSkip
-	}
-	batchSize := 1
-	batchCount := 1
-
-	denoisingStrength := p.DenoisingStrength
-	if denoisingStrength == nil && p.HiresFix != nil && *p.HiresFix {
-		ds := 0.5
-		if p.HiresDenoisingStrength != nil {
-			ds = *p.HiresDenoisingStrength
-		}
-		denoisingStrength = &ds
-	}
-	var hiresFix *bool
-	if p.HiresFix != nil {
-		hiresFix = p.HiresFix
-	}
-
-	timestamp := time.Now().Format("20060102_150405")
-
-	for i := 0; i < params.Count; i++ {
-		runtime.EventsEmit(a.ctx, "batch:progress", BatchProgress{
-			Current: i + 1,
-			Total:   params.Count,
-			Status:  "generating",
-		})
-
-		result, err := a.sd.Txt2Img(sd.Txt2ImgRequest{
-			Prompt:                 prompt,
-			NegativePrompt:         negativePrompt,
-			SamplerName:            samplerName,
-			Scheduler:              p.ScheduleType,
-			Steps:                  p.Steps,
-			CfgScale:               p.CfgScale,
-			Width:                  p.Width,
-			Height:                 p.Height,
-			Seed:                   p.Seed,
-			DenoisingStrength:      denoisingStrength,
-			ClipSkip:               &clipSkip,
-			BatchSize:              &batchSize,
-			BatchCount:             &batchCount,
-			HiresFix:               hiresFix,
-			HiresUpscale:           p.HiresUpscale,
-			HiresDenoisingStrength: p.HiresDenoisingStrength,
-			HiresUpscaler:          p.HiresUpscaler,
-			DoNotSaveImages:        true,
-			DoNotSaveGrid:          true,
-		})
-		if err != nil {
-			if ierr := a.checkSDInterrupted(); ierr != nil {
-				runtime.EventsEmit(a.ctx, "batch:progress", BatchProgress{
-					Current: i + 1,
-					Total:   params.Count,
-					Status:  "interrupted",
-				})
-				return ierr
-			}
-			runtime.EventsEmit(a.ctx, "batch:progress", BatchProgress{
-				Current: i + 1,
-				Total:   params.Count,
-				Status:  fmt.Sprintf("error: image %d failed", i+1),
-			})
-			return fmt.Errorf("image %d/%d failed: %w", i+1, params.Count, err)
-		}
-		if len(result.Images) == 0 {
-			if ierr := a.checkSDInterrupted(); ierr != nil {
-				runtime.EventsEmit(a.ctx, "batch:progress", BatchProgress{
-					Current: i + 1,
-					Total:   params.Count,
-					Status:  "interrupted",
-				})
-				return ierr
-			}
-			runtime.EventsEmit(a.ctx, "batch:progress", BatchProgress{
-				Current: i + 1,
-				Total:   params.Count,
-				Status:  "error: no image returned",
-			})
-			return fmt.Errorf("image %d/%d: no image returned", i+1, params.Count)
-		}
-
-		if len(result.Images[0]) > 67*1024*1024 {
-			return fmt.Errorf("image %d too large (max 50 MB)", i+1)
-		}
-
-		imgData, err := base64.StdEncoding.DecodeString(result.Images[0])
-		if err != nil {
-			return fmt.Errorf("decode image %d: %w", i+1, err)
-		}
-
-		fileName := fmt.Sprintf("batch_%s_%03d.png", timestamp, i+1)
-		filePath := filepath.Join(params.OutputFolder, fileName)
-		if err := os.WriteFile(filePath, imgData, 0644); err != nil {
-			return fmt.Errorf("save image %d: %w", i+1, err)
-		}
-
-		runtime.EventsEmit(a.ctx, "batch:progress", BatchProgress{
-			Current:  i + 1,
-			Total:    params.Count,
-			FilePath: filePath,
-			Status:   "saved",
-		})
-	}
-
-	runtime.EventsEmit(a.ctx, "batch:progress", BatchProgress{
-		Current: params.Count,
-		Total:   params.Count,
-		Status:  "done",
-	})
-	return nil
-}
-
-type TestGenerateParams struct {
-	Mode            string   `json:"mode"`
-	SelectedIDs     []int64  `json:"selected_ids"`
-	SelectedModels  []string `json:"selected_models"`
-	Prompt          string   `json:"prompt"`
-	NegativePrompt  string   `json:"negative_prompt"`
-	Sampler         string   `json:"sampler"`
-	ScheduleType    string   `json:"schedule_type"`
-	Steps           int      `json:"steps"`
-	CfgScale        float64  `json:"cfg_scale"`
-	Width           int      `json:"width"`
-	Height          int      `json:"height"`
-	Seed            *int64   `json:"seed"`
-}
-
-type TestGenerateResultItem struct {
-	Name           string `json:"name"`
-	Image          string `json:"image"`
-	Seed           int64  `json:"seed"`
-	Error          string `json:"error,omitempty"`
-	Sampler        string `json:"sampler"`
-	ScheduleType   string `json:"schedule_type"`
-	CfgScale       float64 `json:"cfg_scale"`
-	ModelName      string `json:"model_name"`
-}
-
-func (a *App) TestGenerate(params TestGenerateParams) ([]TestGenerateResultItem, error) {
-	a.startSDPolling()
-	defer a.stopSDPolling()
-	if params.Mode != "presets" && params.Mode != "models" {
-		return nil, fmt.Errorf("mode must be 'presets' or 'models'")
-	}
-	totalItems := len(params.SelectedIDs)
-	if params.Mode == "models" {
-		totalItems = len(params.SelectedModels)
-	}
-	if totalItems == 0 {
-		return nil, fmt.Errorf("select at least one item")
-	}
-	if totalItems > 50 {
-		return nil, fmt.Errorf("maximum 50 items at once")
-	}
-	if params.Prompt == "" {
-		return nil, fmt.Errorf("prompt is required")
-	}
-	if params.Width > 2048 || params.Height > 2048 {
-		return nil, fmt.Errorf("maximum dimension is 2048")
-	}
-	if params.Steps > 150 {
-		return nil, fmt.Errorf("maximum steps is 150")
-	}
-
-	defaultPreset := &preset.Preset{
-		Sampler:  "Euler a",
-		Steps:    20,
-		CfgScale: 7.0,
-		Width:    512,
-		Height:   512,
-	}
-
-	results := make([]TestGenerateResultItem, 0, totalItems)
-
-	for idx := 0; idx < totalItems; idx++ {
-		runtime.EventsEmit(a.ctx, "test:progress", map[string]any{
-			"current": idx + 1,
-			"total":   totalItems,
-			"status":  "generating",
-		})
-
-		item := TestGenerateResultItem{}
-		p := &preset.Preset{}
-		*p = *defaultPreset
-
-		if params.Mode == "presets" {
-			id := params.SelectedIDs[idx]
-			loaded, err := a.presets.Get(id)
-			if err != nil {
-				item.Error = fmt.Sprintf("preset not found: %v", err)
-				item.Name = fmt.Sprintf("Preset #%d", id)
-				results = append(results, item)
-				continue
-			}
-			p = loaded
-			item.Name = p.Name
-			if p.ModelName != "" {
-				_ = a.sd.SetModel(p.ModelName)
-			}
-			if p.VAE != "" {
-				_ = a.sd.SetVAE(p.VAE)
-			}
-		} else {
-			modelTitle := params.SelectedModels[idx]
-			_ = a.sd.SetModel(modelTitle)
-			item.Name = modelTitle
-		}
-
-		if p.Sampler == "" {
-			p.Sampler = defaultPreset.Sampler
-		}
-		if p.Steps == 0 {
-			p.Steps = defaultPreset.Steps
-		}
-		if p.CfgScale == 0 {
-			p.CfgScale = defaultPreset.CfgScale
-		}
-		if p.Width == 0 {
-			p.Width = defaultPreset.Width
-		}
-		if p.Height == 0 {
-			p.Height = defaultPreset.Height
-		}
-
-		prompt := params.Prompt
-		prompt, filterErr := a.filterKidsInput(prompt)
-		if filterErr != nil {
-			return nil, fmt.Errorf("generating image: %w", filterErr)
-		}
-		if p.Loras != "" && params.Mode == "presets" {
-			var loras []preset.LoRAEntry
-			if err := json.Unmarshal([]byte(p.Loras), &loras); err == nil {
-				for _, l := range loras {
-					prompt += fmt.Sprintf(" <lora:%s:%g>", l.Name, l.Weight)
-				}
-			}
-		}
-
-		negPrompt := params.NegativePrompt
-		if params.Mode == "presets" && p.NegativePrompt != "" {
-			if negPrompt != "" {
-				negPrompt = p.NegativePrompt + ", " + negPrompt
-			} else {
-				negPrompt = p.NegativePrompt
-			}
-		}
-		negPrompt = a.applyKidsNegative(negPrompt)
-
-		sampler := p.Sampler
-		scheduleType := p.ScheduleType
-		steps := p.Steps
-		cfgScale := p.CfgScale
-		width := p.Width
-		height := p.Height
-		seed := p.Seed
-
-		if params.Sampler != "" {
-			sampler = params.Sampler
-		}
-		if params.ScheduleType != "" {
-			scheduleType = params.ScheduleType
-		}
-		if params.Steps > 0 {
-			steps = params.Steps
-		}
-		if params.CfgScale > 0 {
-			cfgScale = params.CfgScale
-		}
-		if params.Width > 0 {
-			width = params.Width
-		}
-		if params.Height > 0 {
-			height = params.Height
-		}
-		if params.Seed != nil {
-			seed = params.Seed
-		}
-
-		samplerName := sampler
-		if scheduleType != "" {
-			st := strings.ToUpper(scheduleType[:1]) + scheduleType[1:]
-			samplerName = sampler + " " + st
-		}
-
-		clipSkip := 1
-		if p.ClipSkip != nil {
-			clipSkip = *p.ClipSkip
-		}
-		batchSize := 1
-		batchCount := 1
-
-		result, err := a.sd.Txt2Img(sd.Txt2ImgRequest{
-			Prompt:          prompt,
-			NegativePrompt:  negPrompt,
-			SamplerName:     samplerName,
-			Scheduler:       scheduleType,
-			Steps:           steps,
-			CfgScale:        cfgScale,
-			Width:           width,
-			Height:          height,
-			Seed:            seed,
-			ClipSkip:        &clipSkip,
-			BatchSize:       &batchSize,
-			BatchCount:      &batchCount,
-			DoNotSaveImages: true,
-			DoNotSaveGrid:   true,
-		})
-		if err != nil {
-			item.Error = err.Error()
-			item.Sampler = sampler
-			item.ScheduleType = scheduleType
-			item.CfgScale = cfgScale
-			if p.ModelName != "" {
-				item.ModelName = p.ModelName
-			}
-			results = append(results, item)
-			continue
-		}
-		if len(result.Images) == 0 {
-			if ierr := a.checkSDInterrupted(); ierr != nil {
-				return nil, ierr
-			}
-			item.Error = "no image returned"
-			results = append(results, item)
-			continue
-		}
-
-		var infoSeed int64
-		var infoModel string
-		if len(result.Info) > 0 {
-			var info struct {
-				Seed    int64  `json:"seed"`
-				SDModel string `json:"sd_model_name"`
-			}
-			if json.Unmarshal(result.Info, &info) == nil {
-				infoSeed = info.Seed
-				infoModel = info.SDModel
-			}
-		}
-
-		item.Image = result.Images[0]
-		item.Seed = infoSeed
-		item.Sampler = sampler
-		item.ScheduleType = scheduleType
-		item.CfgScale = cfgScale
-		item.ModelName = infoModel
-		if item.ModelName == "" && p.ModelName != "" {
-			item.ModelName = p.ModelName
-		}
-
-		results = append(results, item)
-
-		runtime.EventsEmit(a.ctx, "test:progress", map[string]any{
-			"current": idx + 1,
-			"total":   totalItems,
-			"status":  "done",
-		})
-	}
-
-	return results, nil
-}
-
 func (a *App) SelectFolder() (string, error) {
 	path, err := runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{
 		Title: "Select Output Folder",
@@ -1346,311 +374,43 @@ func (a *App) SelectFolder() (string, error) {
 	return path, nil
 }
 
-func (a *App) GetPresetForBatch(presetID int64, description string) (*GenerateSDPromptResult, error) {
-	if presetID <= 0 {
-		return nil, fmt.Errorf("preset is required")
+func (a *App) SaveImage(base64Data, defaultName string) (string, error) {
+	if base64Data == "" {
+		return "", nil
 	}
 
-	if description != "" {
-		result, err := a.GenerateSDPrompt(GenerateSDPromptParams{
-			PresetID:    presetID,
-			Description: description,
-		})
-		if err != nil {
-			return nil, err
-		}
-		return result, nil
+	if defaultName == "" {
+		defaultName = "sd-studio-image.png"
+	}
+	if !strings.HasSuffix(strings.ToLower(defaultName), ".png") {
+		defaultName += ".png"
 	}
 
-	return nil, nil
-}
-
-func (a *App) UpscaleImage(params UpscaleImageParams) (*GenerateImageResult, error) {
-	a.startSDPolling()
-	defer a.stopSDPolling()
-	if params.ImageBase64 == "" {
-		return nil, fmt.Errorf("image is required")
-	}
-	if len(params.ImageBase64) > 67*1024*1024 {
-		return nil, fmt.Errorf("image too large (max 50 MB)")
-	}
-
-	var info struct {
-		Prompt         string  `json:"prompt"`
-		NegativePrompt string  `json:"negative_prompt"`
-		SamplerName    string  `json:"sampler_name"`
-		Scheduler      string  `json:"scheduler"`
-		Seed           int64   `json:"seed"`
-		Width          int     `json:"width"`
-		Height         int     `json:"height"`
-		Steps          int     `json:"steps"`
-		CfgScale       float64 `json:"cfg_scale"`
-		ClipSkip       int     `json:"clip_skip"`
-	}
-	if err := json.Unmarshal([]byte(params.GenInfo), &info); err != nil {
-		return nil, fmt.Errorf("parse gen_info: %w", err)
-	}
-
-	if info.Width <= 0 || info.Height <= 0 {
-		return nil, fmt.Errorf("invalid dimensions in gen_info: %dx%d", info.Width, info.Height)
-	}
-
-	const maxDim = 2048
-	if info.Width > maxDim || info.Height > maxDim {
-		return nil, fmt.Errorf("image is already %dx%d (max %d for upscale)", info.Width, info.Height, maxDim)
-	}
-
-	prompt := info.Prompt
-	negativePrompt := info.NegativePrompt
-
-	negativePrompt = a.applyKidsNegative(negativePrompt)
-
-	samplerName, scheduler := promptutil.SplitCompositeSampler(info.SamplerName, info.Scheduler)
-	steps := 30
-	if info.Steps > 0 {
-		steps = info.Steps
-	}
-	cfgScale := 7.0
-	if info.CfgScale > 0 {
-		cfgScale = info.CfgScale
-	}
-	clipSkip := 1
-	if info.ClipSkip > 0 {
-		clipSkip = info.ClipSkip
-	}
-
-	if params.PresetID > 0 {
-		p, err := a.presets.Get(params.PresetID)
-		if err != nil {
-			return nil, err
-		}
-		if p.Prompt != "" {
-			prompt = p.Prompt
-		}
-		if p.NegativePrompt != "" {
-			negativePrompt = p.NegativePrompt
-		}
-		if p.Sampler != "" {
-			samplerName = p.Sampler
-			if p.ScheduleType != "" {
-				st := strings.ToUpper(p.ScheduleType[:1]) + p.ScheduleType[1:]
-				samplerName = p.Sampler + " " + st
-			}
-		}
-		if p.ScheduleType != "" {
-			scheduler = p.ScheduleType
-		}
-		if p.Steps > 0 {
-			steps = p.Steps
-		}
-		if p.CfgScale > 0 {
-			cfgScale = p.CfgScale
-		}
-		if p.ClipSkip != nil {
-			clipSkip = *p.ClipSkip
-		}
-		if p.ModelName != "" {
-			_ = a.sd.SetModel(p.ModelName)
-		}
-		if p.VAE != "" {
-			_ = a.sd.SetVAE(p.VAE)
-		}
-	}
-
-	denoisingStrength := 0.4
-	newWidth := info.Width * 2
-	newHeight := info.Height * 2
-	if newWidth > maxDim*2 {
-		newWidth = maxDim * 2
-	}
-	if newHeight > maxDim*2 {
-		newHeight = maxDim * 2
-	}
-	seed := info.Seed
-
-	result, err := a.sd.Img2Img(sd.Img2ImgRequest{
-		InitImages:        []string{params.ImageBase64},
-		Prompt:            prompt,
-		NegativePrompt:    negativePrompt,
-		SamplerName:       samplerName,
-		Scheduler:         scheduler,
-		Steps:             steps,
-		CfgScale:          cfgScale,
-		Width:             newWidth,
-		Height:            newHeight,
-		Seed:              &seed,
-		DenoisingStrength: &denoisingStrength,
-		ClipSkip:          &clipSkip,
-		BatchSize:         intPtr(1),
-		BatchCount:        intPtr(1),
-		DoNotSaveImages:   true,
-		DoNotSaveGrid:     true,
+	path, err := runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{
+		DefaultFilename: defaultName,
+		Filters: []runtime.FileFilter{
+			{DisplayName: "PNG Image", Pattern: "*.png"},
+		},
 	})
+	if err != nil || path == "" {
+		return "", err
+	}
+
+	data, err := base64.StdEncoding.DecodeString(base64Data)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 
-	if len(result.Images) == 0 {
-		if ierr := a.checkSDInterrupted(); ierr != nil {
-			return nil, ierr
-		}
-		return nil, fmt.Errorf("no image generated during upscale")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return "", err
 	}
 
-	img := &GenerateImageResult{
-		Image:      result.Images[0],
-		Parameters: result.Parameters,
-		Info:       result.Info,
-		IsPreview:  false,
-	}
-	a.addToSession(result.Images[0], result.Info, "upscale", false, nil)
-	return img, nil
-}
-
-func intPtr(v int) *int { return &v }
-
-func padToAspectRatio(imageBase64 string, targetW, targetH int) (string, error) {
-	imgData, err := base64.StdEncoding.DecodeString(imageBase64)
-	if err != nil {
-		return "", fmt.Errorf("decode base64: %w", err)
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		return "", err
 	}
 
-	img, _, err := image.Decode(bytes.NewReader(imgData))
-	if err != nil {
-		return "", fmt.Errorf("decode image: %w", err)
-	}
-
-	imgW := img.Bounds().Dx()
-	imgH := img.Bounds().Dy()
-
-	targetRatio := float64(targetW) / float64(targetH)
-	imgRatio := float64(imgW) / float64(imgH)
-
-	if math.Abs(targetRatio-imgRatio) < 0.01 {
-		return imageBase64, nil
-	}
-
-	var padW, padH int
-	if imgRatio > targetRatio {
-		padW = imgW
-		padH = int(float64(imgW) / targetRatio)
-	} else {
-		padH = imgH
-		padW = int(float64(imgH) * targetRatio)
-	}
-	padW = (padW / 8) * 8
-	padH = (padH / 8) * 8
-
-	canvas := image.NewRGBA(image.Rect(0, 0, padW, padH))
-	draw.Draw(canvas, canvas.Bounds(), &image.Uniform{color.Black}, image.Point{}, draw.Src)
-
-	offsetX := (padW - imgW) / 2
-	offsetY := (padH - imgH) / 2
-	draw.Draw(canvas, image.Rect(offsetX, offsetY, offsetX+imgW, offsetY+imgH), img, image.Point{}, draw.Over)
-
-	var buf bytes.Buffer
-	if err := png.Encode(&buf, canvas); err != nil {
-		return "", fmt.Errorf("encode image: %w", err)
-	}
-
-	return base64.StdEncoding.EncodeToString(buf.Bytes()), nil
-}
-
-type UpscalePreviewParams struct {
-	PreviewImageBase64 string   `json:"preview_image_base64"`
-	PresetID           int64    `json:"preset_id"`
-	Seed               int64    `json:"seed"`
-	DenoisingStrength  *float64 `json:"denoising_strength,omitempty"`
-}
-
-func (a *App) UpscalePreview(params UpscalePreviewParams) (*GenerateImageResult, error) {
-	a.startSDPolling()
-	defer a.stopSDPolling()
-	p, err := a.presets.Get(params.PresetID)
-	if err != nil {
-		return nil, err
-	}
-
-	prompt := p.Prompt
-	negativePrompt := p.NegativePrompt
-
-	negativePrompt = a.applyKidsNegative(negativePrompt)
-
-	if p.ModelName != "" {
-		_ = a.sd.SetModel(p.ModelName)
-	}
-
-	if p.VAE != "" {
-		_ = a.sd.SetVAE(p.VAE)
-	}
-
-	samplerName := p.Sampler
-	if p.ScheduleType != "" {
-		st := strings.ToUpper(p.ScheduleType[:1]) + p.ScheduleType[1:]
-		samplerName = p.Sampler + " " + st
-	}
-
-	batchSize := 1
-	if p.BatchSize != nil {
-		batchSize = *p.BatchSize
-	}
-	batchCount := 1
-	if p.BatchCount != nil {
-		batchCount = *p.BatchCount
-	}
-	clipSkip := 1
-	if p.ClipSkip != nil {
-		clipSkip = *p.ClipSkip
-	}
-
-	denoisingStrength := 0.55
-	if params.DenoisingStrength != nil && *params.DenoisingStrength > 0 {
-		denoisingStrength = *params.DenoisingStrength
-	}
-
-	initImage := params.PreviewImageBase64
-	padded, err := padToAspectRatio(initImage, p.Width, p.Height)
-	if err == nil {
-		initImage = padded
-	}
-
-	result, err := a.sd.Img2Img(sd.Img2ImgRequest{
-		InitImages:        []string{initImage},
-		Prompt:            prompt,
-		NegativePrompt:    negativePrompt,
-		SamplerName:       samplerName,
-		Scheduler:         p.ScheduleType,
-		Steps:             p.Steps,
-		CfgScale:          p.CfgScale,
-		Width:             p.Width,
-		Height:            p.Height,
-		Seed:              &params.Seed,
-		DenoisingStrength: &denoisingStrength,
-		ClipSkip:          &clipSkip,
-		BatchSize:         &batchSize,
-		BatchCount:        &batchCount,
-		DoNotSaveImages:   true,
-		DoNotSaveGrid:     true,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	if len(result.Images) == 0 {
-		if ierr := a.checkSDInterrupted(); ierr != nil {
-			return nil, ierr
-		}
-		return nil, fmt.Errorf("no image generated during upscale")
-	}
-
-	img := &GenerateImageResult{
-		Image:      result.Images[0],
-		Parameters: result.Parameters,
-		Info:       result.Info,
-		IsPreview:  false,
-	}
-	a.addToSession(result.Images[0], result.Info, "upscale-preview", false, nil)
-	return img, nil
+	a.log.UserAction("Image saved: %s", path)
+	return path, nil
 }
 
 // --- SD Info ---
@@ -1675,6 +435,10 @@ func (a *App) GetSDVAEs() ([]sd.VAE, error) {
 	return a.sd.GetVAEs()
 }
 
+func (a *App) GetSDLoRAs() ([]sd.LoRA, error) {
+	return a.sd.GetLoRAs()
+}
+
 // --- LLM Info ---
 
 func (a *App) GetLLMModels() ([]llm.LLMModel, error) {
@@ -1689,10 +453,6 @@ func (a *App) GetSettings() (map[string]string, error) {
 
 func (a *App) UpdateSettings(data map[string]string) error {
 	return a.settingsSvc.UpdateSettings(data)
-}
-
-func (a *App) applyLLMConfig(mode string) {
-	a.settingsSvc.ApplyLLMConfig(mode)
 }
 
 // --- Saved Descriptions ---
@@ -1757,116 +517,12 @@ func (a *App) DeletePrompt(id int64) error {
 	return a.presets.DeletePrompt(id)
 }
 
-// --- Last Image Persistence ---
-
-type lastImageMeta struct {
-	IsPreview bool            `json:"is_preview"`
-	Info      json.RawMessage `json:"info"`
-}
-
-func (a *App) saveLastImage(imageBase64 string, info json.RawMessage, isPreview bool) {
-	if imageBase64 == "" {
-		return
-	}
-
-	pngData, err := base64.StdEncoding.DecodeString(imageBase64)
-	if err != nil {
-		return
-	}
-
-	if err := os.MkdirAll(a.dataDir, 0o755); err != nil {
-		return
-	}
-
-	pngPath := filepath.Join(a.dataDir, "last_image.png")
-	if err := os.WriteFile(pngPath, pngData, 0o644); err != nil {
-		return
-	}
-
-	meta := lastImageMeta{IsPreview: isPreview, Info: info}
-	metaBytes, err := json.Marshal(meta)
-	if err != nil {
-		return
-	}
-
-	metaPath := filepath.Join(a.dataDir, "last_image.json")
-	_ = os.WriteFile(metaPath, metaBytes, 0o644)
-}
-
-func (a *App) GetLastImage() (*GenerateImageResult, error) {
-	pngPath := filepath.Join(a.dataDir, "last_image.png")
-	pngData, err := os.ReadFile(pngPath)
-	if err != nil {
-		return nil, nil
-	}
-
-	metaPath := filepath.Join(a.dataDir, "last_image.json")
-	metaBytes, err := os.ReadFile(metaPath)
-
-	var meta lastImageMeta
-	if err == nil {
-		_ = json.Unmarshal(metaBytes, &meta)
-	}
-
-	return &GenerateImageResult{
-		Image:     base64.StdEncoding.EncodeToString(pngData),
-		Parameters: nil,
-		Info:      meta.Info,
-		IsPreview: meta.IsPreview,
-	}, nil
-}
-
-func (a *App) ClearLastImage() {
-	os.Remove(filepath.Join(a.dataDir, "last_image.png"))
-	os.Remove(filepath.Join(a.dataDir, "last_image.json"))
-}
-
-// --- Save Image ---
-
-func (a *App) SaveImage(base64Data, defaultName string) (string, error) {
-	if base64Data == "" {
-		return "", nil
-	}
-
-	if defaultName == "" {
-		defaultName = "sd-studio-image.png"
-	}
-	if !strings.HasSuffix(strings.ToLower(defaultName), ".png") {
-		defaultName += ".png"
-	}
-
-	path, err := runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{
-		DefaultFilename: defaultName,
-		Filters: []runtime.FileFilter{
-			{DisplayName: "PNG Image", Pattern: "*.png"},
-		},
-	})
-	if err != nil || path == "" {
-		return "", err
-	}
-
-	data, err := base64.StdEncoding.DecodeString(base64Data)
-	if err != nil {
-		return "", err
-	}
-
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return "", err
-	}
-
-	if err := os.WriteFile(path, data, 0o644); err != nil {
-		return "", err
-	}
-
-	a.log.UserAction("Image saved: %s", path)
-	return path, nil
-}
-
 // --- Preset Export/Import ---
 
 type PresetExportFile = importexport.ExportFile
 type PresetData = importexport.PresetData
 type ImportPreview = importexport.ImportPreview
+type ValidationWarning = importexport.ValidationWarning
 
 func (a *App) ExportPresets(ids []int64) (string, error) {
 	presets, err := a.ieSvc.PrepareExportData(ids)
@@ -1912,36 +568,15 @@ func (a *App) OpenImportFile() (*ImportPreview, error) {
 	return &ImportPreview{Presets: allPresets, Total: len(allPresets)}, nil
 }
 
-type ValidationWarning = importexport.ValidationWarning
-
 func (a *App) ValidateImportModels(items []PresetData) ([]ValidationWarning, error) {
 	return a.ieSvc.ValidateModels(items)
-}
-
-func extractEmbeddedNegative(result *GenerateSDPromptResult) {
-	idx := strings.Index(result.Prompt, "negative_prompt")
-	if idx <= 0 {
-		return
-	}
-	embeddedNeg := result.Prompt[idx:]
-	result.Prompt = strings.TrimRight(result.Prompt[:idx], " ,\n\r\t")
-	embeddedNeg = strings.TrimPrefix(embeddedNeg, "negative_prompt")
-	embeddedNeg = strings.TrimLeft(embeddedNeg, `: "'`)
-	embeddedNeg = strings.TrimRight(embeddedNeg, `"}'`)
-	embeddedNeg = strings.Trim(embeddedNeg, " ,\n\r\t")
-	if embeddedNeg == "" {
-		return
-	}
-	if result.NegativePrompt != "" {
-		result.NegativePrompt = embeddedNeg + ", " + result.NegativePrompt
-	} else {
-		result.NegativePrompt = embeddedNeg
-	}
 }
 
 func (a *App) ImportPresets(items []PresetData) ([]preset.Preset, error) {
 	return a.ieSvc.ImportItems(items)
 }
+
+// --- Compound Presets ---
 
 func (a *App) ListCompoundPresets() ([]preset.CompoundPreset, error) {
 	items, err := a.presets.ListCompoundPresets()
@@ -2006,1629 +641,7 @@ func (a *App) DeleteCompoundPreset(id int64) error {
 	return a.presets.DeleteCompoundPreset(id)
 }
 
-type GenerateCompoundImageParams struct {
-	CompoundPresetID    int64  `json:"compound_preset_id"`
-	ExtraPrompt         string `json:"extra_prompt"`
-	ExtraNegativePrompt string `json:"extra_negative_prompt"`
-}
-
-func (a *App) GenerateCompoundImage(params GenerateCompoundImageParams) (*GenerateImageResult, error) {
-	a.startSDPolling()
-	defer a.stopSDPolling()
-	cp, err := a.presets.GetCompoundPreset(params.CompoundPresetID)
-	if err != nil {
-		return nil, fmt.Errorf("compound preset not found: %w", err)
-	}
-	if len(cp.Steps) == 0 {
-		return nil, fmt.Errorf("compound preset has no steps")
-	}
-
-	var lastImage string
-	var lastInfo json.RawMessage
-
-	for stepIdx, step := range cp.Steps {
-		p, err := a.presets.Get(step.PresetID)
-		if err != nil {
-			return nil, fmt.Errorf("step %d: preset not found: %w", stepIdx+1, err)
-		}
-
-		runtime.EventsEmit(a.ctx, "compound:progress", map[string]any{
-			"current": stepIdx + 1,
-			"total":   len(cp.Steps),
-			"status":  "generating",
-			"step":    stepIdx + 1,
-		})
-
-		prompt := p.Prompt
-		if params.ExtraPrompt != "" {
-			prompt = params.ExtraPrompt
-		}
-		if p.Loras != "" {
-			var loras []preset.LoRAEntry
-			if json.Unmarshal([]byte(p.Loras), &loras) == nil {
-				for _, l := range loras {
-					prompt += fmt.Sprintf(" <lora:%s:%g>", l.Name, l.Weight)
-				}
-			}
-		}
-
-		negativePrompt := p.NegativePrompt
-		if params.ExtraNegativePrompt != "" {
-			negativePrompt = params.ExtraNegativePrompt
-		}
-		negativePrompt = a.applyKidsNegative(negativePrompt)
-
-		if p.ModelName != "" {
-			_ = a.sd.SetModel(p.ModelName)
-		}
-		if p.VAE != "" {
-			_ = a.sd.SetVAE(p.VAE)
-		}
-
-		samplerName := p.Sampler
-		if p.ScheduleType != "" {
-			st := strings.ToUpper(p.ScheduleType[:1]) + p.ScheduleType[1:]
-			samplerName = p.Sampler + " " + st
-		}
-
-		width := step.Width
-		if width == 0 {
-			width = p.Width
-		}
-		height := step.Height
-		if height == 0 {
-			height = p.Height
-		}
-
-		clipSkip := 1
-		if p.ClipSkip != nil {
-			clipSkip = *p.ClipSkip
-		}
-
-		if stepIdx == 0 {
-			batchSize := 1
-			batchCount := 1
-			result, err := a.sd.Txt2Img(sd.Txt2ImgRequest{
-				Prompt:          prompt,
-				NegativePrompt:  negativePrompt,
-				SamplerName:     samplerName,
-				Scheduler:       p.ScheduleType,
-				Steps:           p.Steps,
-				CfgScale:        p.CfgScale,
-				Width:           width,
-				Height:          height,
-				Seed:            p.Seed,
-				ClipSkip:        &clipSkip,
-				BatchSize:       &batchSize,
-				BatchCount:      &batchCount,
-				DoNotSaveImages: true,
-				DoNotSaveGrid:   true,
-			})
-			if err != nil {
-				if ierr := a.checkSDInterrupted(); ierr != nil {
-					return nil, ierr
-				}
-				return nil, fmt.Errorf("step %d (txt2img): %w", stepIdx+1, err)
-			}
-			if len(result.Images) == 0 {
-				if ierr := a.checkSDInterrupted(); ierr != nil {
-					return nil, ierr
-				}
-				return nil, fmt.Errorf("step %d: no image returned", stepIdx+1)
-			}
-			lastImage = result.Images[0]
-			lastInfo = result.Info
-		} else {
-			denoising := step.DenoisingStrength
-			if denoising <= 0 {
-				denoising = 0.5
-			}
-			batchSize := 1
-			batchCount := 1
-			result, err := a.sd.Img2Img(sd.Img2ImgRequest{
-				InitImages:        []string{lastImage},
-				Prompt:            prompt,
-				NegativePrompt:    negativePrompt,
-				SamplerName:       samplerName,
-				Scheduler:         p.ScheduleType,
-				Steps:             p.Steps,
-				CfgScale:          p.CfgScale,
-				Width:             width,
-				Height:            height,
-				Seed:              p.Seed,
-				DenoisingStrength: &denoising,
-				ClipSkip:          &clipSkip,
-				BatchSize:         &batchSize,
-				BatchCount:        &batchCount,
-				DoNotSaveImages:   true,
-				DoNotSaveGrid:     true,
-			})
-			if err != nil {
-				if ierr := a.checkSDInterrupted(); ierr != nil {
-					return nil, ierr
-				}
-				return nil, fmt.Errorf("step %d (img2img): %w", stepIdx+1, err)
-			}
-			if len(result.Images) == 0 {
-				if ierr := a.checkSDInterrupted(); ierr != nil {
-					return nil, ierr
-				}
-				return nil, fmt.Errorf("step %d: no image returned", stepIdx+1)
-			}
-			lastImage = result.Images[0]
-			lastInfo = result.Info
-		}
-	}
-
-	runtime.EventsEmit(a.ctx, "compound:progress", map[string]any{
-		"current": len(cp.Steps),
-		"total":   len(cp.Steps),
-		"status":  "done",
-	})
-
-	img := &GenerateImageResult{
-		Image:                   lastImage,
-		Info:                    lastInfo,
-		IsPreview:               false,
-		EffectivePrompt:         "",
-		EffectiveNegativePrompt: "",
-	}
-	a.addToSession(lastImage, lastInfo, "compound", false, nil)
-	return img, nil
-}
-
-
-type GenerateFromImageParams struct {
-	ImageBase64         string  `json:"image_base64"`
-	Mode                string  `json:"mode"`
-	GenMode             string  `json:"gen_mode"`
-	PresetID            int64   `json:"preset_id"`
-	CompoundPresetID    int64   `json:"compound_preset_id"`
-	DenoisingStrength   float64 `json:"denoising_strength"`
-	Tags                string  `json:"tags"`
-	ExtraNegativePrompt string  `json:"extra_negative_prompt"`
-	MaskBase64          string  `json:"mask_base64"`
-	MaskBlur            int     `json:"mask_blur"`
-	InpaintFill         int     `json:"inpaint_fill"`
-	InpaintFullRes      bool    `json:"inpaint_full_res"`
-	RemoveObject        bool    `json:"remove_object"`
-}
-
-func (a *App) GenerateFromImage(params GenerateFromImageParams) (*GenerateImageResult, error) {
-	a.startSDPolling()
-	defer a.stopSDPolling()
-	if params.ImageBase64 == "" {
-		return nil, fmt.Errorf("image is required")
-	}
-	if len(params.ImageBase64) > 22*1024*1024 {
-		return nil, fmt.Errorf("image too large (max 16 MB)")
-	}
-	if params.GenMode != "preset" && params.GenMode != "compound" {
-		return nil, fmt.Errorf("gen_mode must be preset or compound")
-	}
-	if !params.RemoveObject {
-		if params.GenMode == "preset" && params.PresetID <= 0 {
-			return nil, fmt.Errorf("preset is required")
-		}
-		if params.GenMode == "compound" && params.CompoundPresetID <= 0 {
-			return nil, fmt.Errorf("compound preset is required")
-		}
-	}
-	if params.Mode != "txt2img" && params.Mode != "img2img" && params.Mode != "inpaint" {
-		return nil, fmt.Errorf("mode must be txt2img, img2img or inpaint")
-	}
-	if params.Mode == "inpaint" && params.MaskBase64 == "" {
-		return nil, fmt.Errorf("mask is required for inpaint mode")
-	}
-	if params.DenoisingStrength <= 0 {
-		params.DenoisingStrength = 0.5
-	}
-	if params.DenoisingStrength > 1.0 {
-		params.DenoisingStrength = 1.0
-	}
-
-	var filterErr error
-	params.ExtraNegativePrompt, filterErr = a.filterKidsInput(params.ExtraNegativePrompt)
-	if filterErr != nil {
-		return nil, filterErr
-	}
-
-	if params.RemoveObject {
-		return a.generateRemoveObject(params, "")
-	}
-
-	tags := params.Tags
-
-	tags, filterErr = a.filterKidsInput(tags)
-	if filterErr != nil {
-		return nil, filterErr
-	}
-
-	if params.GenMode == "compound" {
-		return a.generateFromImageCompound(params, tags)
-	}
-
-	p, err := a.presets.Get(params.PresetID)
-	if err != nil {
-		return nil, fmt.Errorf("preset not found: %w", err)
-	}
-
-	var prompt, negativePrompt string
-	if tags == "" {
-		prompt = p.Prompt
-		negativePrompt = p.NegativePrompt
-		if params.ExtraNegativePrompt != "" {
-			negativePrompt += ", " + params.ExtraNegativePrompt
-		}
-		negativePrompt = a.applyKidsNegative(negativePrompt)
-	} else {
-		sdPromptInstruction := config.DefaultSDPromptInstruction
-		if v, err := a.presets.GetSetting("sd_prompt_instruction"); err == nil && v != "" {
-			sdPromptInstruction = v
-		}
-
-		systemPrompt := a.applyKidsSystemPrompt(sdPromptInstruction)
-
-		maxTokens := 256
-		if v, err := a.presets.GetSetting("llm_max_tokens"); err == nil && v != "" {
-			if n, err := strconv.Atoi(v); err == nil && n > 0 {
-				maxTokens = n
-			}
-		}
-
-		generateModel := a.config.SDPromptModel
-		if v, err := a.presets.GetSetting("llm_generate_model"); err == nil && v != "" {
-			generateModel = v
-		}
-
-		a.applyLLMConfig("generate")
-
-		systemPrompt += fmt.Sprintf(`
-
-RESPONSE LENGTH: your response is limited to ~%d tokens. You MUST fit within this limit.`, maxTokens)
-
-		userParts := []string{
-			"BASE POSITIVE PROMPT: " + p.Prompt,
-			"BASE NEGATIVE PROMPT: " + p.NegativePrompt,
-			"USER DESCRIPTION (extracted from image): " + tags,
-		}
-		if params.Mode == "inpaint" {
-			userParts = []string{
-				"MODE: inpaint — user wants to REPLACE the masked area with what they describe below.",
-				"BASE POSITIVE PROMPT (style/quality reference only): " + p.Prompt,
-				"BASE NEGATIVE PROMPT: " + p.NegativePrompt,
-				"USER INSTRUCTION FOR MASKED AREA (THIS IS THE PRIMARY PROMPT): " + tags,
-			}
-		}
-		if params.Mode == "img2img" {
-			userParts = []string{
-				"MODE: img2img — user wants to TRANSFORM the image into the scene described below. Ignore what is currently in the image. Generate a NEW scene based on the user's description.",
-				"BASE POSITIVE PROMPT (style/quality reference): " + p.Prompt,
-				"BASE NEGATIVE PROMPT: " + p.NegativePrompt,
-				"USER SCENE DESCRIPTION (THIS IS THE PRIMARY PROMPT — generate exactly this scene): " + tags,
-			}
-		}
-		if params.ExtraNegativePrompt != "" {
-			userParts = append(userParts, "USER NEGATIVE: "+params.ExtraNegativePrompt)
-		}
-		userMessage := strings.Join(userParts, "\n\n")
-
-		runtime.EventsEmit(a.ctx, "llm:status", map[string]string{"status": "thinking"})
-		raw, err := a.llm.GenerateSDPrompt(systemPrompt, userMessage, p.PresetType, generateModel, maxTokens)
-		if err != nil {
-			runtime.EventsEmit(a.ctx, "llm:status", map[string]string{"status": "done"})
-			return nil, err
-		}
-		runtime.EventsEmit(a.ctx, "llm:status", map[string]string{"status": "done"})
-
-		var promptResult GenerateSDPromptResult
-		jsonRaw := promptutil.ExtractJSON(raw)
-		if err := json.Unmarshal([]byte(jsonRaw), &promptResult); err != nil {
-			promptResult = GenerateSDPromptResult{
-				Prompt:         promptutil.TruncateRepetitive(raw, 1000),
-				NegativePrompt: p.NegativePrompt,
-			}
-		}
-
-		if promptutil.ContainsCyrillic(promptResult.Prompt) {
-			promptResult.Prompt = promptutil.ExtractTagsFromRaw(raw)
-		}
-		if promptutil.ContainsCyrillic(promptResult.NegativePrompt) {
-			promptResult.NegativePrompt = promptutil.ExtractNegativeFromRaw(raw)
-		}
-
-		extractEmbeddedNegative(&promptResult)
-		promptResult.Prompt = promptutil.StripJunk(promptResult.Prompt)
-		promptResult.Prompt = promptutil.TruncateRepetitive(promptResult.Prompt, 1000)
-		promptResult.NegativePrompt = promptutil.StripJunk(promptResult.NegativePrompt)
-		promptResult.NegativePrompt = promptutil.TruncateRepetitive(promptResult.NegativePrompt, 500)
-
-		promptResult.Prompt = a.filterKidsOutput(promptResult.Prompt)
-		promptResult.NegativePrompt = a.filterKidsOutput(promptResult.NegativePrompt)
-
-		prompt = promptResult.Prompt
-		if params.Mode == "inpaint" {
-			prompt += ", " + tags
-		}
-		negativePrompt = promptResult.NegativePrompt
-		if params.ExtraNegativePrompt != "" {
-			negativePrompt += ", " + params.ExtraNegativePrompt
-		}
-		negativePrompt = a.applyKidsNegative(negativePrompt)
-	}
-
-	if p.Loras != "" {
-		var loras []preset.LoRAEntry
-		if json.Unmarshal([]byte(p.Loras), &loras) == nil {
-			for _, l := range loras {
-				prompt += fmt.Sprintf(" <lora:%s:%g>", l.Name, l.Weight)
-			}
-		}
-	}
-
-	if p.ModelName != "" {
-		_ = a.sd.SetModel(p.ModelName)
-	}
-	if p.VAE != "" {
-		_ = a.sd.SetVAE(p.VAE)
-	}
-
-	samplerName := p.Sampler
-	if p.ScheduleType != "" {
-		st := strings.ToUpper(p.ScheduleType[:1]) + p.ScheduleType[1:]
-		samplerName = p.Sampler + " " + st
-	}
-
-	clipSkip := 1
-	if p.ClipSkip != nil {
-		clipSkip = *p.ClipSkip
-	}
-	batchSize := 1
-	batchCount := 1
-
-	if params.Mode == "img2img" || params.Mode == "inpaint" {
-		imgW, imgH := filebrowser.DecodeImageSize(params.ImageBase64)
-		if imgW > 0 && imgH > 0 {
-			imgW = imgW / 8 * 8
-			imgH = imgH / 8 * 8
-		} else {
-			imgW = p.Width
-			imgH = p.Height
-		}
-		denoising := params.DenoisingStrength
-		if denoising <= 0 {
-			denoising = 0.5
-		}
-		maskBlur := params.MaskBlur
-		if maskBlur <= 0 {
-			maskBlur = 4
-		}
-		result, err := a.sd.Img2Img(sd.Img2ImgRequest{
-			InitImages:            []string{params.ImageBase64},
-			Prompt:                prompt,
-			NegativePrompt:        negativePrompt,
-			SamplerName:           samplerName,
-			Scheduler:             p.ScheduleType,
-			Steps:                 p.Steps,
-			CfgScale:              p.CfgScale,
-			Width:                 imgW,
-			Height:                imgH,
-			Seed:                  p.Seed,
-			DenoisingStrength:     &denoising,
-			ClipSkip:              &clipSkip,
-			BatchSize:             &batchSize,
-			BatchCount:            &batchCount,
-			Mask:                  params.MaskBase64,
-			MaskBlur:              maskBlur,
-			InpaintingFill:        params.InpaintFill,
-			InpaintFullRes:        params.InpaintFullRes,
-			InpaintFullResPadding: 32,
-			DoNotSaveImages:       true,
-			DoNotSaveGrid:         true,
-		})
-		if err != nil {
-			return nil, err
-		}
-		if len(result.Images) == 0 {
-			if ierr := a.checkSDInterrupted(); ierr != nil {
-				return nil, ierr
-			}
-			return nil, fmt.Errorf("no image generated (%s)", params.Mode)
-		}
-		img := &GenerateImageResult{
-			Image:                   result.Images[0],
-			Info:                    result.Info,
-			EffectivePrompt:         prompt,
-			EffectiveNegativePrompt: negativePrompt,
-		}
-		a.addToSession(result.Images[0], result.Info, "from-image", false, nil)
-		return img, nil
-	}
-
-	width := p.Width
-	height := p.Height
-	hiresFix := p.HiresFix
-
-	isPreview := false
-	if v, _ := a.presets.GetSetting("preview_mode"); v == "true" {
-		isPreview = true
-		maxW, maxH := 512, 512
-		if pw, _ := a.presets.GetSetting("preview_width"); pw != "" {
-			if n, err := strconv.Atoi(pw); err == nil && n > 0 {
-				maxW = n
-			}
-		}
-		if ph, _ := a.presets.GetSetting("preview_height"); ph != "" {
-			if n, err := strconv.Atoi(ph); err == nil && n > 0 {
-				maxH = n
-			}
-		}
-		targetRatio := float64(p.Width) / float64(p.Height)
-		maxRatio := float64(maxW) / float64(maxH)
-		if maxRatio > targetRatio {
-			height = maxH
-			width = int(float64(maxH) * targetRatio)
-		} else {
-			width = maxW
-			height = int(float64(maxW) / targetRatio)
-		}
-		width = (width / 8) * 8
-		height = (height / 8) * 8
-		if width < 64 {
-			width = 64
-		}
-		if height < 64 {
-			height = 64
-		}
-		hiresFix = nil
-	}
-
-	denoisingStrength := p.DenoisingStrength
-	if denoisingStrength == nil && p.HiresFix != nil && *p.HiresFix {
-		ds := 0.5
-		if p.HiresDenoisingStrength != nil {
-			ds = *p.HiresDenoisingStrength
-		}
-		denoisingStrength = &ds
-	}
-
-	result, err := a.sd.Txt2Img(sd.Txt2ImgRequest{
-		Prompt:                 prompt,
-		NegativePrompt:         negativePrompt,
-		SamplerName:            samplerName,
-		Scheduler:              p.ScheduleType,
-		Steps:                  p.Steps,
-		CfgScale:               p.CfgScale,
-		Width:                  width,
-		Height:                 height,
-		Seed:                   p.Seed,
-		DenoisingStrength:      denoisingStrength,
-		ClipSkip:               &clipSkip,
-		BatchSize:              &batchSize,
-		BatchCount:             &batchCount,
-		HiresFix:               hiresFix,
-		HiresUpscale:           p.HiresUpscale,
-		HiresDenoisingStrength: p.HiresDenoisingStrength,
-		HiresUpscaler:          p.HiresUpscaler,
-		DoNotSaveImages:        true,
-		DoNotSaveGrid:          true,
-	})
-	if err != nil {
-		return nil, err
-	}
-	if len(result.Images) == 0 {
-		if ierr := a.checkSDInterrupted(); ierr != nil {
-			return nil, ierr
-		}
-		return nil, fmt.Errorf("no image generated (txt2img)")
-	}
-
-	img := &GenerateImageResult{
-		Image:                   result.Images[0],
-		Parameters:              result.Parameters,
-		Info:                    result.Info,
-		IsPreview:               isPreview,
-		EffectivePrompt:         prompt,
-		EffectiveNegativePrompt: negativePrompt,
-	}
-	a.addToSession(result.Images[0], result.Info, "generate", isPreview, nil)
-	return img, nil
-}
-
-func (a *App) analyzeRemoveContext(imageBase64, maskBase64 string) (string, error) {
-	imgData, err := base64.StdEncoding.DecodeString(imageBase64)
-	if err != nil {
-		return "", fmt.Errorf("decode image: %w", err)
-	}
-	maskData, err := base64.StdEncoding.DecodeString(maskBase64)
-	if err != nil {
-		return "", fmt.Errorf("decode mask: %w", err)
-	}
-
-	img, _, err := image.Decode(bytes.NewReader(imgData))
-	if err != nil {
-		return "", fmt.Errorf("parse image: %w", err)
-	}
-	mask, _, err := image.Decode(bytes.NewReader(maskData))
-	if err != nil {
-		return "", fmt.Errorf("parse mask: %w", err)
-	}
-
-	bounds := img.Bounds()
-	overlay := image.NewRGBA(bounds)
-	draw.Draw(overlay, bounds, img, bounds.Min, draw.Src)
-
-	red := color.NRGBA{R: 255, G: 0, B: 0, A: 140}
-	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
-		for x := bounds.Min.X; x < bounds.Max.X; x++ {
-			_, _, _, ma := mask.At(x, y).RGBA()
-			if ma > 32768 {
-				draw.Draw(overlay, image.Rect(x, y, x+1, y+1), &image.Uniform{red}, image.Point{}, draw.Over)
-			}
-		}
-	}
-
-	maxDim := 1024
-	w, h := bounds.Dx(), bounds.Dy()
-	if w > maxDim || h > maxDim {
-		ratio := math.Min(float64(maxDim)/float64(w), float64(maxDim)/float64(h))
-		w = int(float64(w) * ratio)
-		h = int(float64(h) * ratio)
-		if w < 1 {
-			w = 1
-		}
-		if h < 1 {
-			h = 1
-		}
-		scaled := image.NewRGBA(image.Rect(0, 0, w, h))
-		xdraw.CatmullRom.Scale(scaled, scaled.Bounds(), overlay, bounds, draw.Over, nil)
-		overlay = scaled
-	}
-
-	var buf bytes.Buffer
-	if err := png.Encode(&buf, overlay); err != nil {
-		return "", fmt.Errorf("encode overlay: %w", err)
-	}
-	overlayBase64 := base64.StdEncoding.EncodeToString(buf.Bytes())
-
-	model := a.config.VisionModel
-	if v, err := a.presets.GetSetting("llm_analyze_model"); err == nil && v != "" {
-		model = v
-	}
-	if model == "" {
-		model = a.config.SDPromptModel
-		if v, err := a.presets.GetSetting("llm_generate_model"); err == nil && v != "" {
-			model = v
-		}
-	}
-
-	a.applyLLMConfig("analyze")
-
-	systemPrompt := "You are a vision model analyzing images for inpainting. The red overlay marks the area to remove. Describe what should fill that area to match the surrounding context seamlessly. Output ONLY comma-separated Stable Diffusion tags for the background/content that should replace the red area. No explanation, no extra text."
-	userText := "Look at the red overlay area. What should fill this space to blend naturally with the surroundings? Output only SD tags."
-
-	runtime.EventsEmit(a.ctx, "llm:status", map[string]string{"status": "thinking"})
-	result, err := a.llm.ChatVision(model, systemPrompt, userText, overlayBase64, 0.3, 128)
-	if err != nil {
-		runtime.EventsEmit(a.ctx, "llm:status", map[string]string{"status": "done"})
-		return "", fmt.Errorf("vision analysis failed: %w", err)
-	}
-	runtime.EventsEmit(a.ctx, "llm:status", map[string]string{"status": "done"})
-
-	result = strings.TrimSpace(result)
-	result = promptutil.TruncateRepetitive(result, 500)
-	return result, nil
-}
-
-func (a *App) generateRemoveObject(params GenerateFromImageParams, removeDesc string) (*GenerateImageResult, error) {
-	if a.ctx != nil {
-		runtime.EventsEmit(a.ctx, "remove:stage", "analyzing")
-	}
-
-	removeDesc, err := a.analyzeRemoveContext(params.ImageBase64, params.MaskBase64)
-	if err != nil {
-		return nil, fmt.Errorf("context analysis failed: %w", err)
-	}
-
-	if a.ctx != nil {
-		runtime.EventsEmit(a.ctx, "remove:stage", "generating")
-	}
-
-	removeNegative := "object, items, things, artifacts, distortion"
-	if params.ExtraNegativePrompt != "" {
-		removeNegative += ", " + params.ExtraNegativePrompt
-	}
-
-	var prompt, negativePrompt string
-	var samplerName string
-	var scheduler string
-	var steps int
-	var cfgScale float64
-	var width, height int
-	var seed *int64
-	var clipSkip int
-	var modelName, vae string
-	var loras string
-
-	imgData, _ := base64.StdEncoding.DecodeString(params.ImageBase64)
-	if imgCfg, _, err := image.DecodeConfig(bytes.NewReader(imgData)); err == nil {
-		width = imgCfg.Width
-		height = imgCfg.Height
-	}
-
-	if params.PresetID > 0 {
-		p, err := a.presets.Get(params.PresetID)
-		if err == nil {
-			if p.Prompt != "" {
-				prompt = p.Prompt + ", " + removeDesc + ", seamless background, clean, natural, consistent with surroundings"
-			} else {
-				prompt = removeDesc + ", seamless background, clean, natural, consistent with surroundings"
-			}
-			negativePrompt = p.NegativePrompt
-			if negativePrompt != "" {
-				negativePrompt += ", "
-			}
-			negativePrompt += removeNegative
-
-			samplerName = p.Sampler
-			if p.ScheduleType != "" {
-				st := strings.ToUpper(p.ScheduleType[:1]) + p.ScheduleType[1:]
-				samplerName = p.Sampler + " " + st
-			}
-			scheduler = p.ScheduleType
-			steps = p.Steps
-			cfgScale = p.CfgScale
-			if p.Width > 0 {
-				width = p.Width
-			}
-			if p.Height > 0 {
-				height = p.Height
-			}
-			seed = p.Seed
-			if p.ClipSkip != nil {
-				clipSkip = *p.ClipSkip
-			}
-			modelName = p.ModelName
-			vae = p.VAE
-			loras = p.Loras
-		}
-	}
-
-	if prompt == "" {
-		prompt = removeDesc + ", seamless background, clean, natural, consistent with surroundings"
-	}
-	if negativePrompt == "" {
-		negativePrompt = removeNegative
-	}
-
-	if loras != "" {
-		var loraList []preset.LoRAEntry
-		if json.Unmarshal([]byte(loras), &loraList) == nil {
-			for _, l := range loraList {
-				prompt += fmt.Sprintf(" <lora:%s:%g>", l.Name, l.Weight)
-			}
-		}
-	}
-
-	if samplerName == "" {
-		samplerName = "Euler a"
-	}
-	if steps == 0 {
-		steps = 20
-	}
-	if cfgScale == 0 {
-		cfgScale = 7
-	}
-	if width == 0 {
-		width = 512
-	}
-	if height == 0 {
-		height = 512
-	}
-
-	if modelName != "" {
-		_ = a.sd.SetModel(modelName)
-	}
-	if vae != "" {
-		_ = a.sd.SetVAE(vae)
-	}
-
-	denoising := params.DenoisingStrength
-	if denoising <= 0 {
-		denoising = 0.75
-	}
-	maskBlur := params.MaskBlur
-	if maskBlur <= 0 {
-		maskBlur = 8
-	}
-
-	batchSize := 1
-	batchCount := 1
-
-	result, err := a.sd.Img2Img(sd.Img2ImgRequest{
-		InitImages:            []string{params.ImageBase64},
-		Prompt:                prompt,
-		NegativePrompt:        negativePrompt,
-		SamplerName:           samplerName,
-		Scheduler:             scheduler,
-		Steps:                 steps,
-		CfgScale:              cfgScale,
-		Width:                 width,
-		Height:                height,
-		Seed:                  seed,
-		DenoisingStrength:     &denoising,
-		ClipSkip:              &clipSkip,
-		BatchSize:             &batchSize,
-		BatchCount:            &batchCount,
-		Mask:                  params.MaskBase64,
-		MaskBlur:              maskBlur,
-		InpaintingFill:        params.InpaintFill,
-		InpaintFullRes:        params.InpaintFullRes,
-		InpaintFullResPadding: 64,
-		DoNotSaveImages:       true,
-		DoNotSaveGrid:         true,
-	})
-	if err != nil {
-		return nil, err
-	}
-	if len(result.Images) == 0 {
-		if ierr := a.checkSDInterrupted(); ierr != nil {
-			return nil, ierr
-		}
-		return nil, fmt.Errorf("no image generated (remove object)")
-	}
-
-	img := &GenerateImageResult{
-		Image:                   result.Images[0],
-		Info:                    result.Info,
-		EffectivePrompt:         prompt,
-		EffectiveNegativePrompt: negativePrompt,
-	}
-	a.addToSession(result.Images[0], result.Info, "compound", false, nil)
-	return img, nil
-}
-
-func (a *App) generateFromImageCompound(params GenerateFromImageParams, tags string) (*GenerateImageResult, error) {
-	cp, err := a.presets.GetCompoundPreset(params.CompoundPresetID)
-	if err != nil {
-		return nil, fmt.Errorf("compound preset not found: %w", err)
-	}
-	if len(cp.Steps) == 0 {
-		return nil, fmt.Errorf("compound preset has no steps")
-	}
-
-	firstPreset, err := a.presets.Get(cp.Steps[0].PresetID)
-	if err != nil {
-		return nil, fmt.Errorf("step 1: preset not found: %w", err)
-	}
-
-	sdPromptInstruction := config.DefaultSDPromptInstruction
-	if v, err := a.presets.GetSetting("sd_prompt_instruction"); err == nil && v != "" {
-		sdPromptInstruction = v
-	}
-
-	systemPrompt := a.applyKidsSystemPrompt(sdPromptInstruction)
-
-	maxTokens := 256
-	if v, err := a.presets.GetSetting("llm_max_tokens"); err == nil && v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			maxTokens = n
-		}
-	}
-
-	generateModel := a.config.SDPromptModel
-	if v, err := a.presets.GetSetting("llm_generate_model"); err == nil && v != "" {
-		generateModel = v
-	}
-
-	a.applyLLMConfig("generate")
-
-	systemPrompt += fmt.Sprintf(`
-
-RESPONSE LENGTH: your response is limited to ~%d tokens. You MUST fit within this limit.`, maxTokens)
-
-	userParts := []string{
-		"BASE POSITIVE PROMPT: " + firstPreset.Prompt,
-		"BASE NEGATIVE PROMPT: " + firstPreset.NegativePrompt,
-		"USER DESCRIPTION (extracted from image): " + tags,
-	}
-	if params.ExtraNegativePrompt != "" {
-		userParts = append(userParts, "USER NEGATIVE: "+params.ExtraNegativePrompt)
-	}
-	userMessage := strings.Join(userParts, "\n\n")
-
-	runtime.EventsEmit(a.ctx, "llm:status", map[string]string{"status": "thinking"})
-	raw, err := a.llm.GenerateSDPrompt(systemPrompt, userMessage, firstPreset.PresetType, generateModel, maxTokens)
-	if err != nil {
-		runtime.EventsEmit(a.ctx, "llm:status", map[string]string{"status": "done"})
-		return nil, err
-	}
-	runtime.EventsEmit(a.ctx, "llm:status", map[string]string{"status": "done"})
-
-	var promptResult GenerateSDPromptResult
-	jsonRaw := promptutil.ExtractJSON(raw)
-	if err := json.Unmarshal([]byte(jsonRaw), &promptResult); err != nil {
-		promptResult = GenerateSDPromptResult{
-			Prompt:         promptutil.TruncateRepetitive(raw, 1000),
-			NegativePrompt: firstPreset.NegativePrompt,
-		}
-	}
-
-	if promptutil.ContainsCyrillic(promptResult.Prompt) {
-		promptResult.Prompt = promptutil.ExtractTagsFromRaw(raw)
-	}
-	extractEmbeddedNegative(&promptResult)
-	promptResult.Prompt = promptutil.StripJunk(promptResult.Prompt)
-	promptResult.Prompt = promptutil.TruncateRepetitive(promptResult.Prompt, 1000)
-	promptResult.NegativePrompt = promptutil.StripJunk(promptResult.NegativePrompt)
-	promptResult.NegativePrompt = promptutil.TruncateRepetitive(promptResult.NegativePrompt, 500)
-
-	promptResult.Prompt = a.filterKidsOutput(promptResult.Prompt)
-	promptResult.NegativePrompt = a.filterKidsOutput(promptResult.NegativePrompt)
-
-	var lastImage string
-	var lastInfo json.RawMessage
-
-	imgW, imgH := filebrowser.DecodeImageSize(params.ImageBase64)
-	if imgW > 0 && imgH > 0 {
-		imgW = imgW / 8 * 8
-		imgH = imgH / 8 * 8
-	}
-
-	for stepIdx, step := range cp.Steps {
-		p, err := a.presets.Get(step.PresetID)
-		if err != nil {
-			return nil, fmt.Errorf("step %d: preset not found: %w", stepIdx+1, err)
-		}
-
-		runtime.EventsEmit(a.ctx, "fromimage:progress", map[string]any{
-			"current": stepIdx + 1,
-			"total":   len(cp.Steps),
-			"status":  "generating",
-		})
-
-		prompt := p.Prompt
-		if stepIdx == 0 {
-			prompt = promptResult.Prompt
-		}
-		if p.Loras != "" {
-			var loras []preset.LoRAEntry
-			if json.Unmarshal([]byte(p.Loras), &loras) == nil {
-				for _, l := range loras {
-					prompt += fmt.Sprintf(" <lora:%s:%g>", l.Name, l.Weight)
-				}
-			}
-		}
-
-		negativePrompt := promptResult.NegativePrompt
-		if params.ExtraNegativePrompt != "" {
-			negativePrompt += ", " + params.ExtraNegativePrompt
-		}
-		negativePrompt = a.applyKidsNegative(negativePrompt)
-
-		if p.ModelName != "" {
-			_ = a.sd.SetModel(p.ModelName)
-		}
-		if p.VAE != "" {
-			_ = a.sd.SetVAE(p.VAE)
-		}
-
-		samplerName := p.Sampler
-		if p.ScheduleType != "" {
-			st := strings.ToUpper(p.ScheduleType[:1]) + p.ScheduleType[1:]
-			samplerName = p.Sampler + " " + st
-		}
-
-		width := step.Width
-		if width == 0 {
-			width = p.Width
-		}
-		height := step.Height
-		if height == 0 {
-			height = p.Height
-		}
-
-		clipSkip := 1
-		if p.ClipSkip != nil {
-			clipSkip = *p.ClipSkip
-		}
-		batchSize := 1
-		batchCount := 1
-
-		if stepIdx == 0 && params.Mode == "img2img" {
-			denoising := params.DenoisingStrength
-			if denoising <= 0 {
-				denoising = 0.5
-			}
-			w, h := imgW, imgH
-			if w == 0 || h == 0 {
-				w, h = width, height
-			}
-			result, err := a.sd.Img2Img(sd.Img2ImgRequest{
-				InitImages:        []string{params.ImageBase64},
-				Prompt:            prompt,
-				NegativePrompt:    negativePrompt,
-				SamplerName:       samplerName,
-				Scheduler:         p.ScheduleType,
-				Steps:             p.Steps,
-				CfgScale:          p.CfgScale,
-				Width:             w,
-				Height:            h,
-				Seed:              p.Seed,
-				DenoisingStrength: &denoising,
-				ClipSkip:          &clipSkip,
-				BatchSize:         &batchSize,
-				BatchCount:        &batchCount,
-				DoNotSaveImages:   true,
-				DoNotSaveGrid:     true,
-			})
-			if err != nil {
-				if ierr := a.checkSDInterrupted(); ierr != nil {
-					return nil, ierr
-				}
-				return nil, fmt.Errorf("step %d (img2img): %w", stepIdx+1, err)
-			}
-			if len(result.Images) == 0 {
-				if ierr := a.checkSDInterrupted(); ierr != nil {
-					return nil, ierr
-				}
-				return nil, fmt.Errorf("step %d: no image returned", stepIdx+1)
-			}
-			lastImage = result.Images[0]
-			lastInfo = result.Info
-		} else if stepIdx == 0 {
-			result, err := a.sd.Txt2Img(sd.Txt2ImgRequest{
-				Prompt:          prompt,
-				NegativePrompt:  negativePrompt,
-				SamplerName:     samplerName,
-				Scheduler:       p.ScheduleType,
-				Steps:           p.Steps,
-				CfgScale:        p.CfgScale,
-				Width:           width,
-				Height:          height,
-				Seed:            p.Seed,
-				ClipSkip:        &clipSkip,
-				BatchSize:       &batchSize,
-				BatchCount:      &batchCount,
-				DoNotSaveImages: true,
-				DoNotSaveGrid:   true,
-			})
-			if err != nil {
-				if ierr := a.checkSDInterrupted(); ierr != nil {
-					return nil, ierr
-				}
-				return nil, fmt.Errorf("step %d (txt2img): %w", stepIdx+1, err)
-			}
-			if len(result.Images) == 0 {
-				if ierr := a.checkSDInterrupted(); ierr != nil {
-					return nil, ierr
-				}
-				return nil, fmt.Errorf("step %d: no image returned", stepIdx+1)
-			}
-			lastImage = result.Images[0]
-			lastInfo = result.Info
-		} else {
-			denoising := step.DenoisingStrength
-			if denoising <= 0 {
-				denoising = 0.5
-			}
-			w, h := width, height
-			if imgW > 0 && imgH > 0 && params.Mode == "img2img" {
-				w, h = imgW, imgH
-			}
-			result, err := a.sd.Img2Img(sd.Img2ImgRequest{
-				InitImages:        []string{lastImage},
-				Prompt:            prompt,
-				NegativePrompt:    negativePrompt,
-				SamplerName:       samplerName,
-				Scheduler:         p.ScheduleType,
-				Steps:             p.Steps,
-				CfgScale:          p.CfgScale,
-				Width:             w,
-				Height:            h,
-				Seed:              p.Seed,
-				DenoisingStrength: &denoising,
-				ClipSkip:          &clipSkip,
-				BatchSize:         &batchSize,
-				BatchCount:        &batchCount,
-				DoNotSaveImages:   true,
-				DoNotSaveGrid:     true,
-			})
-			if err != nil {
-				if ierr := a.checkSDInterrupted(); ierr != nil {
-					return nil, ierr
-				}
-				return nil, fmt.Errorf("step %d (img2img): %w", stepIdx+1, err)
-			}
-			if len(result.Images) == 0 {
-				if ierr := a.checkSDInterrupted(); ierr != nil {
-					return nil, ierr
-				}
-				return nil, fmt.Errorf("step %d: no image returned", stepIdx+1)
-			}
-			lastImage = result.Images[0]
-			lastInfo = result.Info
-		}
-	}
-
-	runtime.EventsEmit(a.ctx, "fromimage:progress", map[string]any{
-		"current": len(cp.Steps),
-		"total":   len(cp.Steps),
-		"status":  "done",
-	})
-
-	img := &GenerateImageResult{
-		Image:                   lastImage,
-		Info:                    lastInfo,
-		EffectivePrompt:         promptResult.Prompt,
-		EffectiveNegativePrompt: promptResult.NegativePrompt,
-	}
-	a.addToSession(lastImage, lastInfo, "compound-from-image", false, nil)
-	return img, nil
-}
-
-type BatchCompoundGenerateParams struct {
-	CompoundPresetID   int64  `json:"compound_preset_id"`
-	ExtraPrompt        string `json:"extra_prompt"`
-	ExtraNegativePrompt string `json:"extra_negative_prompt"`
-	Count              int    `json:"count"`
-	OutputFolder       string `json:"output_folder"`
-}
-
-func (a *App) BatchCompoundGenerate(params BatchCompoundGenerateParams) error {
-	a.startSDPolling()
-	defer a.stopSDPolling()
-	if params.Count <= 0 || params.Count > 100 {
-		return fmt.Errorf("count must be between 1 and 100")
-	}
-	if params.OutputFolder == "" {
-		return fmt.Errorf("output folder is required")
-	}
-
-	a.batchMu.Lock()
-	if a.batchRunning {
-		a.batchMu.Unlock()
-		return fmt.Errorf("batch generation is already running")
-	}
-	a.batchRunning = true
-	a.batchMu.Unlock()
-	defer func() {
-		a.batchMu.Lock()
-		a.batchRunning = false
-		a.batchMu.Unlock()
-	}()
-
-	if err := os.MkdirAll(params.OutputFolder, 0755); err != nil {
-		return fmt.Errorf("create output folder: %w", err)
-	}
-
-	cp, err := a.presets.GetCompoundPreset(params.CompoundPresetID)
-	if err != nil {
-		return fmt.Errorf("compound preset not found: %w", err)
-	}
-	if len(cp.Steps) == 0 {
-		return fmt.Errorf("compound preset has no steps")
-	}
-
-	for batchIdx := 0; batchIdx < params.Count; batchIdx++ {
-		runtime.EventsEmit(a.ctx, "batch:progress", map[string]any{
-			"current": batchIdx + 1,
-			"total":   params.Count,
-			"status":  "generating",
-		})
-
-		var lastImage string
-
-		for stepIdx, step := range cp.Steps {
-			p, err := a.presets.Get(step.PresetID)
-			if err != nil {
-				return fmt.Errorf("step %d: preset not found: %w", stepIdx+1, err)
-			}
-
-			prompt := p.Prompt
-			if params.ExtraPrompt != "" {
-				prompt = params.ExtraPrompt
-			}
-			if p.Loras != "" {
-				var loras []preset.LoRAEntry
-				if json.Unmarshal([]byte(p.Loras), &loras) == nil {
-					for _, l := range loras {
-						prompt += fmt.Sprintf(" <lora:%s:%g>", l.Name, l.Weight)
-					}
-				}
-			}
-
-			negativePrompt := p.NegativePrompt
-			if params.ExtraNegativePrompt != "" {
-				negativePrompt = params.ExtraNegativePrompt
-			}
-			var filterErr error
-			prompt, filterErr = a.filterKidsInput(prompt)
-			if filterErr != nil {
-				return fmt.Errorf("step %d: %w", stepIdx+1, filterErr)
-			}
-			negativePrompt, filterErr = a.filterKidsInput(negativePrompt)
-			if filterErr != nil {
-				return fmt.Errorf("step %d: %w", stepIdx+1, filterErr)
-			}
-			negativePrompt = a.applyKidsNegative(negativePrompt)
-
-			if p.ModelName != "" {
-				_ = a.sd.SetModel(p.ModelName)
-			}
-			if p.VAE != "" {
-				_ = a.sd.SetVAE(p.VAE)
-			}
-
-			samplerName := p.Sampler
-			if p.ScheduleType != "" {
-				st := strings.ToUpper(p.ScheduleType[:1]) + p.ScheduleType[1:]
-				samplerName = p.Sampler + " " + st
-			}
-
-			width := step.Width
-			if width == 0 {
-				width = p.Width
-			}
-			height := step.Height
-			if height == 0 {
-				height = p.Height
-			}
-
-			clipSkip := 1
-			if p.ClipSkip != nil {
-				clipSkip = *p.ClipSkip
-			}
-
-			if stepIdx == 0 {
-				batchSize := 1
-				batchCount := 1
-				result, err := a.sd.Txt2Img(sd.Txt2ImgRequest{
-					Prompt:          prompt,
-					NegativePrompt:  negativePrompt,
-					SamplerName:     samplerName,
-					Scheduler:       p.ScheduleType,
-					Steps:           p.Steps,
-					CfgScale:        p.CfgScale,
-					Width:           width,
-					Height:          height,
-					Seed:            p.Seed,
-					ClipSkip:        &clipSkip,
-					BatchSize:       &batchSize,
-					BatchCount:      &batchCount,
-					DoNotSaveImages: true,
-					DoNotSaveGrid:   true,
-				})
-				if err != nil {
-					if ierr := a.checkSDInterrupted(); ierr != nil {
-						return ierr
-					}
-					return fmt.Errorf("batch %d, step %d (txt2img): %w", batchIdx+1, stepIdx+1, err)
-				}
-				if len(result.Images) == 0 {
-					if ierr := a.checkSDInterrupted(); ierr != nil {
-						return ierr
-					}
-					return fmt.Errorf("batch %d, step %d: no image returned", batchIdx+1, stepIdx+1)
-				}
-				lastImage = result.Images[0]
-			} else {
-				denoising := step.DenoisingStrength
-				if denoising <= 0 {
-					denoising = 0.5
-				}
-				batchSize := 1
-				batchCount := 1
-				result, err := a.sd.Img2Img(sd.Img2ImgRequest{
-					InitImages:        []string{lastImage},
-					Prompt:            prompt,
-					NegativePrompt:    negativePrompt,
-					SamplerName:       samplerName,
-					Scheduler:         p.ScheduleType,
-					Steps:             p.Steps,
-					CfgScale:          p.CfgScale,
-					Width:             width,
-					Height:            height,
-					Seed:              p.Seed,
-					DenoisingStrength: &denoising,
-					ClipSkip:          &clipSkip,
-					BatchSize:         &batchSize,
-					BatchCount:        &batchCount,
-					DoNotSaveImages:   true,
-					DoNotSaveGrid:     true,
-				})
-				if err != nil {
-					if ierr := a.checkSDInterrupted(); ierr != nil {
-						return ierr
-					}
-					return fmt.Errorf("batch %d, step %d (img2img): %w", batchIdx+1, stepIdx+1, err)
-				}
-				if len(result.Images) == 0 {
-					if ierr := a.checkSDInterrupted(); ierr != nil {
-						return ierr
-					}
-					return fmt.Errorf("batch %d, step %d: no image returned", batchIdx+1, stepIdx+1)
-				}
-				lastImage = result.Images[0]
-			}
-		}
-
-		imgData, err := base64.StdEncoding.DecodeString(lastImage)
-		if err != nil {
-			return fmt.Errorf("batch %d: decode image: %w", batchIdx+1, err)
-		}
-
-		filename := fmt.Sprintf("compound_%s_%d_%d.png", cp.Name, time.Now().Unix(), batchIdx+1)
-		filePath := filepath.Join(params.OutputFolder, filename)
-		if err := os.WriteFile(filePath, imgData, 0644); err != nil {
-			return fmt.Errorf("batch %d: save file: %w", batchIdx+1, err)
-		}
-
-		runtime.EventsEmit(a.ctx, "batch:progress", map[string]any{
-			"current":   batchIdx + 1,
-			"total":     params.Count,
-			"file_path": filePath,
-			"status":    "generating",
-		})
-	}
-
-	runtime.EventsEmit(a.ctx, "batch:progress", map[string]any{
-		"current": params.Count,
-		"total":   params.Count,
-		"status":  "done",
-	})
-	return nil
-}
-
-type TestCompoundGenerateParams struct {
-	SelectedIDs        []int64 `json:"selected_ids"`
-	Prompt             string  `json:"prompt"`
-	NegativePrompt     string  `json:"negative_prompt"`
-}
-
-func (a *App) TestCompoundGenerate(params TestCompoundGenerateParams) ([]TestGenerateResultItem, error) {
-	a.startSDPolling()
-	defer a.stopSDPolling()
-	if len(params.SelectedIDs) == 0 {
-		return nil, fmt.Errorf("select at least one compound preset")
-	}
-	if len(params.SelectedIDs) > 20 {
-		return nil, fmt.Errorf("maximum 20 compound presets at once")
-	}
-	if params.Prompt == "" {
-		return nil, fmt.Errorf("prompt is required")
-	}
-
-	totalItems := len(params.SelectedIDs)
-	results := make([]TestGenerateResultItem, 0, totalItems)
-
-	for idx, compoundID := range params.SelectedIDs {
-		runtime.EventsEmit(a.ctx, "test:progress", map[string]any{
-			"current": idx + 1,
-			"total":   totalItems,
-			"status":  "generating",
-		})
-
-		item := TestGenerateResultItem{}
-
-		cp, err := a.presets.GetCompoundPreset(compoundID)
-		if err != nil {
-			item.Error = fmt.Sprintf("compound preset not found: %v", err)
-			item.Name = fmt.Sprintf("Compound #%d", compoundID)
-			results = append(results, item)
-			continue
-		}
-		item.Name = cp.Name
-
-		if len(cp.Steps) == 0 {
-			item.Error = "no steps in compound preset"
-			results = append(results, item)
-			continue
-		}
-
-		var lastImage string
-
-		for stepIdx, step := range cp.Steps {
-			p, err := a.presets.Get(step.PresetID)
-			if err != nil {
-				item.Error = fmt.Sprintf("step %d: preset not found", stepIdx+1)
-				break
-			}
-
-			prompt := params.Prompt
-			prompt, filterErr := a.filterKidsInput(prompt)
-			if filterErr != nil {
-				item.Error = filterErr.Error()
-				break
-			}
-			if p.Loras != "" {
-				var loras []preset.LoRAEntry
-				if json.Unmarshal([]byte(p.Loras), &loras) == nil {
-					for _, l := range loras {
-						prompt += fmt.Sprintf(" <lora:%s:%g>", l.Name, l.Weight)
-					}
-				}
-			}
-
-			negPrompt := params.NegativePrompt
-			if p.NegativePrompt != "" {
-				if negPrompt != "" {
-					negPrompt = p.NegativePrompt + ", " + negPrompt
-				} else {
-					negPrompt = p.NegativePrompt
-				}
-			}
-			negPrompt = a.applyKidsNegative(negPrompt)
-
-			if p.ModelName != "" {
-				_ = a.sd.SetModel(p.ModelName)
-			}
-			if p.VAE != "" {
-				_ = a.sd.SetVAE(p.VAE)
-			}
-
-			samplerName := p.Sampler
-			if p.ScheduleType != "" {
-				st := strings.ToUpper(p.ScheduleType[:1]) + p.ScheduleType[1:]
-				samplerName = p.Sampler + " " + st
-			}
-
-			width := step.Width
-			if width == 0 {
-				width = p.Width
-			}
-			height := step.Height
-			if height == 0 {
-				height = p.Height
-			}
-
-			clipSkip := 1
-			if p.ClipSkip != nil {
-				clipSkip = *p.ClipSkip
-			}
-			batchSize := 1
-			batchCount := 1
-
-			if stepIdx == 0 {
-				result, err := a.sd.Txt2Img(sd.Txt2ImgRequest{
-					Prompt:          prompt,
-					NegativePrompt:  negPrompt,
-					SamplerName:     samplerName,
-					Scheduler:       p.ScheduleType,
-					Steps:           p.Steps,
-					CfgScale:        p.CfgScale,
-					Width:           width,
-					Height:          height,
-					Seed:            p.Seed,
-					ClipSkip:        &clipSkip,
-					BatchSize:       &batchSize,
-					BatchCount:      &batchCount,
-					DoNotSaveImages: true,
-					DoNotSaveGrid:   true,
-				})
-				if err != nil {
-					item.Error = fmt.Sprintf("step %d: %v", stepIdx+1, err)
-					break
-				}
-				if len(result.Images) == 0 {
-					item.Error = fmt.Sprintf("step %d: no image", stepIdx+1)
-					break
-				}
-				lastImage = result.Images[0]
-			} else {
-				denoising := step.DenoisingStrength
-				if denoising <= 0 {
-					denoising = 0.5
-				}
-				result, err := a.sd.Img2Img(sd.Img2ImgRequest{
-					InitImages:        []string{lastImage},
-					Prompt:            prompt,
-					NegativePrompt:    negPrompt,
-					SamplerName:       samplerName,
-					Scheduler:         p.ScheduleType,
-					Steps:             p.Steps,
-					CfgScale:          p.CfgScale,
-					Width:             width,
-					Height:            height,
-					Seed:              p.Seed,
-					DenoisingStrength: &denoising,
-					ClipSkip:          &clipSkip,
-					BatchSize:         &batchSize,
-					BatchCount:        &batchCount,
-					DoNotSaveImages:   true,
-					DoNotSaveGrid:     true,
-				})
-				if err != nil {
-					item.Error = fmt.Sprintf("step %d: %v", stepIdx+1, err)
-					break
-				}
-				if len(result.Images) == 0 {
-					item.Error = fmt.Sprintf("step %d: no image", stepIdx+1)
-					break
-				}
-				lastImage = result.Images[0]
-			}
-		}
-
-		if item.Error == "" {
-			item.Image = lastImage
-		}
-		item.Sampler = ""
-		item.ScheduleType = ""
-		item.CfgScale = 0
-		item.ModelName = ""
-
-		results = append(results, item)
-
-		runtime.EventsEmit(a.ctx, "test:progress", map[string]any{
-			"current": idx + 1,
-			"total":   totalItems,
-			"status":  "done",
-		})
-	}
-
-	return results, nil
-}
-
-// --- Multi-Pass Scene Generation ---
-
-type DecomposeSceneParams struct {
-	Description string `json:"description"`
-	PresetID    int64  `json:"preset_id"`
-}
-
-func (a *App) DecomposeScene(params DecomposeSceneParams) (*compositor.Scene, error) {
-	a.log.UserAction("Decompose scene: %s", promptutil.Truncate(params.Description, 80))
-	if params.Description == "" {
-		return nil, fmt.Errorf("description is required")
-	}
-	if params.PresetID <= 0 {
-		return nil, fmt.Errorf("preset is required")
-	}
-
-	p, err := a.presets.Get(params.PresetID)
-	if err != nil {
-		return nil, fmt.Errorf("preset not found: %w", err)
-	}
-
-	systemPrompt := config.DefaultSceneDecomposePrompt
-
-	userMessage := params.Description
-	userMessage += fmt.Sprintf("\n\nPreset dimensions: %dx%d", p.Width, p.Height)
-	if p.Prompt != "" {
-		userMessage += fmt.Sprintf("\nPreset positive prompt (STYLE — all character and background prompts MUST follow this style): %s", p.Prompt)
-	}
-	if p.NegativePrompt != "" {
-		userMessage += fmt.Sprintf("\nPreset negative prompt (MERGE into scene negative_prompt): %s", p.NegativePrompt)
-	}
-
-	maxTokens := 1024
-	if v, err := a.presets.GetSetting("llm_max_tokens"); err == nil && v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			maxTokens = n
-		}
-	}
-
-	generateModel := a.config.SDPromptModel
-	if v, err := a.presets.GetSetting("llm_generate_model"); err == nil && v != "" {
-		generateModel = v
-	}
-
-	a.applyLLMConfig("generate")
-
-	runtime.EventsEmit(a.ctx, "llm:status", map[string]string{"status": "thinking"})
-	raw, err := a.llm.Chat(generateModel, systemPrompt, userMessage, 0.4, maxTokens)
-	if err != nil {
-		runtime.EventsEmit(a.ctx, "llm:status", map[string]string{"status": "done"})
-		return nil, fmt.Errorf("LLM decomposition failed: %w", err)
-	}
-	runtime.EventsEmit(a.ctx, "llm:status", map[string]string{"status": "done"})
-
-	scene, err := compositor.DecomposeSceneFromJSON(raw)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse scene from LLM response: %w", err)
-	}
-
-	scene.PresetID = params.PresetID
-	if scene.Width == 0 {
-		scene.Width = p.Width
-	}
-	if scene.Height == 0 {
-		scene.Height = p.Height
-	}
-
-	return scene, nil
-}
-
-func (a *App) GenerateMultiPass(scene compositor.Scene) (*compositor.MultiPassResult, error) {
-	a.log.UserAction("Multi-pass generation: %d characters", len(scene.Characters))
-
-	emit := func(progress compositor.MultiPassProgress) {
-		runtime.EventsEmit(a.ctx, "multipass:progress", progress)
-		switch progress.Step {
-		case "background":
-			a.log.Info("Generating background...")
-		case "character":
-			a.log.Info("Generating character %d/%d", progress.Character, progress.Total)
-		case "rembg":
-			a.log.Info("Removing background (character %d/%d)", progress.Character, progress.Total)
-		case "done":
-			a.log.Info("Multi-pass generation complete")
-		}
-	}
-
-	rembgURL, _ := a.presets.GetSetting("rembg_url")
-	var rembgIf compositor.RembgClient
-	if rembgURL != "" {
-		a.rembgClient.SetURL(rembgURL)
-		rembgIf = a.rembgClient
-		a.log.Debug("Rembg enabled: %s", rembgURL)
-	} else {
-		a.log.Warn("Rembg not configured, using Go-based background removal")
-	}
-
-	c := compositor.New(a.sd, rembgIf, a.presets, emit)
-	result, err := c.GenerateScene(scene)
-	if err != nil {
-		a.log.Error("Multi-pass failed: %s", err)
-		return nil, err
-	}
-
-	if result.Image != "" {
-		a.addToSession(result.Image, nil, "scene", false, nil)
-	}
-
-	return result, nil
-}
-
-func (a *App) CheckRembg() error {
-	return a.settingsSvc.CheckRembg()
-}
-
-func (a *App) ListSavedScenes() ([]preset.SavedScene, error) {
-	items, err := a.presets.ListSavedScenes()
-	if err != nil {
-		return nil, err
-	}
-	if items == nil {
-		items = []preset.SavedScene{}
-	}
-	return items, nil
-}
-
-func (a *App) GetSavedScene(id int64) (*preset.SavedScene, error) {
-	return a.presets.GetSavedScene(id)
-}
-
-func (a *App) SaveScene(s preset.SavedScene) (*preset.SavedScene, error) {
-	if strings.TrimSpace(s.Name) == "" {
-		return nil, fmt.Errorf("scene name is required")
-	}
-	if s.SceneJSON == "" {
-		return nil, fmt.Errorf("scene data is required")
-	}
-	if err := a.presets.CreateSavedScene(&s); err != nil {
-		return nil, err
-	}
-	return &s, nil
-}
-
-func (a *App) UpdateSavedScene(s preset.SavedScene) (*preset.SavedScene, error) {
-	if s.ID <= 0 {
-		return nil, fmt.Errorf("invalid scene ID")
-	}
-	if err := a.presets.UpdateSavedScene(&s); err != nil {
-		return nil, err
-	}
-	return &s, nil
-}
-
-func (a *App) DeleteSavedScene(id int64) error {
-	return a.presets.DeleteSavedScene(id)
-}
-
-
-// --- Export ---
+// --- Export Image ---
 
 type ExportImageParams = importexport.ExportImageParams
 
@@ -3682,6 +695,8 @@ func (a *App) DeleteExportPreset(id int64) error {
 	return a.ieSvc.DeleteExportPreset(id)
 }
 
+// --- File Browser ---
+
 type FileEntry = filebrowser.FileEntry
 
 func (a *App) BrowseDirectory(dirPath string) ([]FileEntry, error) {
@@ -3690,6 +705,10 @@ func (a *App) BrowseDirectory(dirPath string) ([]FileEntry, error) {
 
 func (a *App) ReadFileAsBase64(filePath string) (string, error) {
 	return filebrowser.ReadFileAsBase64(filePath)
+}
+
+func (a *App) ReadThumbnail(filePath string) (string, error) {
+	return filebrowser.ReadThumbnail(filePath)
 }
 
 func (a *App) SelectBrowserFolder() (string, error) {
@@ -3712,19 +731,55 @@ func (a *App) SetLastImage(base64Data string) error {
 	if len(base64Data) > 22*1024*1024 {
 		return fmt.Errorf("image too large (max 16 MB)")
 	}
-	a.addToSession(base64Data, nil, "file-browser", false, nil)
+	a.sessions.AddToSession(base64Data, nil, "file-browser", false, nil)
 	return nil
 }
 
-func (a *App) ReadThumbnail(filePath string) (string, error) {
-	return filebrowser.ReadThumbnail(filePath)
+// --- Scene Management ---
+
+func (a *App) ListSavedScenes() ([]preset.SavedScene, error) {
+	items, err := a.presets.ListSavedScenes()
+	if err != nil {
+		return nil, err
+	}
+	if items == nil {
+		items = []preset.SavedScene{}
+	}
+	return items, nil
 }
 
-// --- Session management ---
-
-func (a *App) addToSession(imageBase64 string, info json.RawMessage, source string, isPreview bool, presetID *int64) int64 {
-	return a.sessions.AddToSession(imageBase64, info, source, isPreview, presetID)
+func (a *App) GetSavedScene(id int64) (*preset.SavedScene, error) {
+	return a.presets.GetSavedScene(id)
 }
+
+func (a *App) SaveScene(s preset.SavedScene) (*preset.SavedScene, error) {
+	if strings.TrimSpace(s.Name) == "" {
+		return nil, fmt.Errorf("scene name is required")
+	}
+	if s.SceneJSON == "" {
+		return nil, fmt.Errorf("scene data is required")
+	}
+	if err := a.presets.CreateSavedScene(&s); err != nil {
+		return nil, err
+	}
+	return &s, nil
+}
+
+func (a *App) UpdateSavedScene(s preset.SavedScene) (*preset.SavedScene, error) {
+	if s.ID <= 0 {
+		return nil, fmt.Errorf("invalid scene ID")
+	}
+	if err := a.presets.UpdateSavedScene(&s); err != nil {
+		return nil, err
+	}
+	return &s, nil
+}
+
+func (a *App) DeleteSavedScene(id int64) error {
+	return a.presets.DeleteSavedScene(id)
+}
+
+// --- Session Management ---
 
 func (a *App) CreateSession(name string) (*preset.SessionInfo, error) {
 	return a.sessions.CreateSession(name)

@@ -385,3 +385,7 @@ export function UpscalePreview(arg1) {
 export function ValidateImportModels(arg1) {
   return window['go']['main']['App']['ValidateImportModels'](arg1);
 }
+
+export function Version() {
+  return window['go']['main']['App']['Version']();
+}

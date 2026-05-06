@@ -142,26 +142,32 @@ export namespace compositor {
 
 }
 
-export namespace llm {
+export namespace filebrowser {
 	
-	export class LLMModel {
-	    id: string;
-	    object: string;
+	export class FileEntry {
+	    name: string;
+	    path: string;
+	    is_dir: boolean;
+	    size: number;
+	    mod_time: string;
 	
 	    static createFrom(source: any = {}) {
-	        return new LLMModel(source);
+	        return new FileEntry(source);
 	    }
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.id = source["id"];
-	        this.object = source["object"];
+	        this.name = source["name"];
+	        this.path = source["path"];
+	        this.is_dir = source["is_dir"];
+	        this.size = source["size"];
+	        this.mod_time = source["mod_time"];
 	    }
 	}
 
 }
 
-export namespace main {
+export namespace generation {
 	
 	export class AnalyzePrompts {
 	    system_prompt: string;
@@ -231,52 +237,6 @@ export namespace main {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.description = source["description"];
 	        this.preset_id = source["preset_id"];
-	    }
-	}
-	export class ExportImageParams {
-	    image_base64: string;
-	    format: string;
-	    width: number;
-	    height: number;
-	    lock_ratio: boolean;
-	    quality: number;
-	    interpolation: string;
-	    filename: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new ExportImageParams(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.image_base64 = source["image_base64"];
-	        this.format = source["format"];
-	        this.width = source["width"];
-	        this.height = source["height"];
-	        this.lock_ratio = source["lock_ratio"];
-	        this.quality = source["quality"];
-	        this.interpolation = source["interpolation"];
-	        this.filename = source["filename"];
-	    }
-	}
-	export class FileEntry {
-	    name: string;
-	    path: string;
-	    is_dir: boolean;
-	    size: number;
-	    mod_time: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new FileEntry(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.name = source["name"];
-	        this.path = source["path"];
-	        this.is_dir = source["is_dir"];
-	        this.size = source["size"];
-	        this.mod_time = source["mod_time"];
 	    }
 	}
 	export class GenerateCompoundImageParams {
@@ -399,117 +359,6 @@ export namespace main {
 	        this.negative_prompt = source["negative_prompt"];
 	    }
 	}
-	export class PresetData {
-	    name: string;
-	    preset_type: string;
-	    type_name: string;
-	    prompt: string;
-	    negative_prompt: string;
-	    sampler: string;
-	    schedule_type: string;
-	    steps: number;
-	    cfg_scale: number;
-	    width: number;
-	    height: number;
-	    model_name: string;
-	    seed?: number;
-	    denoising_strength?: number;
-	    clip_skip?: number;
-	    batch_size?: number;
-	    batch_count?: number;
-	    hires_fix?: boolean;
-	    hires_upscale?: number;
-	    hires_denoising_strength?: number;
-	    hires_upscaler: string;
-	    vae: string;
-	    tags: string;
-	    loras: string;
-	    source_file?: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new PresetData(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.name = source["name"];
-	        this.preset_type = source["preset_type"];
-	        this.type_name = source["type_name"];
-	        this.prompt = source["prompt"];
-	        this.negative_prompt = source["negative_prompt"];
-	        this.sampler = source["sampler"];
-	        this.schedule_type = source["schedule_type"];
-	        this.steps = source["steps"];
-	        this.cfg_scale = source["cfg_scale"];
-	        this.width = source["width"];
-	        this.height = source["height"];
-	        this.model_name = source["model_name"];
-	        this.seed = source["seed"];
-	        this.denoising_strength = source["denoising_strength"];
-	        this.clip_skip = source["clip_skip"];
-	        this.batch_size = source["batch_size"];
-	        this.batch_count = source["batch_count"];
-	        this.hires_fix = source["hires_fix"];
-	        this.hires_upscale = source["hires_upscale"];
-	        this.hires_denoising_strength = source["hires_denoising_strength"];
-	        this.hires_upscaler = source["hires_upscaler"];
-	        this.vae = source["vae"];
-	        this.tags = source["tags"];
-	        this.loras = source["loras"];
-	        this.source_file = source["source_file"];
-	    }
-	}
-	export class ImportPreview {
-	    presets: PresetData[];
-	    total: number;
-	
-	    static createFrom(source: any = {}) {
-	        return new ImportPreview(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.presets = this.convertValues(source["presets"], PresetData);
-	        this.total = source["total"];
-	    }
-	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
-	}
-	export class KidsCategoryInfo {
-	    name: string;
-	    label: string;
-	    alwaysOn: boolean;
-	    enabled: boolean;
-	
-	    static createFrom(source: any = {}) {
-	        return new KidsCategoryInfo(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.name = source["name"];
-	        this.label = source["label"];
-	        this.alwaysOn = source["alwaysOn"];
-	        this.enabled = source["enabled"];
-	    }
-	}
-	
 	export class RecommendPresetResult {
 	    preset_id: number;
 	    preset_name: string;
@@ -527,54 +376,6 @@ export namespace main {
 	        this.extra_prompt = source["extra_prompt"];
 	        this.reasoning = source["reasoning"];
 	    }
-	}
-	export class ServiceInfo {
-	    available: boolean;
-	    model: string;
-	    vision_model?: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new ServiceInfo(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.available = source["available"];
-	        this.model = source["model"];
-	        this.vision_model = source["vision_model"];
-	    }
-	}
-	export class ServiceStatus {
-	    llm: ServiceInfo;
-	    sd: ServiceInfo;
-	
-	    static createFrom(source: any = {}) {
-	        return new ServiceStatus(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.llm = this.convertValues(source["llm"], ServiceInfo);
-	        this.sd = this.convertValues(source["sd"], ServiceInfo);
-	    }
-	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
 	}
 	export class TestCompoundGenerateParams {
 	    selected_ids: number[];
@@ -686,6 +487,130 @@ export namespace main {
 	        this.denoising_strength = source["denoising_strength"];
 	    }
 	}
+
+}
+
+export namespace importexport {
+	
+	export class ExportImageParams {
+	    image_base64: string;
+	    format: string;
+	    width: number;
+	    height: number;
+	    lock_ratio: boolean;
+	    quality: number;
+	    interpolation: string;
+	    filename: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ExportImageParams(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.image_base64 = source["image_base64"];
+	        this.format = source["format"];
+	        this.width = source["width"];
+	        this.height = source["height"];
+	        this.lock_ratio = source["lock_ratio"];
+	        this.quality = source["quality"];
+	        this.interpolation = source["interpolation"];
+	        this.filename = source["filename"];
+	    }
+	}
+	export class PresetData {
+	    name: string;
+	    preset_type: string;
+	    type_name: string;
+	    prompt: string;
+	    negative_prompt: string;
+	    sampler: string;
+	    schedule_type: string;
+	    steps: number;
+	    cfg_scale: number;
+	    width: number;
+	    height: number;
+	    model_name: string;
+	    seed?: number;
+	    denoising_strength?: number;
+	    clip_skip?: number;
+	    batch_size?: number;
+	    batch_count?: number;
+	    hires_fix?: boolean;
+	    hires_upscale?: number;
+	    hires_denoising_strength?: number;
+	    hires_upscaler: string;
+	    vae: string;
+	    tags: string;
+	    loras: string;
+	    source_file?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new PresetData(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.preset_type = source["preset_type"];
+	        this.type_name = source["type_name"];
+	        this.prompt = source["prompt"];
+	        this.negative_prompt = source["negative_prompt"];
+	        this.sampler = source["sampler"];
+	        this.schedule_type = source["schedule_type"];
+	        this.steps = source["steps"];
+	        this.cfg_scale = source["cfg_scale"];
+	        this.width = source["width"];
+	        this.height = source["height"];
+	        this.model_name = source["model_name"];
+	        this.seed = source["seed"];
+	        this.denoising_strength = source["denoising_strength"];
+	        this.clip_skip = source["clip_skip"];
+	        this.batch_size = source["batch_size"];
+	        this.batch_count = source["batch_count"];
+	        this.hires_fix = source["hires_fix"];
+	        this.hires_upscale = source["hires_upscale"];
+	        this.hires_denoising_strength = source["hires_denoising_strength"];
+	        this.hires_upscaler = source["hires_upscaler"];
+	        this.vae = source["vae"];
+	        this.tags = source["tags"];
+	        this.loras = source["loras"];
+	        this.source_file = source["source_file"];
+	    }
+	}
+	export class ImportPreview {
+	    presets: PresetData[];
+	    total: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new ImportPreview(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.presets = this.convertValues(source["presets"], PresetData);
+	        this.total = source["total"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
 	export class ValidationWarning {
 	    preset_name: string;
 	    warnings: string[];
@@ -698,6 +623,48 @@ export namespace main {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.preset_name = source["preset_name"];
 	        this.warnings = source["warnings"];
+	    }
+	}
+
+}
+
+export namespace kids {
+	
+	export class CategoryInfo {
+	    name: string;
+	    label: string;
+	    alwaysOn: boolean;
+	    enabled: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new CategoryInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.label = source["label"];
+	        this.alwaysOn = source["alwaysOn"];
+	        this.enabled = source["enabled"];
+	    }
+	}
+
+}
+
+export namespace llm {
+	
+	export class LLMModel {
+	    id: string;
+	    object: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new LLMModel(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.object = source["object"];
 	    }
 	}
 
@@ -1119,6 +1086,59 @@ export namespace sd {
 	        this.model_name = source["model_name"];
 	        this.path = source["path"];
 	    }
+	}
+
+}
+
+export namespace settings {
+	
+	export class ServiceInfo {
+	    available: boolean;
+	    model: string;
+	    vision_model?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ServiceInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.available = source["available"];
+	        this.model = source["model"];
+	        this.vision_model = source["vision_model"];
+	    }
+	}
+	export class ServiceStatus {
+	    llm: ServiceInfo;
+	    sd: ServiceInfo;
+	
+	    static createFrom(source: any = {}) {
+	        return new ServiceStatus(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.llm = this.convertValues(source["llm"], ServiceInfo);
+	        this.sd = this.convertValues(source["sd"], ServiceInfo);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 
 }

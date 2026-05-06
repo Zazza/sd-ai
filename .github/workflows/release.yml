@@ -46,6 +46,12 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Go tests
+        run: go test ./... -count=1 -timeout 120s
+
+      - name: Go vet
+        run: go vet ./...
+
       - name: Build
         env:
           VERSION: ${{ github.ref_name }}
