@@ -46,6 +46,9 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Build frontend
+        run: cd frontend && npm ci && npm run build
+
       - name: Go tests
         run: go test ./... -count=1 -timeout 120s
 
