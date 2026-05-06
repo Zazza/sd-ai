@@ -4,6 +4,17 @@ All notable changes to SD Studio are documented here.
 
 ## [Unreleased]
 
+## [0.5.2] — 2026-05-06
+
+### Changed
+- Refactored app.go God Object (5136 → 841 lines) into service modules: generation, session, settings, importexport, filebrowser, promptutil
+- Business logic extracted to `internal/generation/` (service.go + analyze.go)
+- Old `internal/analyze/` package removed, merged into `internal/generation/`
+
+### Added
+- 475 tests across 9 previously untested packages: promptutil (56), filebrowser (28), rembg (20), session (37), settings (32), importexport (51), generation (132), compositor (69), api (48)
+- CI test gate — `go test` + `go vet` must pass before release build
+
 ## [0.5.1] — 2026-05-05
 
 ### Added
