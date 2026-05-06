@@ -316,7 +316,9 @@ func TestGenerateSDPrompt_EmptyDescriptionAndNegative(t *testing.T) {
 
 	result, err := svc.GenerateSDPrompt(GenerateSDPromptParams{PresetID: 1, Description: "", Negative: ""})
 	assert.NoError(t, err)
-	assert.Nil(t, result)
+	require.NotNil(t, result)
+	assert.Equal(t, "masterpiece, best quality, 1girl", result.Prompt)
+	assert.Equal(t, "lowres, bad anatomy", result.NegativePrompt)
 }
 
 func TestGenerateSDPrompt_Success(t *testing.T) {

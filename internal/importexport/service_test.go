@@ -783,18 +783,17 @@ func TestProcessExportImage_Interpolation_Table(t *testing.T) {
 	}
 }
 
-func TestProcessExportImage_Webp(t *testing.T) {
+func TestProcessExportImage_WebpNotSupported(t *testing.T) {
 	t.Parallel()
 	svc := newTestService(t, &mockSDService{})
 	b64 := encodePNG(t, 64, 64)
 
-	img, err := svc.ProcessExportImage(ExportImageParams{
+	_, err := svc.ProcessExportImage(ExportImageParams{
 		ImageBase64: b64,
 		Format:      "webp",
 	})
-	require.NoError(t, err)
-	assert.NotEmpty(t, img.Data)
-	assert.Equal(t, "webp", img.Format)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "unsupported format")
 }
 
 func TestProcessExportImage_DefaultQuality(t *testing.T) {

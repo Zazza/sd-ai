@@ -143,14 +143,11 @@ func TestBrowseDirectory_SupportedExtensions(t *testing.T) {
 		{name: "png", ext: ".png"},
 		{name: "jpg", ext: ".jpg"},
 		{name: "jpeg", ext: ".jpeg"},
-		{name: "webp", ext: ".webp"},
 	}
 
 	dir := t.TempDir()
 	for _, tt := range tests {
-		if tt.ext == ".webp" {
-			require.NoError(t, os.WriteFile(filepath.Join(dir, "image"+tt.ext), []byte("fake"), 0644))
-		} else if tt.ext == ".png" {
+		if tt.ext == ".png" {
 			createPNGFile(t, filepath.Join(dir, "image"+tt.ext), 10, 10)
 		} else {
 			createJPEGFile(t, filepath.Join(dir, "image"+tt.ext), 10, 10)
@@ -159,7 +156,7 @@ func TestBrowseDirectory_SupportedExtensions(t *testing.T) {
 
 	result, err := BrowseDirectory(dir)
 	require.NoError(t, err)
-	assert.Len(t, result, 4)
+	assert.Len(t, result, 3)
 }
 
 func TestReadFileAsBase64_EmptyPath(t *testing.T) {
@@ -329,14 +326,11 @@ func TestReadThumbnail_WebPNotSupported(t *testing.T) {
 
 	dir := t.TempDir()
 	path := filepath.Join(dir, "image.webp")
-	var buf bytes.Buffer
-	img := image.NewRGBA(image.Rect(0, 0, 512, 512))
-	require.NoError(t, png.Encode(&buf, img))
-	require.NoError(t, os.WriteFile(path, buf.Bytes(), 0644))
+	require.NoError(t, os.WriteFile(path, []byte("fake"), 0644))
 
 	_, err := ReadThumbnail(path)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "webp thumbnails not supported")
+	assert.Contains(t, err.Error(), "unsupported file type")
 }
 
 func TestReadThumbnail_FileTooLarge(t *testing.T) {
