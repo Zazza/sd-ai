@@ -1,6 +1,7 @@
 package config
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -136,10 +137,11 @@ func TestLoad_EnvOverrides(t *testing.T) {
 }
 
 func TestLoad_DBPathOverride(t *testing.T) {
-	t.Setenv("DB_PATH", "/tmp/test-presets.db")
+	dbPath := filepath.Join(t.TempDir(), "test-presets.db")
+	t.Setenv("DB_PATH", dbPath)
 	cfg := Load()
-	if cfg.DBPath != "/tmp/test-presets.db" {
-		t.Errorf("DBPath = %q, want %q", cfg.DBPath, "/tmp/test-presets.db")
+	if cfg.DBPath != dbPath {
+		t.Errorf("DBPath = %q, want %q", cfg.DBPath, dbPath)
 	}
 }
 
