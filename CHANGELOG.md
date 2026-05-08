@@ -4,6 +4,14 @@ All notable changes to SD Studio are documented here.
 
 ## [Unreleased]
 
+## [0.5.5] — 2026-05-08
+
+### Fixed
+- Remove tool: LLM vision analysis now produces background/surface tags instead of full scene descriptions
+- Added prose detection — scene descriptions are rejected, fallback prompt used instead
+- Lowered denoising strength (0.75 → 0.6) for cleaner object removal with fewer artifacts
+- Post-processing with `CleanTags` + `StripJunk` to strip non-tag output from LLM
+
 ## [0.5.4] — 2026-05-06
 
 ### Added

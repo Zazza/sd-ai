@@ -136,6 +136,34 @@ func (s *Service) GetDefaultAnalyzePrompts() *AnalyzePrompts {
 	}
 }
 
+// --- isProse ---
+
+var prosePatterns = []string{
+	"The image", "This image", "The picture", "This picture",
+	"I can see", "I see", "appears to be", "depicts",
+	"featuring", "shows a", "there are", "There is",
+	"wearing", "holding", "standing", "sitting",
+	"background shows", "foreground",
+}
+
+func isProse(s string) bool {
+	if s == "" {
+		return false
+	}
+	lower := strings.ToLower(s)
+	for _, p := range prosePatterns {
+		if strings.Contains(lower, strings.ToLower(p)) {
+			return true
+		}
+	}
+	periods := strings.Count(s, ".")
+	commas := strings.Count(s, ",")
+	if periods > commas {
+		return true
+	}
+	return false
+}
+
 // --- AnalyzeRemoveContext ---
 
 func (s *Service) analyzeRemoveContext(imageBase64, maskBase64 string) (string, error) {
@@ -211,6 +239,9 @@ func (s *Service) analyzeRemoveContext(imageBase64, maskBase64 string) (string, 
 	result = llm.CleanTags(result)
 	result = promptutil.StripJunk(result)
 	result = promptutil.TruncateRepetitive(result, 200)
+	if isProse(result) {
+		return "", nil
+	}
 	return result, nil
 }
 
