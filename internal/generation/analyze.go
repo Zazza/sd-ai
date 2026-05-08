@@ -197,19 +197,20 @@ func (s *Service) analyzeRemoveContext(imageBase64, maskBase64 string) (string, 
 	model := s.getAnalyzeModel()
 	s.settings.ApplyLLMConfig("analyze")
 
-	systemPrompt := "You are a vision model analyzing images for inpainting. The red overlay marks the area to remove. Describe what should fill that area to match the surrounding context seamlessly. Output ONLY comma-separated Stable Diffusion tags for the background/content that should replace the red area. No explanation, no extra text."
-	userText := "Look at the red overlay area. What should fill this space to blend naturally with the surroundings? Output only SD tags."
+	systemPrompt := "You analyze images for object removal via inpainting. The red overlay marks the area to REMOVE. Your task: describe ONLY the background/surface that should fill the red area to blend seamlessly. DO NOT describe objects, people, or the scene. Output ONLY short comma-separated tags for texture/color/material of the surrounding area.\n\nExample outputs:\n- gray concrete wall, subtle cracks, warm lighting\n- blue sky, soft white clouds\n- green grass, natural texture, sunlight\n- wooden floor, planks, warm brown tone\n\nNO sentences. NO explanation. NO scene description. ONLY tags."
+	userText := "What background/surface should replace the red area? Tags only."
 
 	s.emitter.Emit("llm:status", map[string]string{"status": "thinking"})
-	result, err := s.llm.ChatVision(model, systemPrompt, userText, overlayBase64, 0.3, 128)
+	result, err := s.llm.ChatVision(model, systemPrompt, userText, overlayBase64, 0.2, 64)
 	if err != nil {
 		s.emitter.Emit("llm:status", map[string]string{"status": "done"})
 		return "", fmt.Errorf("vision analysis failed: %w", err)
 	}
 	s.emitter.Emit("llm:status", map[string]string{"status": "done"})
 
-	result = strings.TrimSpace(result)
-	result = promptutil.TruncateRepetitive(result, 500)
+	result = llm.CleanTags(result)
+	result = promptutil.StripJunk(result)
+	result = promptutil.TruncateRepetitive(result, 200)
 	return result, nil
 }
 
@@ -245,7 +246,11 @@ func (s *Service) generateRemoveObject(params GenerateFromImageParams) (*Generat
 		height = imgCfg.Height
 	}
 
-	prompt = removeDesc + ", seamless background, clean, natural, consistent with surroundings"
+	if removeDesc != "" {
+		prompt = removeDesc + ", seamless blend, clean edges"
+	} else {
+		prompt = "seamless background, clean, natural, consistent with surroundings"
+	}
 	negativePrompt = removeNegative
 
 	if samplerName == "" {
@@ -266,7 +271,7 @@ func (s *Service) generateRemoveObject(params GenerateFromImageParams) (*Generat
 
 	denoising := params.DenoisingStrength
 	if denoising <= 0 {
-		denoising = 0.75
+		denoising = 0.6
 	}
 	maskBlur := params.MaskBlur
 	if maskBlur <= 0 {
