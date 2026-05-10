@@ -35,6 +35,7 @@ const showFastSaveModal = ref(false)
 const fastSaveFilename = ref('')
 const fastSaveFormat = ref('jpg')
 const fastSaveLoading = ref(false)
+const stereoLoading = ref(false)
 
 const generatingImage = ref(false)
 const { llmStatus, sdProgress, preview, interrupt: interruptGeneration, reset: resetProgress } = useGenerationProgress()
@@ -337,6 +338,23 @@ async function upscaleImageX2() {
     error.value = String(e)
   } finally {
     upscalingX2.value = false
+  }
+}
+
+async function generateStereo() {
+  if (!generatedImage.value) return
+  stereoLoading.value = true
+  error.value = ''
+  try {
+    const result = await api.generateStereoImage(generatedImage.value, 'side-by-side', 8)
+    if (result) {
+      generatedImage.value = result
+      isPreview.value = false
+    }
+  } catch (e) {
+    error.value = String(e)
+  } finally {
+    stereoLoading.value = false
   }
 }
 
@@ -655,6 +673,7 @@ function onKeydown(e) {
               <button v-if="isPreview && previewMode" class="btn btn-primary btn-sm" @click="upscalePreview">{{ t('generate.btn_upscale_full') }}</button>
               <button v-if="!isPreview && savedPreview" class="btn btn-secondary btn-sm" @click="backToPreview">{{ t('generate.btn_back_preview') }}</button>
               <button v-if="generatedImage && !isPreview" class="btn btn-secondary btn-sm" @click="upscaleImageX2" :disabled="upscalingX2">{{ t('generate.btn_upscale_x2') }}</button>
+              <button v-if="generatedImage && !isPreview" class="btn btn-secondary btn-sm" @click="generateStereo" :disabled="stereoLoading">{{ stereoLoading ? '...' : 'Stereo' }}</button>
               <button class="btn btn-secondary btn-sm" @click="downloadImage" data-tooltip="Download">{{ t('generate.btn_download') }}</button>
               <button v-if="generatedImage" class="btn btn-secondary btn-sm" @click="openFastSaveModal">{{ t('generate.btn_fast_save') }}</button>
               <button class="btn btn-secondary btn-sm" @click="copyPrompt" data-tooltip="Copy prompt">{{ t('generate.btn_copy') }}</button>

@@ -47,6 +47,10 @@ func (m *mockSDGenerator) SetVAE(vaeName string) error {
 	return m.setVAEErr
 }
 
+func (m *mockSDGenerator) GetDepthMap(imageBase64 string) (string, error) {
+	return "", nil
+}
+
 type mockRembgClient struct {
 	removeFunc func(base64Image string) (string, error)
 }

@@ -409,3 +409,35 @@ func (c *Client) GetLoRAs() ([]LoRA, error) {
 	}
 	return loras, nil
 }
+
+func (c *Client) GetDepthMap(imageBase64 string) (string, error) {
+	body := map[string]interface{}{
+		"image":           imageBase64,
+		"preprocessor":    "depth_midas",
+		"model":           "midas",
+	}
+	jsonBody, _ := json.Marshal(body)
+
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, c.baseURL+"/sdapi/v1/extra-single-image-api", bytes.NewReader(jsonBody))
+	if err != nil {
+		return "", fmt.Errorf("depth map request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("depth map request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var result struct {
+		Image string `json:"image"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", fmt.Errorf("decode depth map: %w", err)
+	}
+	if result.Image == "" {
+		return "", fmt.Errorf("depth map: empty response")
+	}
+	return result.Image, nil
+}

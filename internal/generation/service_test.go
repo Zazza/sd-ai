@@ -161,6 +161,10 @@ func (m *mockSD) SetVAE(vaeName string) error {
 	return nil
 }
 
+func (m *mockSD) GetDepthMap(imageBase64 string) (string, error) {
+	return "", nil
+}
+
 type mockEmitter struct {
 	mu     sync.Mutex
 	events []emittedEvent

@@ -45,6 +45,9 @@ func (m *mockSDService) HealthCheck() error                           { return n
 func (m *mockSDService) SetURL(baseURL string)                        {}
 func (m *mockSDService) SetModel(modelName string) error              { return nil }
 func (m *mockSDService) SetVAE(vaeName string) error                  { return nil }
+func (m *mockSDService) GetDepthMap(imageBase64 string) (string, error) {
+	return "", nil
+}
 
 func openTestDB(t *testing.T) *preset.DB {
 	t.Helper()

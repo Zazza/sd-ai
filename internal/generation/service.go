@@ -27,6 +27,7 @@ import (
 	"go-sd/internal/promptutil"
 	"go-sd/internal/rembg"
 	"go-sd/internal/sd"
+	"go-sd/internal/stereo"
 )
 
 // --- Interfaces ---
@@ -1533,6 +1534,30 @@ func (s *Service) GetLastImage() (*GenerateImageResult, error) {
 func (s *Service) ClearLastImage() {
 	os.Remove(filepath.Join(s.dataDir, "last_image.png"))
 	os.Remove(filepath.Join(s.dataDir, "last_image.json"))
+}
+
+func (s *Service) GenerateStereoImage(imageBase64, format string, eyeShift float64) (string, error) {
+	depthBase64, err := s.sd.GetDepthMap(imageBase64)
+	if err != nil {
+		return "", fmt.Errorf("get depth map: %w", err)
+	}
+
+	f := stereo.SideBySide
+	if format == "anaglyph-rc" {
+		f = stereo.AnaglyphRC
+	}
+
+	result, err := stereo.GenerateStereo(stereo.Params{
+		ImageBase64: imageBase64,
+		DepthBase64: depthBase64,
+		Format:      f,
+		EyeShift:    eyeShift,
+	})
+	if err != nil {
+		return "", fmt.Errorf("generate stereo: %w", err)
+	}
+
+	return result, nil
 }
 
 // --- DecomposeScene ---

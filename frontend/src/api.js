@@ -105,6 +105,7 @@ export const api = {
   deleteSavedScene: (id) => DeleteSavedScene(id),
   checkRembg: () => CheckRembg(),
   clearLastImage: () => ClearLastImage(),
+  generateStereoImage: (imageBase64, format, eyeShift) => GenerateStereoImage(imageBase64, format, eyeShift),
   listExportPresets: () => ListExportPresets(),
   saveExportPreset: (data) => SaveExportPreset(data),
   deleteExportPreset: (id) => DeleteExportPreset(id),

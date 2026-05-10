@@ -300,6 +300,10 @@ func (a *App) GenerateFromImage(params GenerateFromImageParams) (*GenerateImageR
 	return a.gen.GenerateFromImage(params)
 }
 
+func (a *App) GenerateStereoImage(imageBase64, format string, eyeShift float64) (string, error) {
+	return a.gen.GenerateStereoImage(imageBase64, format, eyeShift)
+}
+
 func (a *App) BatchCompoundGenerate(params BatchCompoundGenerateParams) error {
 	return a.gen.BatchCompoundGenerate(params)
 }

@@ -16,4 +16,5 @@ type Service interface {
 	SetURL(baseURL string)
 	SetModel(modelName string) error
 	SetVAE(vaeName string) error
+	GetDepthMap(imageBase64 string) (string, error)
 }
