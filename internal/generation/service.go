@@ -92,6 +92,7 @@ type GenerateImageResult struct {
 	Info                    any    `json:"info"`
 	IsPreview               bool   `json:"is_preview"`
 	HiresFixSkipped         bool   `json:"hires_fix_skipped"`
+	HiresFixManual          bool   `json:"hires_fix_manual"`
 	EffectivePrompt         string `json:"effective_prompt"`
 	EffectiveNegativePrompt string `json:"effective_negative_prompt"`
 }
@@ -314,6 +315,30 @@ func (s *Service) checkSDInterrupted() error {
 		return fmt.Errorf("interrupted")
 	}
 	return nil
+}
+
+func (s *Service) manualHiresUpscale(base64Img string, req sd.Txt2ImgRequest, scale float64, denoiseStrength float64) (*sd.Txt2ImgResponse, error) {
+	targetW := int(float64(req.Width) * scale)
+	targetH := int(float64(req.Height) * scale)
+	i2iReq := sd.Img2ImgRequest{
+		InitImages:        []string{base64Img},
+		Prompt:            req.Prompt,
+		NegativePrompt:    req.NegativePrompt,
+		SamplerName:       req.SamplerName,
+		Scheduler:         req.Scheduler,
+		Steps:             req.Steps,
+		CfgScale:          req.CfgScale,
+		Width:             targetW,
+		Height:            targetH,
+		Seed:              req.Seed,
+		DenoisingStrength: &denoiseStrength,
+		ClipSkip:          req.ClipSkip,
+		BatchSize:         req.BatchSize,
+		BatchCount:        req.BatchCount,
+		DoNotSaveImages:   true,
+		DoNotSaveGrid:     true,
+	}
+	return s.sd.Img2Img(i2iReq)
 }
 
 // --- Helpers ---
@@ -749,12 +774,13 @@ func (s *Service) GenerateImage(params GenerateImageParams) (*GenerateImageResul
 
 	result, err := s.sd.Txt2Img(req)
 	hiresSkipped := false
+	hiresManual := false
 	if err != nil {
 		if ierr := s.checkSDInterrupted(); ierr != nil {
 			return nil, ierr
 		}
 		if hiresFix != nil {
-			s.log.Warn("SD error with hires fix enabled, retrying without hires fix: %s", err)
+			s.log.Warn("SD error with hires fix enabled, retrying with manual upscale: %s", err)
 			time.Sleep(3 * time.Second)
 			req.HiresFix = nil
 			req.HiresUpscale = nil
@@ -764,7 +790,29 @@ func (s *Service) GenerateImage(params GenerateImageParams) (*GenerateImageResul
 			req.HiresResizeY = 0
 			req.HiresSecondPassSteps = 0
 			result, err = s.sd.Txt2Img(req)
-			hiresSkipped = true
+			if err == nil && len(result.Images) > 0 {
+				scale := 2.0
+				if p.HiresUpscale != nil {
+					scale = *p.HiresUpscale
+				}
+				ds := 0.5
+				if p.HiresDenoisingStrength != nil {
+					ds = *p.HiresDenoisingStrength
+				}
+				s.log.Info("Manual hires upscale: %.1fx, denoise=%.2f", scale, ds)
+				hrResult, hrErr := s.manualHiresUpscale(result.Images[0], req, scale, ds)
+				if hrErr != nil {
+					s.log.Warn("Manual hires upscale failed, using base image: %s", hrErr)
+					hiresSkipped = true
+				} else if len(hrResult.Images) > 0 {
+					result = hrResult
+					hiresManual = true
+				} else {
+					hiresSkipped = true
+				}
+			} else {
+				hiresSkipped = true
+			}
 		}
 		if err != nil {
 			return nil, err
@@ -796,6 +844,7 @@ func (s *Service) GenerateImage(params GenerateImageParams) (*GenerateImageResul
 		Info:                    result.Info,
 		IsPreview:               isPreview,
 		HiresFixSkipped:         hiresSkipped,
+		HiresFixManual:          hiresManual,
 		EffectivePrompt:         prompt,
 		EffectiveNegativePrompt: negativePrompt,
 	}
@@ -938,7 +987,7 @@ func (s *Service) BatchGenerate(params BatchGenerateParams) error {
 				return ierr
 			}
 			if hiresFix != nil {
-				s.log.Warn("SD error with hires fix enabled, retrying without hires fix: %s", err)
+				s.log.Warn("SD error with hires fix enabled, retrying with manual upscale: %s", err)
 				time.Sleep(3 * time.Second)
 				req.HiresFix = nil
 				req.HiresUpscale = nil
@@ -948,6 +997,21 @@ func (s *Service) BatchGenerate(params BatchGenerateParams) error {
 				req.HiresResizeY = 0
 				req.HiresSecondPassSteps = 0
 				result, err = s.sd.Txt2Img(req)
+				if err == nil && len(result.Images) > 0 {
+					scale := 2.0
+					if p.HiresUpscale != nil {
+						scale = *p.HiresUpscale
+					}
+					ds := 0.5
+					if p.HiresDenoisingStrength != nil {
+						ds = *p.HiresDenoisingStrength
+					}
+					s.log.Info("Manual hires upscale: %.1fx, denoise=%.2f", scale, ds)
+					hrResult, hrErr := s.manualHiresUpscale(result.Images[0], req, scale, ds)
+					if hrErr == nil && len(hrResult.Images) > 0 {
+						result = hrResult
+					}
+				}
 			}
 			if err != nil {
 				s.emitter.Emit("batch:progress", BatchProgress{

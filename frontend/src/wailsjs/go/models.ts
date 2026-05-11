@@ -313,6 +313,7 @@ export namespace generation {
 	    info: any;
 	    is_preview: boolean;
 	    hires_fix_skipped: boolean;
+	    hires_fix_manual: boolean;
 	    effective_prompt: string;
 	    effective_negative_prompt: string;
 	
@@ -327,6 +328,7 @@ export namespace generation {
 	        this.info = source["info"];
 	        this.is_preview = source["is_preview"];
 	        this.hires_fix_skipped = source["hires_fix_skipped"];
+	        this.hires_fix_manual = source["hires_fix_manual"];
 	        this.effective_prompt = source["effective_prompt"];
 	        this.effective_negative_prompt = source["effective_negative_prompt"];
 	    }

@@ -2055,6 +2055,64 @@ func TestGenerateImage_ForgeHiresFallback(t *testing.T) {
 	assert.Zero(t, secondCallReq.HiresSecondPassSteps)
 }
 
+func TestGenerateImage_ForgeHiresManualUpscale(t *testing.T) {
+	t.Parallel()
+	hf := true
+	db := openTestDB(t)
+	makeTestPreset(t, db, &preset.Preset{
+		Name:                    "forge-manual",
+		Prompt:                  "1girl, masterpiece",
+		NegativePrompt:          "lowres",
+		Sampler:                 "Euler a",
+		Steps:                   20,
+		CfgScale:                7.0,
+		Width:                   512,
+		Height:                  512,
+		HiresFix:               &hf,
+		HiresUpscale:           floatPtr(2.0),
+		HiresDenoisingStrength: floatPtr(0.5),
+		HiresUpscaler:          "Latent",
+	})
+
+	txt2imgCalls := 0
+	sdSvc := &mockSD{
+		txt2img: func(req sd.Txt2ImgRequest) (*sd.Txt2ImgResponse, error) {
+			txt2imgCalls++
+			if txt2imgCalls == 1 {
+				return nil, fmt.Errorf("status 500: hires not supported")
+			}
+			return &sd.Txt2ImgResponse{
+				Images:     []string{"base-image-data"},
+				Info:       json.RawMessage(`{"seed":123}`),
+				Parameters: json.RawMessage(`{}`),
+			}, nil
+		},
+		img2img: func(req sd.Img2ImgRequest) (*sd.Txt2ImgResponse, error) {
+			assert.Equal(t, 1024, req.Width)
+			assert.Equal(t, 1024, req.Height)
+			assert.Equal(t, []string{"base-image-data"}, req.InitImages)
+			assert.NotNil(t, req.DenoisingStrength)
+			assert.InDelta(t, 0.5, *req.DenoisingStrength, 0.01)
+			return &sd.Txt2ImgResponse{
+				Images:     []string{"upscaled-image-data"},
+				Info:       json.RawMessage(`{"seed":123}`),
+				Parameters: json.RawMessage(`{}`),
+			}, nil
+		},
+	}
+
+	svc := newTestService(t, db, &mockLLM{}, sdSvc)
+	svc.ctx = context.Background()
+
+	result, err := svc.GenerateImage(GenerateImageParams{PresetID: 1})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, "upscaled-image-data", result.Image)
+	assert.False(t, result.HiresFixSkipped)
+	assert.True(t, result.HiresFixManual)
+	assert.Equal(t, 2, txt2imgCalls)
+}
+
 func TestGenerateImage_ForgeErrorNoHiresFix(t *testing.T) {
 	t.Parallel()
 	db := openTestDB(t)
