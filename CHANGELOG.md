@@ -4,6 +4,15 @@ All notable changes to SD Studio are documented here.
 
 ## [Unreleased]
 
+## [0.5.6] — 2026-05-11
+
+### Added
+- Manual hires upscale fallback: when Forge API hires fix fails, generates at base resolution then upscales via img2img with denoising — transparent to UI, no UI changes needed
+- `HiresFixManual` flag in generation result (UI can show "manual upscale" badge)
+
+### Changed
+- Hires fix fallback now attempts manual upscale before falling back to base image
+
 ## [0.5.5] — 2026-05-08
 
 ### Fixed
