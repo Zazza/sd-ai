@@ -280,7 +280,7 @@ func TestListPresets_Empty(t *testing.T) {
 func TestListPresets_WithData(t *testing.T) {
 	t.Parallel()
 	db := openTestDB(t)
-	p := &preset.Preset{Name: "test", Prompt: "prompt", Sampler: "Euler a", Steps: 20, CfgScale: 7, Width: 512, Height: 512}
+	p := &preset.Preset{Name: "test", Prompt: "prompt", Sampler: "Euler a", Steps: 20, CfgScale: 7}
 	require.NoError(t, db.Create(p))
 
 	h := NewHandler(db, &mockLLM{}, &mockSD{}, defaultConfig())
@@ -298,8 +298,8 @@ func TestListPresets_WithData(t *testing.T) {
 func TestListPresetsByType_Filter(t *testing.T) {
 	t.Parallel()
 	db := openTestDB(t)
-	character := &preset.Preset{Name: "char", PresetType: "character", Prompt: "p", Sampler: "Euler a", Steps: 20, CfgScale: 7, Width: 512, Height: 512}
-	bg := &preset.Preset{Name: "bg", PresetType: "background", Prompt: "p", Sampler: "Euler a", Steps: 20, CfgScale: 7, Width: 512, Height: 512}
+	character := &preset.Preset{Name: "char", PresetType: "character", Prompt: "p", Sampler: "Euler a", Steps: 20, CfgScale: 7}
+	bg := &preset.Preset{Name: "bg", PresetType: "background", Prompt: "p", Sampler: "Euler a", Steps: 20, CfgScale: 7}
 	require.NoError(t, db.Create(character))
 	require.NoError(t, db.Create(bg))
 
@@ -331,7 +331,7 @@ func TestListPresetsByType_EmptyResult(t *testing.T) {
 func TestGetPreset_Valid(t *testing.T) {
 	t.Parallel()
 	db := openTestDB(t)
-	p := &preset.Preset{Name: "target", Prompt: "p", Sampler: "Euler a", Steps: 20, CfgScale: 7, Width: 512, Height: 512}
+	p := &preset.Preset{Name: "target", Prompt: "p", Sampler: "Euler a", Steps: 20, CfgScale: 7}
 	require.NoError(t, db.Create(p))
 
 	h := NewHandler(db, &mockLLM{}, &mockSD{}, defaultConfig())
@@ -401,7 +401,7 @@ func TestCreatePreset_InvalidJSON(t *testing.T) {
 func TestUpdatePreset_Valid(t *testing.T) {
 	t.Parallel()
 	db := openTestDB(t)
-	p := &preset.Preset{Name: "original", Prompt: "p", Sampler: "Euler a", Steps: 20, CfgScale: 7, Width: 512, Height: 512}
+	p := &preset.Preset{Name: "original", Prompt: "p", Sampler: "Euler a", Steps: 20, CfgScale: 7}
 	require.NoError(t, db.Create(p))
 
 	h := NewHandler(db, &mockLLM{}, &mockSD{}, defaultConfig())
@@ -448,7 +448,7 @@ func TestUpdatePreset_InvalidJSON(t *testing.T) {
 func TestDeletePreset_Valid(t *testing.T) {
 	t.Parallel()
 	db := openTestDB(t)
-	p := &preset.Preset{Name: "to-delete", Prompt: "p", Sampler: "Euler a", Steps: 20, CfgScale: 7, Width: 512, Height: 512}
+	p := &preset.Preset{Name: "to-delete", Prompt: "p", Sampler: "Euler a", Steps: 20, CfgScale: 7}
 	require.NoError(t, db.Create(p))
 
 	h := NewHandler(db, &mockLLM{}, &mockSD{}, defaultConfig())
@@ -566,7 +566,7 @@ func TestGenerateSDPrompt_UsesMaxTokens(t *testing.T) {
 func TestGenerateImage_Valid(t *testing.T) {
 	t.Parallel()
 	db := openTestDB(t)
-	p := &preset.Preset{Name: "gen", Prompt: "base prompt", NegativePrompt: "bad", Sampler: "Euler a", Steps: 20, CfgScale: 7, Width: 512, Height: 512}
+	p := &preset.Preset{Name: "gen", Prompt: "base prompt", NegativePrompt: "bad", Sampler: "Euler a", Steps: 20, CfgScale: 7}
 	require.NoError(t, db.Create(p))
 
 	sdClient := &mockSD{
@@ -620,7 +620,7 @@ func TestGenerateImage_InvalidJSON(t *testing.T) {
 func TestGenerateImage_SDError(t *testing.T) {
 	t.Parallel()
 	db := openTestDB(t)
-	p := &preset.Preset{Name: "gen", Prompt: "p", Sampler: "Euler a", Steps: 20, CfgScale: 7, Width: 512, Height: 512}
+	p := &preset.Preset{Name: "gen", Prompt: "p", Sampler: "Euler a", Steps: 20, CfgScale: 7}
 	require.NoError(t, db.Create(p))
 
 	sdClient := &mockSD{err: fmt.Errorf("SD unavailable")}
@@ -636,7 +636,7 @@ func TestGenerateImage_SDError(t *testing.T) {
 func TestGenerateImage_NoImagesReturned(t *testing.T) {
 	t.Parallel()
 	db := openTestDB(t)
-	p := &preset.Preset{Name: "gen", Prompt: "p", Sampler: "Euler a", Steps: 20, CfgScale: 7, Width: 512, Height: 512}
+	p := &preset.Preset{Name: "gen", Prompt: "p", Sampler: "Euler a", Steps: 20, CfgScale: 7}
 	require.NoError(t, db.Create(p))
 
 	sdClient := &mockSD{result: &sd.Txt2ImgResponse{Images: []string{}}}
@@ -652,7 +652,7 @@ func TestGenerateImage_NoImagesReturned(t *testing.T) {
 func TestGenerateImage_WithModelName(t *testing.T) {
 	t.Parallel()
 	db := openTestDB(t)
-	p := &preset.Preset{Name: "gen", Prompt: "p", ModelName: "sdxl", Sampler: "Euler a", Steps: 20, CfgScale: 7, Width: 512, Height: 512}
+	p := &preset.Preset{Name: "gen", Prompt: "p", ModelName: "sdxl", Sampler: "Euler a", Steps: 20, CfgScale: 7}
 	require.NoError(t, db.Create(p))
 
 	sdClient := &mockSD{
@@ -670,7 +670,7 @@ func TestGenerateImage_WithModelName(t *testing.T) {
 func TestGenerateImage_WithScheduleType(t *testing.T) {
 	t.Parallel()
 	db := openTestDB(t)
-	p := &preset.Preset{Name: "gen", Prompt: "p", Sampler: "DPM++ 2M", ScheduleType: "karras", Steps: 20, CfgScale: 7, Width: 512, Height: 512}
+	p := &preset.Preset{Name: "gen", Prompt: "p", Sampler: "DPM++ 2M", ScheduleType: "karras", Steps: 20, CfgScale: 7}
 	require.NoError(t, db.Create(p))
 
 	sdClient := &mockSD{
@@ -688,7 +688,7 @@ func TestGenerateImage_HiresFixDefaults(t *testing.T) {
 	t.Parallel()
 	db := openTestDB(t)
 	hf := true
-	p := &preset.Preset{Name: "gen", Prompt: "p", Sampler: "Euler a", Steps: 20, CfgScale: 7, Width: 512, Height: 512, HiresFix: &hf}
+	p := &preset.Preset{Name: "gen", Prompt: "p", Sampler: "Euler a", Steps: 20, CfgScale: 7, HiresFix: &hf}
 	require.NoError(t, db.Create(p))
 
 	sdClient := &mockSD{

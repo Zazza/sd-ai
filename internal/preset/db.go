@@ -86,6 +86,10 @@ func Open(dbPath string) (*DB, error) {
 		return nil, fmt.Errorf("migrate v15: %w", err)
 	}
 
+	if err := migrateV16(db); err != nil {
+		return nil, fmt.Errorf("migrate v16: %w", err)
+	}
+
 	return &DB{db: db}, nil
 }
 
@@ -190,7 +194,7 @@ func (d *DB) DB() *sql.DB {
 	return d.db
 }
 
-const presetColumns = `id, name, preset_type, prompt, negative_prompt, sampler, schedule_type, steps, cfg_scale, width, height, model_name, seed, denoising_strength, clip_skip, batch_size, batch_count, hires_fix, hires_upscale, hires_denoising_strength, hires_upscaler, vae, type_id, tags, loras, created_at, updated_at`
+const presetColumns = `id, name, preset_type, prompt, negative_prompt, sampler, schedule_type, steps, cfg_scale, model_name, seed, denoising_strength, clip_skip, batch_size, batch_count, hires_fix, hires_upscale, hires_denoising_strength, hires_upscaler, vae, type_id, tags, loras, created_at, updated_at`
 
 func scanPreset(scanner interface{ Scan(...any) error }, p *Preset) error {
 	var seed sql.NullInt64
@@ -205,7 +209,7 @@ func scanPreset(scanner interface{ Scan(...any) error }, p *Preset) error {
 
 	err := scanner.Scan(
 		&p.ID, &p.Name, &p.PresetType, &p.Prompt, &p.NegativePrompt,
-		&p.Sampler, &p.ScheduleType, &p.Steps, &p.CfgScale, &p.Width, &p.Height,
+		&p.Sampler, &p.ScheduleType, &p.Steps, &p.CfgScale,
 		&p.ModelName, &seed,
 		&denoisingStrength, &clipSkip, &batchSize, &batchCount,
 		&hiresFix, &hiresUpscale, &hiresDenoisingStrength,
@@ -297,8 +301,8 @@ func (d *DB) Get(id int64) (*Preset, error) {
 }
 
 func (d *DB) Create(p *Preset) error {
-	result, err := d.db.Exec(`INSERT INTO presets (name, preset_type, prompt, negative_prompt, sampler, schedule_type, steps, cfg_scale, width, height, model_name, seed, denoising_strength, clip_skip, batch_size, batch_count, hires_fix, hires_upscale, hires_denoising_strength, hires_upscaler, vae, type_id, tags, loras) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		p.Name, p.PresetType, p.Prompt, p.NegativePrompt, p.Sampler, p.ScheduleType, p.Steps, p.CfgScale, p.Width, p.Height, p.ModelName, p.Seed,
+	result, err := d.db.Exec(`INSERT INTO presets (name, preset_type, prompt, negative_prompt, sampler, schedule_type, steps, cfg_scale, model_name, seed, denoising_strength, clip_skip, batch_size, batch_count, hires_fix, hires_upscale, hires_denoising_strength, hires_upscaler, vae, type_id, tags, loras) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		p.Name, p.PresetType, p.Prompt, p.NegativePrompt, p.Sampler, p.ScheduleType, p.Steps, p.CfgScale, p.ModelName, p.Seed,
 		p.DenoisingStrength, p.ClipSkip, p.BatchSize, p.BatchCount, p.HiresFix, p.HiresUpscale, p.HiresDenoisingStrength, p.HiresUpscaler, p.VAE,
 		p.TypeID, p.Tags, p.Loras)
 	if err != nil {
@@ -309,8 +313,8 @@ func (d *DB) Create(p *Preset) error {
 }
 
 func (d *DB) Update(p *Preset) error {
-	_, err := d.db.Exec(`UPDATE presets SET name=?, preset_type=?, prompt=?, negative_prompt=?, sampler=?, schedule_type=?, steps=?, cfg_scale=?, width=?, height=?, model_name=?, seed=?, denoising_strength=?, clip_skip=?, batch_size=?, batch_count=?, hires_fix=?, hires_upscale=?, hires_denoising_strength=?, hires_upscaler=?, vae=?, type_id=?, tags=?, loras=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`,
-		p.Name, p.PresetType, p.Prompt, p.NegativePrompt, p.Sampler, p.ScheduleType, p.Steps, p.CfgScale, p.Width, p.Height, p.ModelName, p.Seed,
+	_, err := d.db.Exec(`UPDATE presets SET name=?, preset_type=?, prompt=?, negative_prompt=?, sampler=?, schedule_type=?, steps=?, cfg_scale=?, model_name=?, seed=?, denoising_strength=?, clip_skip=?, batch_size=?, batch_count=?, hires_fix=?, hires_upscale=?, hires_denoising_strength=?, hires_upscaler=?, vae=?, type_id=?, tags=?, loras=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`,
+		p.Name, p.PresetType, p.Prompt, p.NegativePrompt, p.Sampler, p.ScheduleType, p.Steps, p.CfgScale, p.ModelName, p.Seed,
 		p.DenoisingStrength, p.ClipSkip, p.BatchSize, p.BatchCount, p.HiresFix, p.HiresUpscale, p.HiresDenoisingStrength, p.HiresUpscaler, p.VAE,
 		p.TypeID, p.Tags, p.Loras, p.ID)
 	return err
@@ -359,8 +363,8 @@ func (d *DB) CreateBatch(items []Preset) ([]Preset, error) {
 
 	var created []Preset
 	for _, item := range items {
-		result, err := tx.Exec(`INSERT INTO presets (name, preset_type, prompt, negative_prompt, sampler, schedule_type, steps, cfg_scale, width, height, model_name, seed, denoising_strength, clip_skip, batch_size, batch_count, hires_fix, hires_upscale, hires_denoising_strength, hires_upscaler, vae, type_id, tags, loras) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			item.Name, item.PresetType, item.Prompt, item.NegativePrompt, item.Sampler, item.ScheduleType, item.Steps, item.CfgScale, item.Width, item.Height, item.ModelName, item.Seed,
+		result, err := tx.Exec(`INSERT INTO presets (name, preset_type, prompt, negative_prompt, sampler, schedule_type, steps, cfg_scale, model_name, seed, denoising_strength, clip_skip, batch_size, batch_count, hires_fix, hires_upscale, hires_denoising_strength, hires_upscaler, vae, type_id, tags, loras) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			item.Name, item.PresetType, item.Prompt, item.NegativePrompt, item.Sampler, item.ScheduleType, item.Steps, item.CfgScale, item.ModelName, item.Seed,
 			item.DenoisingStrength, item.ClipSkip, item.BatchSize, item.BatchCount, item.HiresFix, item.HiresUpscale, item.HiresDenoisingStrength, item.HiresUpscaler, item.VAE,
 			item.TypeID, item.Tags, item.Loras)
 		if err != nil {
@@ -1084,6 +1088,17 @@ func migrateV14(db *sql.DB) error {
 
 func migrateV15(db *sql.DB) error {
 	cols := []string{"default_resolution_id", "default_hires_profile_id"}
+	for _, col := range cols {
+		_, err := db.Exec("ALTER TABLE presets DROP COLUMN " + col)
+		if err != nil && !strings.Contains(err.Error(), "no such column") {
+			return err
+		}
+	}
+	return nil
+}
+
+func migrateV16(db *sql.DB) error {
+	cols := []string{"width", "height"}
 	for _, col := range cols {
 		_, err := db.Exec("ALTER TABLE presets DROP COLUMN " + col)
 		if err != nil && !strings.Contains(err.Error(), "no such column") {

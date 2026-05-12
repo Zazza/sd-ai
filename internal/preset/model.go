@@ -10,8 +10,6 @@ type Preset struct {
 	ScheduleType   string  `json:"schedule_type"`
 	Steps          int     `json:"steps"`
 	CfgScale       float64 `json:"cfg_scale"`
-	Width          int     `json:"width"`
-	Height         int     `json:"height"`
 	ModelName              string   `json:"model_name"`
 	Seed                   *int64   `json:"seed"`
 	DenoisingStrength      *float64 `json:"denoising_strength"`

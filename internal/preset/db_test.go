@@ -50,8 +50,6 @@ func TestPreset_CreateAndGet(t *testing.T) {
 		ScheduleType:           "Karras",
 		Steps:                  30,
 		CfgScale:               7.5,
-		Width:                  768,
-		Height:                 1024,
 		ModelName:              "model_v1",
 		Seed:                   &seed,
 		DenoisingStrength:      &ds,
@@ -84,8 +82,6 @@ func TestPreset_CreateAndGet(t *testing.T) {
 	assert.Equal(t, "Karras", got.ScheduleType)
 	assert.Equal(t, 30, got.Steps)
 	assert.Equal(t, 7.5, got.CfgScale)
-	assert.Equal(t, 768, got.Width)
-	assert.Equal(t, 1024, got.Height)
 	assert.Equal(t, "model_v1", got.ModelName)
 	require.NotNil(t, got.Seed)
 	assert.Equal(t, int64(42), *got.Seed)
@@ -1112,4 +1108,220 @@ func TestGetAllTags(t *testing.T) {
 	assert.True(t, tagSet["nature"])
 	assert.True(t, tagSet["portrait"])
 	assert.Len(t, tags, 3)
+}
+
+func TestResolution_BuiltinDefaults(t *testing.T) {
+	t.Parallel()
+	db := testDB(t)
+
+	items, err := db.ListResolutions()
+	require.NoError(t, err)
+	assert.Len(t, items, 14)
+	assert.Equal(t, "Square 512x512", items[0].Name)
+	assert.Equal(t, 512, items[0].Width)
+	assert.Equal(t, 512, items[0].Height)
+	assert.True(t, items[0].IsBuiltin)
+	for _, r := range items {
+		assert.True(t, r.IsBuiltin)
+		assert.NotEmpty(t, r.CreatedAt)
+	}
+}
+
+func TestResolution_CRUD(t *testing.T) {
+	t.Parallel()
+	db := testDB(t)
+
+	r := &Resolution{Name: "Custom Res", Width: 640, Height: 480}
+	err := db.CreateResolution(r)
+	require.NoError(t, err)
+	assert.Greater(t, r.ID, int64(0))
+	assert.False(t, r.IsBuiltin)
+
+	got, err := db.GetResolution(r.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "Custom Res", got.Name)
+	assert.Equal(t, 640, got.Width)
+	assert.Equal(t, 480, got.Height)
+	assert.False(t, got.IsBuiltin)
+
+	got.Name = "Updated Res"
+	got.Width = 800
+	got.Height = 600
+	err = db.UpdateResolution(got)
+	require.NoError(t, err)
+
+	updated, err := db.GetResolution(r.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "Updated Res", updated.Name)
+	assert.Equal(t, 800, updated.Width)
+	assert.Equal(t, 600, updated.Height)
+
+	err = db.DeleteResolution(r.ID)
+	require.NoError(t, err)
+
+	_, err = db.GetResolution(r.ID)
+	assert.Error(t, err)
+}
+
+func TestResolution_List(t *testing.T) {
+	t.Parallel()
+	db := testDB(t)
+
+	require.NoError(t, db.CreateResolution(&Resolution{Name: "Custom A", Width: 100, Height: 100}))
+	require.NoError(t, db.CreateResolution(&Resolution{Name: "Custom B", Width: 200, Height: 200}))
+
+	items, err := db.ListResolutions()
+	require.NoError(t, err)
+	assert.Len(t, items, 16)
+
+	customCount := 0
+	for _, r := range items {
+		if !r.IsBuiltin {
+			customCount++
+		}
+	}
+	assert.Equal(t, 2, customCount)
+}
+
+func TestResolution_GetNonexistent(t *testing.T) {
+	t.Parallel()
+	db := testDB(t)
+
+	_, err := db.GetResolution(99999)
+	assert.Error(t, err)
+}
+
+func TestResolution_DeleteBuiltin(t *testing.T) {
+	t.Parallel()
+	db := testDB(t)
+
+	items, err := db.ListResolutions()
+	require.NoError(t, err)
+	require.NotEmpty(t, items)
+
+	err = db.DeleteResolution(items[0].ID)
+	assert.Error(t, err)
+	assert.Equal(t, "cannot delete builtin resolution", err.Error())
+}
+
+func TestResolution_DeleteNotFound(t *testing.T) {
+	t.Parallel()
+	db := testDB(t)
+
+	err := db.DeleteResolution(99999)
+	assert.Error(t, err)
+	assert.Equal(t, "resolution not found", err.Error())
+}
+
+func TestHiresProfile_BuiltinDefaults(t *testing.T) {
+	t.Parallel()
+	db := testDB(t)
+
+	items, err := db.ListHiresProfiles()
+	require.NoError(t, err)
+	assert.Len(t, items, 4)
+
+	names := []string{"Light", "Standard", "Heavy", "Max"}
+	for i, name := range names {
+		assert.Equal(t, name, items[i].Name)
+		assert.True(t, items[i].IsBuiltin)
+		assert.NotEmpty(t, items[i].CreatedAt)
+	}
+
+	assert.Equal(t, 1.5, items[0].Upscale)
+	assert.Equal(t, 0.3, items[0].DenoisingStrength)
+	assert.Equal(t, 2.0, items[1].Upscale)
+	assert.Equal(t, 0.45, items[1].DenoisingStrength)
+	assert.Equal(t, 2.5, items[2].Upscale)
+	assert.Equal(t, 0.55, items[2].DenoisingStrength)
+	assert.Equal(t, 4.0, items[3].Upscale)
+	assert.Equal(t, 0.4, items[3].DenoisingStrength)
+}
+
+func TestHiresProfile_CRUD(t *testing.T) {
+	t.Parallel()
+	db := testDB(t)
+
+	h := &HiresProfile{Name: "Custom Profile", Upscale: 1.5, DenoisingStrength: 0.5, Upscaler: "R-ESRGAN 4x+"}
+	err := db.CreateHiresProfile(h)
+	require.NoError(t, err)
+	assert.Greater(t, h.ID, int64(0))
+	assert.False(t, h.IsBuiltin)
+
+	got, err := db.GetHiresProfile(h.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "Custom Profile", got.Name)
+	assert.Equal(t, 1.5, got.Upscale)
+	assert.Equal(t, 0.5, got.DenoisingStrength)
+	assert.Equal(t, "R-ESRGAN 4x+", got.Upscaler)
+	assert.False(t, got.IsBuiltin)
+
+	got.Name = "Updated Profile"
+	got.Upscale = 2.0
+	got.DenoisingStrength = 0.6
+	got.Upscaler = "SwinIR_4x"
+	err = db.UpdateHiresProfile(got)
+	require.NoError(t, err)
+
+	updated, err := db.GetHiresProfile(h.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "Updated Profile", updated.Name)
+	assert.Equal(t, 2.0, updated.Upscale)
+	assert.Equal(t, 0.6, updated.DenoisingStrength)
+	assert.Equal(t, "SwinIR_4x", updated.Upscaler)
+
+	err = db.DeleteHiresProfile(h.ID)
+	require.NoError(t, err)
+
+	_, err = db.GetHiresProfile(h.ID)
+	assert.Error(t, err)
+}
+
+func TestHiresProfile_List(t *testing.T) {
+	t.Parallel()
+	db := testDB(t)
+
+	require.NoError(t, db.CreateHiresProfile(&HiresProfile{Name: "Custom X", Upscale: 2.0, DenoisingStrength: 0.4, Upscaler: ""}))
+
+	items, err := db.ListHiresProfiles()
+	require.NoError(t, err)
+	assert.Len(t, items, 5)
+
+	customCount := 0
+	for _, h := range items {
+		if !h.IsBuiltin {
+			customCount++
+		}
+	}
+	assert.Equal(t, 1, customCount)
+}
+
+func TestHiresProfile_GetNonexistent(t *testing.T) {
+	t.Parallel()
+	db := testDB(t)
+
+	_, err := db.GetHiresProfile(99999)
+	assert.Error(t, err)
+}
+
+func TestHiresProfile_DeleteBuiltin(t *testing.T) {
+	t.Parallel()
+	db := testDB(t)
+
+	items, err := db.ListHiresProfiles()
+	require.NoError(t, err)
+	require.NotEmpty(t, items)
+
+	err = db.DeleteHiresProfile(items[0].ID)
+	assert.Error(t, err)
+	assert.Equal(t, "cannot delete builtin hires profile", err.Error())
+}
+
+func TestHiresProfile_DeleteNotFound(t *testing.T) {
+	t.Parallel()
+	db := testDB(t)
+
+	err := db.DeleteHiresProfile(99999)
+	assert.Error(t, err)
+	assert.Equal(t, "hires profile not found", err.Error())
 }

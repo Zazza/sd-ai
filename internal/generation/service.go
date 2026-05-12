@@ -530,12 +530,12 @@ func (s *Service) getPreviewDimensions(presetW, presetH int) (int, int, bool) {
 
 func (s *Service) resolveResolution(p *preset.Preset, resolutionID *int64) (width int, height int) {
 	if resolutionID == nil || *resolutionID <= 0 {
-		return p.Width, p.Height
+		return 512, 512
 	}
 	r, err := s.db.GetResolution(*resolutionID)
 	if err != nil {
 		s.log.Warn("resolveResolution: failed to load resolution %d: %s", *resolutionID, err)
-		return p.Width, p.Height
+		return 512, 512
 	}
 	return r.Width, r.Height
 }
@@ -941,8 +941,6 @@ func (s *Service) BatchGenerate(params BatchGenerateParams) error {
 		Sampler:        "Euler a",
 		Steps:          20,
 		CfgScale:       7.0,
-		Width:          512,
-		Height:         512,
 	}
 	if params.PresetID > 0 {
 		var err error
@@ -1156,8 +1154,6 @@ func (s *Service) TestGenerate(params TestGenerateParams) ([]TestGenerateResultI
 		Sampler:  "Euler a",
 		Steps:    20,
 		CfgScale: 7.0,
-		Width:    512,
-		Height:   512,
 	}
 
 	results := make([]TestGenerateResultItem, 0, totalItems)
@@ -1205,12 +1201,6 @@ func (s *Service) TestGenerate(params TestGenerateParams) ([]TestGenerateResultI
 		if p.CfgScale == 0 {
 			p.CfgScale = defaultPreset.CfgScale
 		}
-		if p.Width == 0 {
-			p.Width = defaultPreset.Width
-		}
-		if p.Height == 0 {
-			p.Height = defaultPreset.Height
-		}
 
 		prompt := params.Prompt
 		prompt, filterErr := s.kids.FilterInput(prompt)
@@ -1235,8 +1225,8 @@ func (s *Service) TestGenerate(params TestGenerateParams) ([]TestGenerateResultI
 		scheduleType := p.ScheduleType
 		steps := p.Steps
 		cfgScale := p.CfgScale
-		width := p.Width
-		height := p.Height
+		width := 512
+		height := 512
 		seed := p.Seed
 
 		rw, rh := s.resolveResolution(p, params.ResolutionID)
@@ -1689,7 +1679,7 @@ func (s *Service) DecomposeScene(params DecomposeSceneParams) (*compositor.Scene
 	systemPrompt := config.DefaultSceneDecomposePrompt
 
 	userMessage := params.Description
-	userMessage += fmt.Sprintf("\n\nPreset dimensions: %dx%d", p.Width, p.Height)
+	userMessage += "\n\nPreset dimensions: 512x512"
 	if p.Prompt != "" {
 		userMessage += fmt.Sprintf("\nPreset positive prompt (STYLE — all character and background prompts MUST follow this style): %s", p.Prompt)
 	}
@@ -1722,10 +1712,10 @@ func (s *Service) DecomposeScene(params DecomposeSceneParams) (*compositor.Scene
 
 	scene.PresetID = params.PresetID
 	if scene.Width == 0 {
-		scene.Width = p.Width
+		scene.Width = 512
 	}
 	if scene.Height == 0 {
-		scene.Height = p.Height
+		scene.Height = 512
 	}
 
 	return scene, nil

@@ -61,7 +61,7 @@ func newTestService(t *testing.T, mockSD sd.Service) *Service {
 	return New(db, mockSD, log)
 }
 
-func makePreset(name, pType, model string, steps, w, h int) PresetData {
+func makePreset(name, pType, model string, steps int) PresetData {
 	return PresetData{
 		Name:       name,
 		PresetType: pType,
@@ -69,8 +69,6 @@ func makePreset(name, pType, model string, steps, w, h int) PresetData {
 		Sampler:    "Euler a",
 		Steps:      steps,
 		CfgScale:   7.0,
-		Width:      w,
-		Height:     h,
 		ModelName:  model,
 	}
 }
@@ -84,8 +82,6 @@ func createPresetInDB(t *testing.T, db *preset.DB, name string) int64 {
 		Sampler:    "Euler a",
 		Steps:      20,
 		CfgScale:   7.0,
-		Width:      512,
-		Height:     512,
 		ModelName:  "model.safetensors",
 	}
 	err := db.Create(p)
@@ -157,8 +153,6 @@ func TestPrepareExportData_WithPresetType(t *testing.T) {
 		Sampler:    "Euler a",
 		Steps:      20,
 		CfgScale:   7.0,
-		Width:      512,
-		Height:     512,
 	}
 	err = db.Create(p)
 	require.NoError(t, err)
@@ -172,7 +166,7 @@ func TestPrepareExportData_WithPresetType(t *testing.T) {
 func TestBuildExportFile_ValidPresets(t *testing.T) {
 	t.Parallel()
 	svc := newTestService(t, &mockSDService{})
-	presets := []PresetData{makePreset("p1", "type1", "model1", 20, 512, 512)}
+	presets := []PresetData{makePreset("p1", "type1", "model1", 20)}
 	data, err := svc.BuildExportFile(presets)
 	require.NoError(t, err)
 
@@ -199,8 +193,8 @@ func TestBuildExportFile_MultiplePresets(t *testing.T) {
 	t.Parallel()
 	svc := newTestService(t, &mockSDService{})
 	presets := []PresetData{
-		makePreset("a", "t1", "m1", 20, 512, 512),
-		makePreset("b", "t2", "m2", 30, 768, 768),
+		makePreset("a", "t1", "m1", 20),
+		makePreset("b", "t2", "m2", 30),
 	}
 	data, err := svc.BuildExportFile(presets)
 	require.NoError(t, err)
@@ -216,7 +210,7 @@ func TestParseImportFile_ValidV2(t *testing.T) {
 
 	ef := ExportFile{
 		Version: 2,
-		Presets: []PresetData{makePreset("imported", "test", "model", 20, 512, 512)},
+		Presets: []PresetData{makePreset("imported", "test", "model", 20)},
 	}
 	raw, err := json.Marshal(ef)
 	require.NoError(t, err)
@@ -237,7 +231,7 @@ func TestParseImportFile_ValidV1(t *testing.T) {
 
 	ef := ExportFile{
 		Version: 1,
-		Presets: []PresetData{makePreset("v1preset", "test", "m", 20, 512, 512)},
+		Presets: []PresetData{makePreset("v1preset", "test", "m", 20)},
 	}
 	raw, err := json.Marshal(ef)
 	require.NoError(t, err)
@@ -380,7 +374,7 @@ func TestImportItems_TooManyItems(t *testing.T) {
 	svc := newTestService(t, &mockSDService{})
 	items := make([]PresetData, 501)
 	for i := range items {
-		items[i] = makePreset("p", "t", "m", 20, 512, 512)
+		items[i] = makePreset("p", "t", "m", 20)
 	}
 	_, err := svc.ImportItems(items)
 	assert.Error(t, err)
@@ -390,7 +384,7 @@ func TestImportItems_TooManyItems(t *testing.T) {
 func TestImportItems_EmptyName(t *testing.T) {
 	t.Parallel()
 	svc := newTestService(t, &mockSDService{})
-	items := []PresetData{{Name: "   ", Steps: 20, Width: 512, Height: 512, CfgScale: 7.0}}
+	items := []PresetData{{Name: "   ", Steps: 20, CfgScale: 7.0}}
 	_, err := svc.ImportItems(items)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "preset name is required")
@@ -400,8 +394,8 @@ func TestImportItems_ValidBatch(t *testing.T) {
 	t.Parallel()
 	svc := newTestService(t, &mockSDService{})
 	items := []PresetData{
-		makePreset("import-a", "type1", "model1", 20, 512, 512),
-		makePreset("import-b", "type2", "model2", 30, 768, 768),
+		makePreset("import-a", "type1", "model1", 20),
+		makePreset("import-b", "type2", "model2", 30),
 	}
 	result, err := svc.ImportItems(items)
 	require.NoError(t, err)
@@ -424,8 +418,6 @@ func TestImportItems_WithTypeName(t *testing.T) {
 			Sampler:    "Euler a",
 			Steps:      20,
 			CfgScale:   7.0,
-			Width:      512,
-			Height:     512,
 		},
 	}
 	result, err := svc.ImportItems(items)
@@ -443,32 +435,22 @@ func TestImportItems_InvalidSteps_Table(t *testing.T) {
 	}{
 		{
 			"steps_zero",
-			PresetData{Name: "p", Steps: 0, Width: 512, Height: 512, CfgScale: 7.0},
+			PresetData{Name: "p", Steps: 0, CfgScale: 7.0},
 			"invalid steps",
 		},
 		{
 			"steps_too_high",
-			PresetData{Name: "p", Steps: 200, Width: 512, Height: 512, CfgScale: 7.0},
+			PresetData{Name: "p", Steps: 200, CfgScale: 7.0},
 			"invalid steps",
 		},
 		{
-			"width_too_small",
-			PresetData{Name: "p", Steps: 20, Width: 32, Height: 512, CfgScale: 7.0},
-			"invalid dimensions",
-		},
-		{
-			"width_too_large",
-			PresetData{Name: "p", Steps: 20, Width: 4096, Height: 512, CfgScale: 7.0},
-			"invalid dimensions",
-		},
-		{
 			"cfg_negative",
-			PresetData{Name: "p", Steps: 20, Width: 512, Height: 512, CfgScale: -1.0},
+			PresetData{Name: "p", Steps: 20, CfgScale: -1.0},
 			"invalid cfg_scale",
 		},
 		{
 			"cfg_too_high",
-			PresetData{Name: "p", Steps: 20, Width: 512, Height: 512, CfgScale: 50.0},
+			PresetData{Name: "p", Steps: 20, CfgScale: 50.0},
 			"invalid cfg_scale",
 		},
 	}
@@ -487,7 +469,7 @@ func TestImportItems_InvalidSteps_Table(t *testing.T) {
 func TestImportItems_InvalidOptionalFields_Table(t *testing.T) {
 	t.Parallel()
 	base := func() PresetData {
-		return PresetData{Name: "p", Steps: 20, Width: 512, Height: 512, CfgScale: 7.0}
+		return PresetData{Name: "p", Steps: 20, CfgScale: 7.0}
 	}
 
 	tests := []struct {
@@ -583,8 +565,6 @@ func TestImportItems_ValidOptionalFields(t *testing.T) {
 	items := []PresetData{{
 		Name:                   "full-optional",
 		Steps:                  30,
-		Width:                  768,
-		Height:                 768,
 		CfgScale:               7.5,
 		DenoisingStrength:      &ds,
 		ClipSkip:               &cs,
@@ -950,8 +930,6 @@ func TestRoundTrip_ExportParseImport(t *testing.T) {
 		Sampler:    "Euler a",
 		Steps:      25,
 		CfgScale:   8.0,
-		Width:      640,
-		Height:     480,
 		ModelName:  "model.safetensors",
 	}
 	require.NoError(t, db.Create(p))
@@ -978,8 +956,6 @@ func TestRoundTrip_ExportParseImport(t *testing.T) {
 	assert.Equal(t, "roundtrip", imported[0].Name)
 	assert.Equal(t, 25, imported[0].Steps)
 	assert.Equal(t, 8.0, imported[0].CfgScale)
-	assert.Equal(t, 640, imported[0].Width)
-	assert.Equal(t, 480, imported[0].Height)
 	assert.True(t, imported[0].ID > 0)
 	assert.NotEqual(t, p.ID, imported[0].ID)
 }

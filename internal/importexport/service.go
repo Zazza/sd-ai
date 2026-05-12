@@ -38,8 +38,6 @@ type PresetData struct {
 	ScheduleType           string   `json:"schedule_type"`
 	Steps                  int      `json:"steps"`
 	CfgScale               float64  `json:"cfg_scale"`
-	Width                  int      `json:"width"`
-	Height                 int      `json:"height"`
 	ModelName              string   `json:"model_name"`
 	Seed                   *int64   `json:"seed"`
 	DenoisingStrength      *float64 `json:"denoising_strength"`
@@ -131,8 +129,6 @@ func (s *Service) PrepareExportData(ids []int64) ([]PresetData, error) {
 			ScheduleType:           p.ScheduleType,
 			Steps:                  p.Steps,
 			CfgScale:               p.CfgScale,
-			Width:                  p.Width,
-			Height:                 p.Height,
 			ModelName:              p.ModelName,
 			Seed:                   p.Seed,
 			DenoisingStrength:      p.DenoisingStrength,
@@ -251,9 +247,6 @@ func (s *Service) ImportItems(items []PresetData) ([]preset.Preset, error) {
 		if item.Steps < 1 || item.Steps > 150 {
 			return nil, fmt.Errorf("invalid steps for %q: must be 1-150", item.Name)
 		}
-		if item.Width < 64 || item.Width > 2048 || item.Height < 64 || item.Height > 2048 {
-			return nil, fmt.Errorf("invalid dimensions for %q: must be 64-2048", item.Name)
-		}
 		if item.CfgScale < 0 || item.CfgScale > 30 {
 			return nil, fmt.Errorf("invalid cfg_scale for %q: must be 0-30", item.Name)
 		}
@@ -318,8 +311,6 @@ func (s *Service) ImportItems(items []PresetData) ([]preset.Preset, error) {
 			ScheduleType:           scheduleType,
 			Steps:                  item.Steps,
 			CfgScale:               item.CfgScale,
-			Width:                  item.Width,
-			Height:                 item.Height,
 			ModelName:              item.ModelName,
 			Seed:                   item.Seed,
 			DenoisingStrength:      item.DenoisingStrength,

@@ -541,8 +541,8 @@ func (s *Service) GenerateFromImage(params GenerateFromImageParams) (*GenerateIm
 			imgW = imgW / 8 * 8
 			imgH = imgH / 8 * 8
 		} else {
-			imgW = p.Width
-			imgH = p.Height
+			imgW = 512
+			imgH = 512
 		}
 		denoising := params.DenoisingStrength
 		if denoising <= 0 {
@@ -594,12 +594,11 @@ func (s *Service) GenerateFromImage(params GenerateFromImageParams) (*GenerateIm
 		return img, nil
 	}
 
-	width := p.Width
-	height := p.Height
+	width, height := s.resolveResolution(p, params.ResolutionID)
 	hiresFix := p.HiresFix
 
 	isPreview := false
-	if pw, ph, preview := s.getPreviewDimensions(p.Width, p.Height); preview {
+	if pw, ph, preview := s.getPreviewDimensions(width, height); preview {
 		isPreview = true
 		width = pw
 		height = ph
@@ -723,11 +722,11 @@ func (s *Service) generateFromImageCompound(params GenerateFromImageParams, tags
 
 		width := step.Width
 		if width == 0 {
-			width = p.Width
+			width = 512
 		}
 		height := step.Height
 		if height == 0 {
-			height = p.Height
+			height = 512
 		}
 
 		clipSkip := 1

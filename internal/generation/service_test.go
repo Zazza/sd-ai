@@ -239,8 +239,6 @@ func makeTestPreset(t *testing.T, db *preset.DB, p *preset.Preset) *preset.Prese
 			Sampler:        "Euler a",
 			Steps:          20,
 			CfgScale:       7.0,
-			Width:          512,
-			Height:         512,
 		}
 	}
 	err := db.Create(p)
@@ -469,8 +467,6 @@ func TestRecommendPreset_Success(t *testing.T) {
 		Sampler:        "Euler a",
 		Steps:          20,
 		CfgScale:       7.0,
-		Width:          512,
-		Height:         512,
 	})
 
 	llmSvc := &mockLLM{
@@ -630,8 +626,6 @@ func TestGenerateImage_WithLoRAs(t *testing.T) {
 		Sampler:        "Euler a",
 		Steps:          20,
 		CfgScale:       7.0,
-		Width:          512,
-		Height:         512,
 		Loras:          `[{"name":"test-lora","weight":0.8}]`,
 	})
 
@@ -660,8 +654,6 @@ func TestGenerateImage_SetsModelAndVAE(t *testing.T) {
 		Sampler:        "Euler a",
 		Steps:          20,
 		CfgScale:       7.0,
-		Width:          512,
-		Height:         512,
 		ModelName:      "sd-xl",
 		VAE:            "vae-ft-mse",
 	})
@@ -899,8 +891,6 @@ func TestDecomposeScene_Success(t *testing.T) {
 		Sampler:        "Euler a",
 		Steps:          20,
 		CfgScale:       7.0,
-		Width:          768,
-		Height:         512,
 	})
 
 	llmSvc := &mockLLM{
@@ -2003,8 +1993,6 @@ func TestGenerateImage_ForgeHiresFallback(t *testing.T) {
 		Sampler:                 "Euler a",
 		Steps:                   20,
 		CfgScale:                7.0,
-		Width:                   512,
-		Height:                  512,
 		HiresFix:               &hf,
 		HiresUpscale:           floatPtr(2.0),
 		HiresDenoisingStrength: floatPtr(0.5),
@@ -2066,8 +2054,6 @@ func TestGenerateImage_ForgeHiresManualUpscale(t *testing.T) {
 		Sampler:                 "Euler a",
 		Steps:                   20,
 		CfgScale:                7.0,
-		Width:                   512,
-		Height:                  512,
 		HiresFix:               &hf,
 		HiresUpscale:           floatPtr(2.0),
 		HiresDenoisingStrength: floatPtr(0.5),
@@ -2123,8 +2109,6 @@ func TestGenerateImage_ForgeErrorNoHiresFix(t *testing.T) {
 		Sampler:        "Euler a",
 		Steps:          20,
 		CfgScale:       7.0,
-		Width:          512,
-		Height:         512,
 	})
 
 	callCount := 0
@@ -2156,8 +2140,6 @@ func TestGenerateImage_HiresFallbackStillFails(t *testing.T) {
 		Sampler:        "Euler a",
 		Steps:          20,
 		CfgScale:       7.0,
-		Width:          512,
-		Height:         512,
 		HiresFix:      &hf,
 	})
 

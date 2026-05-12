@@ -104,8 +104,6 @@ func makeTestPreset() *preset.Preset {
 		ScheduleType:   "",
 		Steps:          steps,
 		CfgScale:       7.0,
-		Width:          512,
-		Height:         512,
 		ModelName:      "test-model",
 		VAE:            "test-vae",
 	}

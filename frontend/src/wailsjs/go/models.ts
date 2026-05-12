@@ -564,8 +564,6 @@ export namespace importexport {
 	    schedule_type: string;
 	    steps: number;
 	    cfg_scale: number;
-	    width: number;
-	    height: number;
 	    model_name: string;
 	    seed?: number;
 	    denoising_strength?: number;
@@ -596,8 +594,6 @@ export namespace importexport {
 	        this.schedule_type = source["schedule_type"];
 	        this.steps = source["steps"];
 	        this.cfg_scale = source["cfg_scale"];
-	        this.width = source["width"];
-	        this.height = source["height"];
 	        this.model_name = source["model_name"];
 	        this.seed = source["seed"];
 	        this.denoising_strength = source["denoising_strength"];
@@ -718,8 +714,6 @@ export namespace preset {
 	    schedule_type: string;
 	    steps: number;
 	    cfg_scale: number;
-	    width: number;
-	    height: number;
 	    model_name: string;
 	    seed?: number;
 	    denoising_strength?: number;
@@ -734,8 +728,6 @@ export namespace preset {
 	    type_id?: number;
 	    tags: string;
 	    loras: string;
-	    default_resolution_id?: number;
-	    default_hires_profile_id?: number;
 	    created_at: string;
 	    updated_at: string;
 	
@@ -754,8 +746,6 @@ export namespace preset {
 	        this.schedule_type = source["schedule_type"];
 	        this.steps = source["steps"];
 	        this.cfg_scale = source["cfg_scale"];
-	        this.width = source["width"];
-	        this.height = source["height"];
 	        this.model_name = source["model_name"];
 	        this.seed = source["seed"];
 	        this.denoising_strength = source["denoising_strength"];
@@ -770,8 +760,6 @@ export namespace preset {
 	        this.type_id = source["type_id"];
 	        this.tags = source["tags"];
 	        this.loras = source["loras"];
-	        this.default_resolution_id = source["default_resolution_id"];
-	        this.default_hires_profile_id = source["default_hires_profile_id"];
 	        this.created_at = source["created_at"];
 	        this.updated_at = source["updated_at"];
 	    }

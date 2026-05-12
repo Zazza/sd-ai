@@ -240,7 +240,6 @@ onMounted(load)
         <div class="preset-meta">
           <span>{{ p.sampler }}</span>
           <span>{{ p.steps }} steps</span>
-          <span>{{ p.width }}x{{ p.height }}</span>
           <span>CFG {{ p.cfg_scale }}</span>
         </div>
         <div v-if="!selectMode" class="preset-actions">
