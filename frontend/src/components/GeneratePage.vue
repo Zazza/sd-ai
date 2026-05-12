@@ -6,6 +6,8 @@ import { t } from '../i18n/index.js'
 import { useGenerationProgress } from '../composables/useGenerationProgress.js'
 import SavedDescriptionsModal from './SavedDescriptionsModal.vue'
 import ImageViewer from './ImageViewer.vue'
+import ResolutionSelector from './ResolutionSelector.vue'
+import HiresProfileSelector from './HiresProfileSelector.vue'
 
 const presets = ref([])
 const presetTypes = ref([])
@@ -43,6 +45,9 @@ const error = ref('')
 let promptDirty = true
 
 const kidsModeActive = ref(false)
+
+const selectedResolutionId = ref(null)
+const selectedHiresProfileId = ref(null)
 
 const shared = inject('sharedGenState', null)
 
@@ -160,9 +165,11 @@ async function sendToSD() {
         compound_preset_id: selectedCompoundPresetId.value,
         extra_prompt: extraPrompt.value,
         extra_negative_prompt: extraNegativePrompt.value,
+        resolution_id: selectedResolutionId.value,
+        hires_profile_id: selectedHiresProfileId.value,
       })
     } else {
-      result = await api.generateImage(selectedPresetId.value, extraPrompt.value, extraNegativePrompt.value)
+      result = await api.generateImage(selectedPresetId.value, extraPrompt.value, extraNegativePrompt.value, selectedResolutionId.value, selectedHiresProfileId.value)
     }
     if (!result || !result.image) {
       error.value = t('generate.error_no_image')
@@ -248,9 +255,11 @@ async function generateImage() {
         compound_preset_id: selectedCompoundPresetId.value,
         extra_prompt: extraPrompt.value,
         extra_negative_prompt: extraNegativePrompt.value,
+        resolution_id: selectedResolutionId.value,
+        hires_profile_id: selectedHiresProfileId.value,
       })
     } else {
-      result = await api.generateImage(selectedPresetId.value, extraPrompt.value, extraNegativePrompt.value)
+      result = await api.generateImage(selectedPresetId.value, extraPrompt.value, extraNegativePrompt.value, selectedResolutionId.value, selectedHiresProfileId.value)
     }
     if (!result || !result.image) {
       error.value = t('generate.error_no_image')
@@ -590,6 +599,9 @@ function onKeydown(e) {
             <label class="form-label">{{ t('generate.label_negative') }}</label>
             <textarea class="form-textarea" v-model="negative" rows="2" :placeholder="t('generate.placeholder_negative')" :disabled="generatingImage"></textarea>
           </div>
+
+          <ResolutionSelector v-model="selectedResolutionId" />
+          <HiresProfileSelector v-model="selectedHiresProfileId" />
 
           <button class="btn btn-primary" :class="{ 'btn-generating': generatingImage }" style="width: 100%; justify-content: center; padding: 12px;" @click="generateImage" :disabled="generatingImage || (genMode === 'preset' ? !selectedPresetId : !selectedCompoundPresetId)">
             <span v-if="generatingImage" style="display: inline-flex; align-items: center; gap: 6px;">

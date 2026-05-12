@@ -233,18 +233,6 @@ onMounted(() => {
 
         <div class="form-row">
           <div class="form-group">
-            <label class="form-label">{{ t('preset.label_width') }}</label>
-            <input class="form-input" type="number" v-model.number="form.width" step="64" min="64" max="2048" />
-          </div>
-          <div class="form-group">
-            <label class="form-label">{{ t('preset.label_height') }}</label>
-            <input class="form-input" type="number" v-model.number="form.height" step="64" min="64" max="2048" />
-          </div>
-          <div></div>
-        </div>
-
-        <div class="form-row">
-          <div class="form-group">
             <label class="form-label">{{ t('preset.label_batch_size') }}</label>
             <input class="form-input" type="number" v-model.number="form.batch_size" min="1" max="8" />
           </div>
@@ -272,33 +260,6 @@ onMounted(() => {
           </div>
           <div></div>
         </div>
-
-        <div class="form-group">
-          <label class="form-label" style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-            <input type="checkbox" v-model="form.hires_fix" />
-            {{ t('preset.hires_fix') }}
-          </label>
-        </div>
-
-        <template v-if="form.hires_fix">
-          <div class="form-row">
-            <div class="form-group">
-              <label class="form-label">{{ t('preset.label_upscale_factor') }}</label>
-              <input class="form-input" type="number" v-model.number="form.hires_upscale" step="0.5" min="1" max="4" />
-            </div>
-            <div class="form-group">
-              <label class="form-label">{{ t('preset.label_hires_denoising') }}</label>
-              <input class="form-input" type="number" v-model.number="form.hires_denoising_strength" step="0.05" min="0" max="1" />
-            </div>
-            <div class="form-group">
-              <label class="form-label">{{ t('preset.label_hires_upscaler') }}</label>
-              <select class="form-select" v-model="form.hires_upscaler">
-                <option value="">{{ t('preset.default') }}</option>
-                <option v-for="u in upscalers" :key="u.name" :value="u.name">{{ u.name }}</option>
-              </select>
-            </div>
-          </div>
-        </template>
 
         <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
           <button type="button" class="btn btn-secondary" @click="$emit('close')">{{ t('preset.btn_cancel') }}</button>

@@ -84,6 +84,8 @@ type GenerateImageParams struct {
 	PresetID            int64  `json:"preset_id"`
 	ExtraPrompt         string `json:"extra_prompt"`
 	ExtraNegativePrompt string `json:"extra_negative_prompt"`
+	ResolutionID        *int64 `json:"resolution_id,omitempty"`
+	HiresProfileID      *int64 `json:"hires_profile_id,omitempty"`
 }
 
 type GenerateImageResult struct {
@@ -104,11 +106,13 @@ type UpscaleImageParams struct {
 }
 
 type BatchGenerateParams struct {
-	PresetID       int64  `json:"preset_id"`
-	Prompt         string `json:"prompt"`
-	NegativePrompt string `json:"negative_prompt"`
-	Count          int    `json:"count"`
-	OutputFolder   string `json:"output_folder"`
+	PresetID        int64  `json:"preset_id"`
+	Prompt          string `json:"prompt"`
+	NegativePrompt  string `json:"negative_prompt"`
+	Count           int    `json:"count"`
+	OutputFolder    string `json:"output_folder"`
+	ResolutionID    *int64 `json:"resolution_id,omitempty"`
+	HiresProfileID  *int64 `json:"hires_profile_id,omitempty"`
 }
 
 type BatchProgress struct {
@@ -131,6 +135,8 @@ type TestGenerateParams struct {
 	Width          int      `json:"width"`
 	Height         int      `json:"height"`
 	Seed           *int64   `json:"seed"`
+	ResolutionID   *int64   `json:"resolution_id,omitempty"`
+	HiresProfileID *int64   `json:"hires_profile_id,omitempty"`
 }
 
 type TestGenerateResultItem struct {
@@ -149,12 +155,16 @@ type UpscalePreviewParams struct {
 	PresetID           int64    `json:"preset_id"`
 	Seed               int64    `json:"seed"`
 	DenoisingStrength  *float64 `json:"denoising_strength,omitempty"`
+	ResolutionID       *int64   `json:"resolution_id,omitempty"`
+	HiresProfileID     *int64   `json:"hires_profile_id,omitempty"`
 }
 
 type GenerateCompoundImageParams struct {
 	CompoundPresetID    int64  `json:"compound_preset_id"`
 	ExtraPrompt         string `json:"extra_prompt"`
 	ExtraNegativePrompt string `json:"extra_negative_prompt"`
+	ResolutionID        *int64 `json:"resolution_id,omitempty"`
+	HiresProfileID      *int64 `json:"hires_profile_id,omitempty"`
 }
 
 type GenerateFromImageParams struct {
@@ -171,6 +181,8 @@ type GenerateFromImageParams struct {
 	InpaintFill         int     `json:"inpaint_fill"`
 	InpaintFullRes      bool    `json:"inpaint_full_res"`
 	RemoveObject        bool    `json:"remove_object"`
+	ResolutionID        *int64  `json:"resolution_id,omitempty"`
+	HiresProfileID      *int64  `json:"hires_profile_id,omitempty"`
 }
 
 type BatchCompoundGenerateParams struct {
@@ -179,12 +191,16 @@ type BatchCompoundGenerateParams struct {
 	ExtraNegativePrompt string `json:"extra_negative_prompt"`
 	Count               int    `json:"count"`
 	OutputFolder        string `json:"output_folder"`
+	ResolutionID        *int64 `json:"resolution_id,omitempty"`
+	HiresProfileID      *int64 `json:"hires_profile_id,omitempty"`
 }
 
 type TestCompoundGenerateParams struct {
 	SelectedIDs    []int64 `json:"selected_ids"`
 	Prompt         string  `json:"prompt"`
 	NegativePrompt string  `json:"negative_prompt"`
+	ResolutionID   *int64  `json:"resolution_id,omitempty"`
+	HiresProfileID *int64  `json:"hires_profile_id,omitempty"`
 }
 
 type DecomposeSceneParams struct {
@@ -510,6 +526,40 @@ func (s *Service) getPreviewDimensions(presetW, presetH int) (int, int, bool) {
 	return w, h, true
 }
 
+// --- Resolution / Hires resolve ---
+
+func (s *Service) resolveResolution(p *preset.Preset, resolutionID *int64) (width int, height int) {
+	if resolutionID == nil || *resolutionID <= 0 {
+		return p.Width, p.Height
+	}
+	r, err := s.db.GetResolution(*resolutionID)
+	if err != nil {
+		s.log.Warn("resolveResolution: failed to load resolution %d: %s", *resolutionID, err)
+		return p.Width, p.Height
+	}
+	return r.Width, r.Height
+}
+
+func (s *Service) resolveHires(p *preset.Preset, hiresProfileID *int64) (enabled bool, upscale *float64, denoising *float64, upscaler string) {
+	if hiresProfileID == nil || *hiresProfileID <= 0 {
+		hf := false
+		if p.HiresFix != nil {
+			hf = *p.HiresFix
+		}
+		return hf, p.HiresUpscale, p.HiresDenoisingStrength, p.HiresUpscaler
+	}
+	h, err := s.db.GetHiresProfile(*hiresProfileID)
+	if err != nil {
+		s.log.Warn("resolveHires: failed to load hires profile %d: %s", *hiresProfileID, err)
+		hf := false
+		if p.HiresFix != nil {
+			hf = *p.HiresFix
+		}
+		return hf, p.HiresUpscale, p.HiresDenoisingStrength, p.HiresUpscaler
+	}
+	return true, &h.Upscale, &h.DenoisingStrength, h.Upscaler
+}
+
 // --- GenerateSDPrompt ---
 
 func (s *Service) GenerateSDPrompt(params GenerateSDPromptParams) (*GenerateSDPromptResult, error) {
@@ -728,22 +778,23 @@ func (s *Service) GenerateImage(params GenerateImageParams) (*GenerateImageResul
 	}
 
 	denoisingStrength := p.DenoisingStrength
-	if denoisingStrength == nil && p.HiresFix != nil && *p.HiresFix {
+	hiresEnabled, hiresUpscale, hiresDenoising, hiresUpscaler := s.resolveHires(p, params.HiresProfileID)
+	var hiresFix *bool
+	if hiresEnabled {
+		hiresFix = &hiresEnabled
+	}
+	if denoisingStrength == nil && hiresEnabled {
 		ds := 0.5
-		if p.HiresDenoisingStrength != nil {
-			ds = *p.HiresDenoisingStrength
+		if hiresDenoising != nil {
+			ds = *hiresDenoising
 		}
 		denoisingStrength = &ds
 	}
 
-	width, height := p.Width, p.Height
-	var hiresFix *bool
-	if p.HiresFix != nil {
-		hiresFix = p.HiresFix
-	}
+	width, height := s.resolveResolution(p, params.ResolutionID)
 
 	isPreview := false
-	if pw, ph, preview := s.getPreviewDimensions(p.Width, p.Height); preview {
+	if pw, ph, preview := s.getPreviewDimensions(width, height); preview {
 		isPreview = true
 		width = pw
 		height = ph
@@ -765,9 +816,9 @@ func (s *Service) GenerateImage(params GenerateImageParams) (*GenerateImageResul
 		BatchSize:              &batchSize,
 		BatchCount:             &batchCount,
 		HiresFix:               hiresFix,
-		HiresUpscale:           p.HiresUpscale,
-		HiresDenoisingStrength: p.HiresDenoisingStrength,
-		HiresUpscaler:          p.HiresUpscaler,
+		HiresUpscale:           hiresUpscale,
+		HiresDenoisingStrength: hiresDenoising,
+		HiresUpscaler:          hiresUpscaler,
 		DoNotSaveImages:        true,
 		DoNotSaveGrid:          true,
 	}
@@ -792,12 +843,12 @@ func (s *Service) GenerateImage(params GenerateImageParams) (*GenerateImageResul
 			result, err = s.sd.Txt2Img(req)
 			if err == nil && len(result.Images) > 0 {
 				scale := 2.0
-				if p.HiresUpscale != nil {
-					scale = *p.HiresUpscale
+				if hiresUpscale != nil {
+					scale = *hiresUpscale
 				}
 				ds := 0.5
-				if p.HiresDenoisingStrength != nil {
-					ds = *p.HiresDenoisingStrength
+				if hiresDenoising != nil {
+					ds = *hiresDenoising
 				}
 				s.log.Info("Manual hires upscale: %.1fx, denoise=%.2f", scale, ds)
 				hrResult, hrErr := s.manualHiresUpscale(result.Images[0], req, scale, ds)
@@ -933,17 +984,20 @@ func (s *Service) BatchGenerate(params BatchGenerateParams) error {
 	batchCount := 1
 
 	denoisingStrength := p.DenoisingStrength
-	if denoisingStrength == nil && p.HiresFix != nil && *p.HiresFix {
+	hiresEnabled, hiresUpscale, hiresDenoising, hiresUpscaler := s.resolveHires(p, params.HiresProfileID)
+	var hiresFix *bool
+	if hiresEnabled {
+		hiresFix = &hiresEnabled
+	}
+	if denoisingStrength == nil && hiresEnabled {
 		ds := 0.5
-		if p.HiresDenoisingStrength != nil {
-			ds = *p.HiresDenoisingStrength
+		if hiresDenoising != nil {
+			ds = *hiresDenoising
 		}
 		denoisingStrength = &ds
 	}
-	var hiresFix *bool
-	if p.HiresFix != nil {
-		hiresFix = p.HiresFix
-	}
+
+	width, height := s.resolveResolution(p, params.ResolutionID)
 
 	timestamp := time.Now().Format("20060102_150405")
 
@@ -961,17 +1015,17 @@ func (s *Service) BatchGenerate(params BatchGenerateParams) error {
 			Scheduler:              p.ScheduleType,
 			Steps:                  p.Steps,
 			CfgScale:               p.CfgScale,
-			Width:                  p.Width,
-			Height:                 p.Height,
+			Width:                  width,
+			Height:                 height,
 			Seed:                   p.Seed,
 			DenoisingStrength:      denoisingStrength,
 			ClipSkip:               &clipSkip,
 			BatchSize:              &batchSize,
 			BatchCount:             &batchCount,
 			HiresFix:               hiresFix,
-			HiresUpscale:           p.HiresUpscale,
-			HiresDenoisingStrength: p.HiresDenoisingStrength,
-			HiresUpscaler:          p.HiresUpscaler,
+			HiresUpscale:           hiresUpscale,
+			HiresDenoisingStrength: hiresDenoising,
+			HiresUpscaler:          hiresUpscaler,
 			DoNotSaveImages:        true,
 			DoNotSaveGrid:          true,
 		}
@@ -999,12 +1053,12 @@ func (s *Service) BatchGenerate(params BatchGenerateParams) error {
 				result, err = s.sd.Txt2Img(req)
 				if err == nil && len(result.Images) > 0 {
 					scale := 2.0
-					if p.HiresUpscale != nil {
-						scale = *p.HiresUpscale
+					if hiresUpscale != nil {
+						scale = *hiresUpscale
 					}
 					ds := 0.5
-					if p.HiresDenoisingStrength != nil {
-						ds = *p.HiresDenoisingStrength
+					if hiresDenoising != nil {
+						ds = *hiresDenoising
 					}
 					s.log.Info("Manual hires upscale: %.1fx, denoise=%.2f", scale, ds)
 					hrResult, hrErr := s.manualHiresUpscale(result.Images[0], req, scale, ds)
@@ -1185,6 +1239,12 @@ func (s *Service) TestGenerate(params TestGenerateParams) ([]TestGenerateResultI
 		height := p.Height
 		seed := p.Seed
 
+		rw, rh := s.resolveResolution(p, params.ResolutionID)
+		width = rw
+		height = rh
+
+		hiresEnabled, hiresUpscale, hiresDenoising, hiresUpscaler := s.resolveHires(p, params.HiresProfileID)
+
 		if params.Sampler != "" {
 			sampler = params.Sampler
 		}
@@ -1216,21 +1276,30 @@ func (s *Service) TestGenerate(params TestGenerateParams) ([]TestGenerateResultI
 		batchSize := 1
 		batchCount := 1
 
+		var hiresFix *bool
+		if hiresEnabled {
+			hiresFix = &hiresEnabled
+		}
+
 		result, err := s.sd.Txt2Img(sd.Txt2ImgRequest{
-			Prompt:          prompt,
-			NegativePrompt:  negPrompt,
-			SamplerName:     samplerName,
-			Scheduler:       scheduleType,
-			Steps:           steps,
-			CfgScale:        cfgScale,
-			Width:           width,
-			Height:          height,
-			Seed:            seed,
-			ClipSkip:        &clipSkip,
-			BatchSize:       &batchSize,
-			BatchCount:      &batchCount,
-			DoNotSaveImages: true,
-			DoNotSaveGrid:   true,
+			Prompt:                 prompt,
+			NegativePrompt:         negPrompt,
+			SamplerName:            samplerName,
+			Scheduler:              scheduleType,
+			Steps:                  steps,
+			CfgScale:               cfgScale,
+			Width:                  width,
+			Height:                 height,
+			Seed:                   seed,
+			ClipSkip:               &clipSkip,
+			BatchSize:              &batchSize,
+			BatchCount:             &batchCount,
+			HiresFix:               hiresFix,
+			HiresUpscale:           hiresUpscale,
+			HiresDenoisingStrength: hiresDenoising,
+			HiresUpscaler:          hiresUpscaler,
+			DoNotSaveImages:        true,
+			DoNotSaveGrid:          true,
 		})
 		if err != nil {
 			item.Error = err.Error()
@@ -1495,8 +1564,10 @@ func (s *Service) UpscalePreview(params UpscalePreviewParams) (*GenerateImageRes
 		denoisingStrength = *params.DenoisingStrength
 	}
 
+	width, height := s.resolveResolution(p, params.ResolutionID)
+
 	initImage := params.PreviewImageBase64
-	padded, err := padToAspectRatio(initImage, p.Width, p.Height)
+	padded, err := padToAspectRatio(initImage, width, height)
 	if err == nil {
 		initImage = padded
 	}
@@ -1509,8 +1580,8 @@ func (s *Service) UpscalePreview(params UpscalePreviewParams) (*GenerateImageRes
 		Scheduler:         p.ScheduleType,
 		Steps:             p.Steps,
 		CfgScale:          p.CfgScale,
-		Width:             p.Width,
-		Height:            p.Height,
+		Width:             width,
+		Height:            height,
 		Seed:              &params.Seed,
 		DenoisingStrength: &denoisingStrength,
 		ClipSkip:          &clipSkip,

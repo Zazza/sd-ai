@@ -191,6 +191,8 @@ export namespace generation {
 	    extra_negative_prompt: string;
 	    count: number;
 	    output_folder: string;
+	    resolution_id?: number;
+	    hires_profile_id?: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new BatchCompoundGenerateParams(source);
@@ -203,6 +205,8 @@ export namespace generation {
 	        this.extra_negative_prompt = source["extra_negative_prompt"];
 	        this.count = source["count"];
 	        this.output_folder = source["output_folder"];
+	        this.resolution_id = source["resolution_id"];
+	        this.hires_profile_id = source["hires_profile_id"];
 	    }
 	}
 	export class BatchGenerateParams {
@@ -211,6 +215,8 @@ export namespace generation {
 	    negative_prompt: string;
 	    count: number;
 	    output_folder: string;
+	    resolution_id?: number;
+	    hires_profile_id?: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new BatchGenerateParams(source);
@@ -223,6 +229,8 @@ export namespace generation {
 	        this.negative_prompt = source["negative_prompt"];
 	        this.count = source["count"];
 	        this.output_folder = source["output_folder"];
+	        this.resolution_id = source["resolution_id"];
+	        this.hires_profile_id = source["hires_profile_id"];
 	    }
 	}
 	export class DecomposeSceneParams {
@@ -243,6 +251,8 @@ export namespace generation {
 	    compound_preset_id: number;
 	    extra_prompt: string;
 	    extra_negative_prompt: string;
+	    resolution_id?: number;
+	    hires_profile_id?: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new GenerateCompoundImageParams(source);
@@ -253,6 +263,8 @@ export namespace generation {
 	        this.compound_preset_id = source["compound_preset_id"];
 	        this.extra_prompt = source["extra_prompt"];
 	        this.extra_negative_prompt = source["extra_negative_prompt"];
+	        this.resolution_id = source["resolution_id"];
+	        this.hires_profile_id = source["hires_profile_id"];
 	    }
 	}
 	export class GenerateFromImageParams {
@@ -269,6 +281,8 @@ export namespace generation {
 	    inpaint_fill: number;
 	    inpaint_full_res: boolean;
 	    remove_object: boolean;
+	    resolution_id?: number;
+	    hires_profile_id?: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new GenerateFromImageParams(source);
@@ -289,12 +303,16 @@ export namespace generation {
 	        this.inpaint_fill = source["inpaint_fill"];
 	        this.inpaint_full_res = source["inpaint_full_res"];
 	        this.remove_object = source["remove_object"];
+	        this.resolution_id = source["resolution_id"];
+	        this.hires_profile_id = source["hires_profile_id"];
 	    }
 	}
 	export class GenerateImageParams {
 	    preset_id: number;
 	    extra_prompt: string;
 	    extra_negative_prompt: string;
+	    resolution_id?: number;
+	    hires_profile_id?: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new GenerateImageParams(source);
@@ -305,6 +323,8 @@ export namespace generation {
 	        this.preset_id = source["preset_id"];
 	        this.extra_prompt = source["extra_prompt"];
 	        this.extra_negative_prompt = source["extra_negative_prompt"];
+	        this.resolution_id = source["resolution_id"];
+	        this.hires_profile_id = source["hires_profile_id"];
 	    }
 	}
 	export class GenerateImageResult {
@@ -385,6 +405,8 @@ export namespace generation {
 	    selected_ids: number[];
 	    prompt: string;
 	    negative_prompt: string;
+	    resolution_id?: number;
+	    hires_profile_id?: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new TestCompoundGenerateParams(source);
@@ -395,6 +417,8 @@ export namespace generation {
 	        this.selected_ids = source["selected_ids"];
 	        this.prompt = source["prompt"];
 	        this.negative_prompt = source["negative_prompt"];
+	        this.resolution_id = source["resolution_id"];
+	        this.hires_profile_id = source["hires_profile_id"];
 	    }
 	}
 	export class TestGenerateParams {
@@ -410,6 +434,8 @@ export namespace generation {
 	    width: number;
 	    height: number;
 	    seed?: number;
+	    resolution_id?: number;
+	    hires_profile_id?: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new TestGenerateParams(source);
@@ -429,6 +455,8 @@ export namespace generation {
 	        this.width = source["width"];
 	        this.height = source["height"];
 	        this.seed = source["seed"];
+	        this.resolution_id = source["resolution_id"];
+	        this.hires_profile_id = source["hires_profile_id"];
 	    }
 	}
 	export class TestGenerateResultItem {
@@ -478,6 +506,8 @@ export namespace generation {
 	    preset_id: number;
 	    seed: number;
 	    denoising_strength?: number;
+	    resolution_id?: number;
+	    hires_profile_id?: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new UpscalePreviewParams(source);
@@ -489,6 +519,8 @@ export namespace generation {
 	        this.preset_id = source["preset_id"];
 	        this.seed = source["seed"];
 	        this.denoising_strength = source["denoising_strength"];
+	        this.resolution_id = source["resolution_id"];
+	        this.hires_profile_id = source["hires_profile_id"];
 	    }
 	}
 
@@ -702,6 +734,8 @@ export namespace preset {
 	    type_id?: number;
 	    tags: string;
 	    loras: string;
+	    default_resolution_id?: number;
+	    default_hires_profile_id?: number;
 	    created_at: string;
 	    updated_at: string;
 	
@@ -736,6 +770,8 @@ export namespace preset {
 	        this.type_id = source["type_id"];
 	        this.tags = source["tags"];
 	        this.loras = source["loras"];
+	        this.default_resolution_id = source["default_resolution_id"];
+	        this.default_hires_profile_id = source["default_hires_profile_id"];
 	        this.created_at = source["created_at"];
 	        this.updated_at = source["updated_at"];
 	    }
@@ -748,6 +784,7 @@ export namespace preset {
 	    width: number;
 	    height: number;
 	    denoising_strength: number;
+	    resolution_id?: number;
 	    preset?: Preset;
 	
 	    static createFrom(source: any = {}) {
@@ -763,6 +800,7 @@ export namespace preset {
 	        this.width = source["width"];
 	        this.height = source["height"];
 	        this.denoising_strength = source["denoising_strength"];
+	        this.resolution_id = source["resolution_id"];
 	        this.preset = this.convertValues(source["preset"], Preset);
 	    }
 	
@@ -855,6 +893,30 @@ export namespace preset {
 	        this.updated_at = source["updated_at"];
 	    }
 	}
+	export class HiresProfile {
+	    id: number;
+	    name: string;
+	    upscale: number;
+	    denoising_strength: number;
+	    upscaler: string;
+	    is_builtin: boolean;
+	    created_at: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new HiresProfile(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.upscale = source["upscale"];
+	        this.denoising_strength = source["denoising_strength"];
+	        this.upscaler = source["upscaler"];
+	        this.is_builtin = source["is_builtin"];
+	        this.created_at = source["created_at"];
+	    }
+	}
 	
 	export class PresetType {
 	    id: number;
@@ -873,6 +935,28 @@ export namespace preset {
 	        this.name = source["name"];
 	        this.description = source["description"];
 	        this.sort_order = source["sort_order"];
+	        this.created_at = source["created_at"];
+	    }
+	}
+	export class Resolution {
+	    id: number;
+	    name: string;
+	    width: number;
+	    height: number;
+	    is_builtin: boolean;
+	    created_at: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Resolution(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.width = source["width"];
+	        this.height = source["height"];
+	        this.is_builtin = source["is_builtin"];
 	        this.created_at = source["created_at"];
 	    }
 	}

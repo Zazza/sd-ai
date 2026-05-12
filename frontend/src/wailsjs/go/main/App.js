@@ -50,6 +50,10 @@ export function CreateDescriptionFull(arg1) {
   return window['go']['main']['App']['CreateDescriptionFull'](arg1);
 }
 
+export function CreateHiresProfile(arg1) {
+  return window['go']['main']['App']['CreateHiresProfile'](arg1);
+}
+
 export function CreatePreset(arg1) {
   return window['go']['main']['App']['CreatePreset'](arg1);
 }
@@ -60,6 +64,10 @@ export function CreatePresetType(arg1) {
 
 export function CreatePrompt(arg1) {
   return window['go']['main']['App']['CreatePrompt'](arg1);
+}
+
+export function CreateResolution(arg1) {
+  return window['go']['main']['App']['CreateResolution'](arg1);
 }
 
 export function CreateSession(arg1) {
@@ -82,6 +90,10 @@ export function DeleteExportPreset(arg1) {
   return window['go']['main']['App']['DeleteExportPreset'](arg1);
 }
 
+export function DeleteHiresProfile(arg1) {
+  return window['go']['main']['App']['DeleteHiresProfile'](arg1);
+}
+
 export function DeletePreset(arg1) {
   return window['go']['main']['App']['DeletePreset'](arg1);
 }
@@ -92,6 +104,10 @@ export function DeletePresetType(arg1) {
 
 export function DeletePrompt(arg1) {
   return window['go']['main']['App']['DeletePrompt'](arg1);
+}
+
+export function DeleteResolution(arg1) {
+  return window['go']['main']['App']['DeleteResolution'](arg1);
 }
 
 export function DeleteSavedScene(arg1) {
@@ -158,6 +174,10 @@ export function GetDefaultPromptInstruction() {
   return window['go']['main']['App']['GetDefaultPromptInstruction']();
 }
 
+export function GetHiresProfile(arg1) {
+  return window['go']['main']['App']['GetHiresProfile'](arg1);
+}
+
 export function GetKidsCategories() {
   return window['go']['main']['App']['GetKidsCategories']();
 }
@@ -180,6 +200,10 @@ export function GetPresetForBatch(arg1, arg2) {
 
 export function GetPresetType(arg1) {
   return window['go']['main']['App']['GetPresetType'](arg1);
+}
+
+export function GetResolution(arg1) {
+  return window['go']['main']['App']['GetResolution'](arg1);
 }
 
 export function GetSDLoRAs() {
@@ -254,6 +278,10 @@ export function ListExportPresets() {
   return window['go']['main']['App']['ListExportPresets']();
 }
 
+export function ListHiresProfiles() {
+  return window['go']['main']['App']['ListHiresProfiles']();
+}
+
 export function ListPresetTypes() {
   return window['go']['main']['App']['ListPresetTypes']();
 }
@@ -268,6 +296,10 @@ export function ListPresetsByType(arg1) {
 
 export function ListPrompts() {
   return window['go']['main']['App']['ListPrompts']();
+}
+
+export function ListResolutions() {
+  return window['go']['main']['App']['ListResolutions']();
 }
 
 export function ListSavedScenes() {
@@ -362,12 +394,20 @@ export function UpdateDescription(arg1) {
   return window['go']['main']['App']['UpdateDescription'](arg1);
 }
 
+export function UpdateHiresProfile(arg1) {
+  return window['go']['main']['App']['UpdateHiresProfile'](arg1);
+}
+
 export function UpdatePreset(arg1) {
   return window['go']['main']['App']['UpdatePreset'](arg1);
 }
 
 export function UpdatePresetType(arg1) {
   return window['go']['main']['App']['UpdatePresetType'](arg1);
+}
+
+export function UpdateResolution(arg1) {
+  return window['go']['main']['App']['UpdateResolution'](arg1);
 }
 
 export function UpdateSavedScene(arg1) {

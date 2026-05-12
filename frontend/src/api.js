@@ -27,6 +27,8 @@ import {
   ClearSession, GetSessionImage, GetSessionThumb, HasSessionItems, ConfirmClose,
   InterruptGeneration,
   Version,
+  ListResolutions, CreateResolution, UpdateResolution, DeleteResolution,
+  ListHiresProfiles, CreateHiresProfile, UpdateHiresProfile, DeleteHiresProfile,
 } from './wailsjs/go/main/App.js'
 
 export const api = {
@@ -36,10 +38,10 @@ export const api = {
   updatePreset: (id, data) => UpdatePreset({ ...data, id }),
   deletePreset: (id) => DeletePreset(id),
   generateSdPrompt: (params) => GenerateSDPrompt(params),
-  generateImage: (presetId, extraPrompt, extraNegativePrompt) =>
-    GenerateImage({ preset_id: presetId, extra_prompt: extraPrompt, extra_negative_prompt: extraNegativePrompt }),
-  upscalePreview: (previewImageBase64, presetId, seed) =>
-    UpscalePreview({ preview_image_base64: previewImageBase64, preset_id: presetId, seed }),
+  generateImage: (presetId, extraPrompt, extraNegativePrompt, resolutionId, hiresProfileId) =>
+    GenerateImage({ preset_id: presetId, extra_prompt: extraPrompt, extra_negative_prompt: extraNegativePrompt, resolution_id: resolutionId || null, hires_profile_id: hiresProfileId || null }),
+  upscalePreview: (previewImageBase64, presetId, seed, resolutionId, hiresProfileId) =>
+    UpscalePreview({ preview_image_base64: previewImageBase64, preset_id: presetId, seed, resolution_id: resolutionId || null, hires_profile_id: hiresProfileId || null }),
   upscaleImage: (imageBase64, genInfo, presetId) =>
     UpscaleImage({ image_base64: imageBase64, gen_info: typeof genInfo === 'string' ? genInfo : JSON.stringify(genInfo || {}), preset_id: presetId || 0 }),
   saveImage: (base64Data, defaultName) => SaveImage(base64Data, defaultName),
@@ -131,4 +133,12 @@ export const api = {
   confirmClose: (action) => ConfirmClose(action),
   interruptGeneration: () => InterruptGeneration(),
   version: () => Version(),
+  listResolutions: () => ListResolutions(),
+  createResolution: (data) => CreateResolution(data),
+  updateResolution: (data) => UpdateResolution(data),
+  deleteResolution: (id) => DeleteResolution(id),
+  listHiresProfiles: () => ListHiresProfiles(),
+  createHiresProfile: (data) => CreateHiresProfile(data),
+  updateHiresProfile: (data) => UpdateHiresProfile(data),
+  deleteHiresProfile: (id) => DeleteHiresProfile(id),
 }

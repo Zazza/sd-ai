@@ -66,6 +66,26 @@ func Open(dbPath string) (*DB, error) {
 		return nil, fmt.Errorf("migrate v10: %w", err)
 	}
 
+	if err := migrateV11(db); err != nil {
+		return nil, fmt.Errorf("migrate v11: %w", err)
+	}
+
+	if err := migrateV12(db); err != nil {
+		return nil, fmt.Errorf("migrate v12: %w", err)
+	}
+
+	if err := migrateV13(db); err != nil {
+		return nil, fmt.Errorf("migrate v13: %w", err)
+	}
+
+	if err := migrateV14(db); err != nil {
+		return nil, fmt.Errorf("migrate v14: %w", err)
+	}
+
+	if err := migrateV15(db); err != nil {
+		return nil, fmt.Errorf("migrate v15: %w", err)
+	}
+
 	return &DB{db: db}, nil
 }
 
@@ -653,7 +673,7 @@ func (d *DB) GetCompoundPreset(id int64) (*CompoundPreset, error) {
 
 func (d *DB) getCompoundSteps(compoundPresetID int64) ([]CompoundPresetStep, error) {
 	rows, err := d.db.Query(
-		`SELECT id, compound_preset_id, step_order, preset_id, width, height, denoising_strength FROM compound_preset_steps WHERE compound_preset_id = ? ORDER BY step_order`,
+		`SELECT id, compound_preset_id, step_order, preset_id, width, height, denoising_strength, resolution_id FROM compound_preset_steps WHERE compound_preset_id = ? ORDER BY step_order`,
 		compoundPresetID,
 	)
 	if err != nil {
@@ -664,8 +684,12 @@ func (d *DB) getCompoundSteps(compoundPresetID int64) ([]CompoundPresetStep, err
 	var steps []CompoundPresetStep
 	for rows.Next() {
 		var s CompoundPresetStep
-		if err := rows.Scan(&s.ID, &s.CompoundPresetID, &s.StepOrder, &s.PresetID, &s.Width, &s.Height, &s.DenoisingStrength); err != nil {
+		var resolutionID sql.NullInt64
+		if err := rows.Scan(&s.ID, &s.CompoundPresetID, &s.StepOrder, &s.PresetID, &s.Width, &s.Height, &s.DenoisingStrength, &resolutionID); err != nil {
 			return nil, err
+		}
+		if resolutionID.Valid {
+			s.ResolutionID = &resolutionID.Int64
 		}
 		steps = append(steps, s)
 	}
@@ -687,8 +711,8 @@ func (d *DB) CreateCompoundPreset(cp *CompoundPreset) error {
 
 	for i, step := range cp.Steps {
 		_, err := tx.Exec(
-			`INSERT INTO compound_preset_steps (compound_preset_id, step_order, preset_id, width, height, denoising_strength) VALUES (?, ?, ?, ?, ?, ?)`,
-			cp.ID, i+1, step.PresetID, step.Width, step.Height, step.DenoisingStrength,
+			`INSERT INTO compound_preset_steps (compound_preset_id, step_order, preset_id, width, height, denoising_strength, resolution_id) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+			cp.ID, i+1, step.PresetID, step.Width, step.Height, step.DenoisingStrength, step.ResolutionID,
 		)
 		if err != nil {
 			tx.Rollback()
@@ -720,8 +744,8 @@ func (d *DB) UpdateCompoundPreset(cp *CompoundPreset) error {
 
 	for i, step := range cp.Steps {
 		_, err := tx.Exec(
-			`INSERT INTO compound_preset_steps (compound_preset_id, step_order, preset_id, width, height, denoising_strength) VALUES (?, ?, ?, ?, ?, ?)`,
-			cp.ID, i+1, step.PresetID, step.Width, step.Height, step.DenoisingStrength,
+			`INSERT INTO compound_preset_steps (compound_preset_id, step_order, preset_id, width, height, denoising_strength, resolution_id) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+			cp.ID, i+1, step.PresetID, step.Width, step.Height, step.DenoisingStrength, step.ResolutionID,
 		)
 		if err != nil {
 			tx.Rollback()
@@ -927,4 +951,144 @@ func migrateV10(db *sql.DB) error {
 	sessionID, _ := result.LastInsertId()
 	_, err = db.Exec(`INSERT INTO session_active (id, session_id) VALUES (1, ?)`, sessionID)
 	return err
+}
+
+func migrateV11(db *sql.DB) error {
+	_, err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS resolutions (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			name TEXT NOT NULL,
+			width INTEGER NOT NULL,
+			height INTEGER NOT NULL,
+			is_builtin INTEGER NOT NULL DEFAULT 0,
+			created_at TEXT NOT NULL DEFAULT (datetime('now'))
+		)
+	`)
+	if err != nil {
+		return err
+	}
+
+	var count int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM resolutions`).Scan(&count); err != nil {
+		return err
+	}
+	if count > 0 {
+		return nil
+	}
+
+	builtins := []struct {
+		name   string
+		width  int
+		height int
+	}{
+		{"Square 512x512", 512, 512},
+		{"Square 768x768", 768, 768},
+		{"Square 1024x1024", 1024, 1024},
+		{"Portrait 512x768", 512, 768},
+		{"Portrait 768x1024", 768, 1024},
+		{"Portrait 768x1152", 768, 1152},
+		{"Portrait 1024x1536", 1024, 1536},
+		{"Landscape 768x512", 768, 512},
+		{"Landscape 1024x768", 1024, 768},
+		{"Landscape 1152x768", 1152, 768},
+		{"Landscape 1536x1024", 1536, 1024},
+		{"Widescreen 912x512", 912, 512},
+		{"Widescreen 1344x768", 1344, 768},
+		{"Widescreen 1024x576", 1024, 576},
+	}
+	for _, r := range builtins {
+		_, err := db.Exec(
+			`INSERT INTO resolutions (name, width, height, is_builtin) VALUES (?, ?, ?, 1)`,
+			r.name, r.width, r.height,
+		)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func migrateV12(db *sql.DB) error {
+	_, err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS hires_profiles (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			name TEXT NOT NULL,
+			upscale REAL NOT NULL DEFAULT 2.0,
+			denoising_strength REAL NOT NULL DEFAULT 0.45,
+			upscaler TEXT NOT NULL DEFAULT '',
+			is_builtin INTEGER NOT NULL DEFAULT 0,
+			created_at TEXT NOT NULL DEFAULT (datetime('now'))
+		)
+	`)
+	if err != nil {
+		return err
+	}
+
+	var count int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM hires_profiles`).Scan(&count); err != nil {
+		return err
+	}
+	if count > 0 {
+		return nil
+	}
+
+	builtins := []struct {
+		name              string
+		upscale           float64
+		denoisingStrength float64
+	}{
+		{"Light", 1.5, 0.3},
+		{"Standard", 2.0, 0.45},
+		{"Heavy", 2.5, 0.55},
+		{"Max", 4.0, 0.4},
+	}
+	for _, h := range builtins {
+		_, err := db.Exec(
+			`INSERT INTO hires_profiles (name, upscale, denoising_strength, upscaler, is_builtin) VALUES (?, ?, ?, '', 1)`,
+			h.name, h.upscale, h.denoisingStrength,
+		)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func migrateV13(db *sql.DB) error {
+	newCols := []struct {
+		name string
+		typ  string
+	}{
+		{"default_resolution_id", "INTEGER REFERENCES resolutions(id)"},
+		{"default_hires_profile_id", "INTEGER REFERENCES hires_profiles(id)"},
+	}
+	for _, col := range newCols {
+		_, err := db.Exec("ALTER TABLE presets ADD COLUMN " + col.name + " " + col.typ)
+		if err != nil && strings.Contains(err.Error(), "duplicate column name") {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func migrateV14(db *sql.DB) error {
+	_, err := db.Exec("ALTER TABLE compound_preset_steps ADD COLUMN resolution_id INTEGER REFERENCES resolutions(id)")
+	if err != nil && strings.Contains(err.Error(), "duplicate column name") {
+		return nil
+	}
+	return err
+}
+
+func migrateV15(db *sql.DB) error {
+	cols := []string{"default_resolution_id", "default_hires_profile_id"}
+	for _, col := range cols {
+		_, err := db.Exec("ALTER TABLE presets DROP COLUMN " + col)
+		if err != nil && !strings.Contains(err.Error(), "no such column") {
+			return err
+		}
+	}
+	return nil
 }

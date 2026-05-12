@@ -906,3 +906,109 @@ func (a *App) ConfirmClose(action string) {
 		runtime.Quit(a.ctx)
 	}
 }
+
+// --- Resolutions ---
+
+func (a *App) ListResolutions() ([]preset.Resolution, error) {
+	items, err := a.presets.ListResolutions()
+	if err != nil {
+		return nil, err
+	}
+	if items == nil {
+		items = []preset.Resolution{}
+	}
+	return items, nil
+}
+
+func (a *App) GetResolution(id int64) (*preset.Resolution, error) {
+	return a.presets.GetResolution(id)
+}
+
+func (a *App) CreateResolution(r preset.Resolution) (*preset.Resolution, error) {
+	if strings.TrimSpace(r.Name) == "" {
+		return nil, fmt.Errorf("name is required")
+	}
+	if r.Width < 64 || r.Width > 4096 || r.Height < 64 || r.Height > 4096 {
+		return nil, fmt.Errorf("width and height must be between 64 and 4096")
+	}
+	if err := a.presets.CreateResolution(&r); err != nil {
+		return nil, err
+	}
+	return &r, nil
+}
+
+func (a *App) UpdateResolution(r preset.Resolution) (*preset.Resolution, error) {
+	if r.ID <= 0 {
+		return nil, fmt.Errorf("id is required")
+	}
+	if strings.TrimSpace(r.Name) == "" {
+		return nil, fmt.Errorf("name is required")
+	}
+	if r.Width < 64 || r.Width > 4096 || r.Height < 64 || r.Height > 4096 {
+		return nil, fmt.Errorf("width and height must be between 64 and 4096")
+	}
+	if err := a.presets.UpdateResolution(&r); err != nil {
+		return nil, err
+	}
+	return &r, nil
+}
+
+func (a *App) DeleteResolution(id int64) error {
+	return a.presets.DeleteResolution(id)
+}
+
+// --- Hires Profiles ---
+
+func (a *App) ListHiresProfiles() ([]preset.HiresProfile, error) {
+	items, err := a.presets.ListHiresProfiles()
+	if err != nil {
+		return nil, err
+	}
+	if items == nil {
+		items = []preset.HiresProfile{}
+	}
+	return items, nil
+}
+
+func (a *App) GetHiresProfile(id int64) (*preset.HiresProfile, error) {
+	return a.presets.GetHiresProfile(id)
+}
+
+func (a *App) CreateHiresProfile(h preset.HiresProfile) (*preset.HiresProfile, error) {
+	if strings.TrimSpace(h.Name) == "" {
+		return nil, fmt.Errorf("name is required")
+	}
+	if h.Upscale < 1.0 || h.Upscale > 4.0 {
+		return nil, fmt.Errorf("upscale must be between 1.0 and 4.0")
+	}
+	if h.DenoisingStrength < 0.0 || h.DenoisingStrength > 1.0 {
+		return nil, fmt.Errorf("denoising_strength must be between 0.0 and 1.0")
+	}
+	if err := a.presets.CreateHiresProfile(&h); err != nil {
+		return nil, err
+	}
+	return &h, nil
+}
+
+func (a *App) UpdateHiresProfile(h preset.HiresProfile) (*preset.HiresProfile, error) {
+	if h.ID <= 0 {
+		return nil, fmt.Errorf("id is required")
+	}
+	if strings.TrimSpace(h.Name) == "" {
+		return nil, fmt.Errorf("name is required")
+	}
+	if h.Upscale < 1.0 || h.Upscale > 4.0 {
+		return nil, fmt.Errorf("upscale must be between 1.0 and 4.0")
+	}
+	if h.DenoisingStrength < 0.0 || h.DenoisingStrength > 1.0 {
+		return nil, fmt.Errorf("denoising_strength must be between 0.0 and 1.0")
+	}
+	if err := a.presets.UpdateHiresProfile(&h); err != nil {
+		return nil, err
+	}
+	return &h, nil
+}
+
+func (a *App) DeleteHiresProfile(id int64) error {
+	return a.presets.DeleteHiresProfile(id)
+}

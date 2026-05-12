@@ -920,13 +920,24 @@ func (s *Service) GenerateCompoundImage(params GenerateCompoundImageParams) (*Ge
 		samplerName := buildSamplerName(p.Sampler, p.ScheduleType)
 
 		width := step.Width
-		if width == 0 {
-			width = p.Width
-		}
 		height := step.Height
-		if height == 0 {
-			height = p.Height
+		if step.ResolutionID != nil && *step.ResolutionID > 0 {
+			if r, err := s.db.GetResolution(*step.ResolutionID); err == nil {
+				width = r.Width
+				height = r.Height
+			}
 		}
+		if width == 0 || height == 0 {
+			rw, rh := s.resolveResolution(p, params.ResolutionID)
+			if width == 0 {
+				width = rw
+			}
+			if height == 0 {
+				height = rh
+			}
+		}
+
+		hiresEnabled, hiresUpscale, hiresDenoising, hiresUpscaler := s.resolveHires(p, params.HiresProfileID)
 
 		clipSkip := 1
 		if p.ClipSkip != nil {
@@ -936,21 +947,29 @@ func (s *Service) GenerateCompoundImage(params GenerateCompoundImageParams) (*Ge
 		if stepIdx == 0 {
 			batchSize := 1
 			batchCount := 1
+			var hiresFix *bool
+			if hiresEnabled {
+				hiresFix = &hiresEnabled
+			}
 			result, err := s.sd.Txt2Img(sd.Txt2ImgRequest{
-				Prompt:          prompt,
-				NegativePrompt:  negativePrompt,
-				SamplerName:     samplerName,
-				Scheduler:       p.ScheduleType,
-				Steps:           p.Steps,
-				CfgScale:        p.CfgScale,
-				Width:           width,
-				Height:          height,
-				Seed:            p.Seed,
-				ClipSkip:        &clipSkip,
-				BatchSize:       &batchSize,
-				BatchCount:      &batchCount,
-				DoNotSaveImages: true,
-				DoNotSaveGrid:   true,
+				Prompt:                 prompt,
+				NegativePrompt:         negativePrompt,
+				SamplerName:            samplerName,
+				Scheduler:              p.ScheduleType,
+				Steps:                  p.Steps,
+				CfgScale:               p.CfgScale,
+				Width:                  width,
+				Height:                 height,
+				Seed:                   p.Seed,
+				ClipSkip:               &clipSkip,
+				BatchSize:              &batchSize,
+				BatchCount:             &batchCount,
+				HiresFix:               hiresFix,
+				HiresUpscale:           hiresUpscale,
+				HiresDenoisingStrength: hiresDenoising,
+				HiresUpscaler:          hiresUpscaler,
+				DoNotSaveImages:        true,
+				DoNotSaveGrid:          true,
 			})
 			if err != nil {
 				if ierr := s.checkSDInterrupted(); ierr != nil {
@@ -1108,13 +1127,24 @@ func (s *Service) BatchCompoundGenerate(params BatchCompoundGenerateParams) erro
 			samplerName := buildSamplerName(p.Sampler, p.ScheduleType)
 
 			width := step.Width
-			if width == 0 {
-				width = p.Width
-			}
 			height := step.Height
-			if height == 0 {
-				height = p.Height
+			if step.ResolutionID != nil && *step.ResolutionID > 0 {
+				if r, err := s.db.GetResolution(*step.ResolutionID); err == nil {
+					width = r.Width
+					height = r.Height
+				}
 			}
+			if width == 0 || height == 0 {
+				rw, rh := s.resolveResolution(p, params.ResolutionID)
+				if width == 0 {
+					width = rw
+				}
+				if height == 0 {
+					height = rh
+				}
+			}
+
+			hiresEnabled, hiresUpscale, hiresDenoising, hiresUpscaler := s.resolveHires(p, params.HiresProfileID)
 
 			clipSkip := 1
 			if p.ClipSkip != nil {
@@ -1124,20 +1154,28 @@ func (s *Service) BatchCompoundGenerate(params BatchCompoundGenerateParams) erro
 			if stepIdx == 0 {
 				batchSize := 1
 				batchCount := 1
+				var hiresFix *bool
+				if hiresEnabled {
+					hiresFix = &hiresEnabled
+				}
 				result, err := s.sd.Txt2Img(sd.Txt2ImgRequest{
-					Prompt:          prompt,
-					NegativePrompt:  negativePrompt,
-					SamplerName:     samplerName,
-					Scheduler:       p.ScheduleType,
-					Steps:           p.Steps,
-					CfgScale:        p.CfgScale,
-					Width:           width,
-					Height:          height,
-					Seed:            p.Seed,
-					ClipSkip:        &clipSkip,
-					BatchSize:       &batchSize,
-					BatchCount:      &batchCount,
-					DoNotSaveImages: true,
+					Prompt:                 prompt,
+					NegativePrompt:         negativePrompt,
+					SamplerName:            samplerName,
+					Scheduler:              p.ScheduleType,
+					Steps:                  p.Steps,
+					CfgScale:               p.CfgScale,
+					Width:                  width,
+					Height:                 height,
+					Seed:                   p.Seed,
+					ClipSkip:               &clipSkip,
+					BatchSize:              &batchSize,
+					BatchCount:             &batchCount,
+					HiresFix:               hiresFix,
+					HiresUpscale:           hiresUpscale,
+					HiresDenoisingStrength: hiresDenoising,
+					HiresUpscaler:          hiresUpscaler,
+					DoNotSaveImages:        true,
 					DoNotSaveGrid:   true,
 				})
 				if err != nil {
@@ -1300,13 +1338,24 @@ func (s *Service) TestCompoundGenerate(params TestCompoundGenerateParams) ([]Tes
 			samplerName := buildSamplerName(p.Sampler, p.ScheduleType)
 
 			width := step.Width
-			if width == 0 {
-				width = p.Width
-			}
 			height := step.Height
-			if height == 0 {
-				height = p.Height
+			if step.ResolutionID != nil && *step.ResolutionID > 0 {
+				if r, err := s.db.GetResolution(*step.ResolutionID); err == nil {
+					width = r.Width
+					height = r.Height
+				}
 			}
+			if width == 0 || height == 0 {
+				rw, rh := s.resolveResolution(p, params.ResolutionID)
+				if width == 0 {
+					width = rw
+				}
+				if height == 0 {
+					height = rh
+				}
+			}
+
+			hiresEnabled, hiresUpscale, hiresDenoising, hiresUpscaler := s.resolveHires(p, params.HiresProfileID)
 
 			clipSkip := 1
 			if p.ClipSkip != nil {
@@ -1316,17 +1365,25 @@ func (s *Service) TestCompoundGenerate(params TestCompoundGenerateParams) ([]Tes
 			batchCount := 1
 
 			if stepIdx == 0 {
+				var hiresFix *bool
+				if hiresEnabled {
+					hiresFix = &hiresEnabled
+				}
 				result, err := s.sd.Txt2Img(sd.Txt2ImgRequest{
-					Prompt:          prompt,
-					NegativePrompt:  negPrompt,
-					SamplerName:     samplerName,
-					Scheduler:       p.ScheduleType,
-					Steps:           p.Steps,
-					CfgScale:        p.CfgScale,
-					Width:           width,
-					Height:          height,
-					Seed:            p.Seed,
-					ClipSkip:        &clipSkip,
+					Prompt:                 prompt,
+					NegativePrompt:         negPrompt,
+					SamplerName:            samplerName,
+					Scheduler:              p.ScheduleType,
+					Steps:                  p.Steps,
+					CfgScale:               p.CfgScale,
+					Width:                  width,
+					Height:                 height,
+					Seed:                   p.Seed,
+					ClipSkip:               &clipSkip,
+					HiresFix:               hiresFix,
+					HiresUpscale:           hiresUpscale,
+					HiresDenoisingStrength: hiresDenoising,
+					HiresUpscaler:          hiresUpscaler,
 					BatchSize:       &batchSize,
 					BatchCount:      &batchCount,
 					DoNotSaveImages: true,

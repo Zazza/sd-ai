@@ -34,11 +34,15 @@ export function CreateDescription(arg1:string):Promise<preset.SavedDescription>;
 
 export function CreateDescriptionFull(arg1:preset.SavedDescription):Promise<preset.SavedDescription>;
 
+export function CreateHiresProfile(arg1:preset.HiresProfile):Promise<preset.HiresProfile>;
+
 export function CreatePreset(arg1:preset.Preset):Promise<preset.Preset>;
 
 export function CreatePresetType(arg1:preset.PresetType):Promise<preset.PresetType>;
 
 export function CreatePrompt(arg1:string):Promise<preset.SavedPrompt>;
+
+export function CreateResolution(arg1:preset.Resolution):Promise<preset.Resolution>;
 
 export function CreateSession(arg1:string):Promise<preset.SessionInfo>;
 
@@ -50,11 +54,15 @@ export function DeleteDescription(arg1:number):Promise<void>;
 
 export function DeleteExportPreset(arg1:number):Promise<void>;
 
+export function DeleteHiresProfile(arg1:number):Promise<void>;
+
 export function DeletePreset(arg1:number):Promise<void>;
 
 export function DeletePresetType(arg1:number):Promise<void>;
 
 export function DeletePrompt(arg1:number):Promise<void>;
+
+export function DeleteResolution(arg1:number):Promise<void>;
 
 export function DeleteSavedScene(arg1:number):Promise<void>;
 
@@ -88,6 +96,8 @@ export function GetDefaultAnalyzePrompts():Promise<generation.AnalyzePrompts>;
 
 export function GetDefaultPromptInstruction():Promise<string>;
 
+export function GetHiresProfile(arg1:number):Promise<preset.HiresProfile>;
+
 export function GetKidsCategories():Promise<Array<kids.CategoryInfo>>;
 
 export function GetLLMModels():Promise<Array<llm.LLMModel>>;
@@ -99,6 +109,8 @@ export function GetPreset(arg1:number):Promise<preset.Preset>;
 export function GetPresetForBatch(arg1:number,arg2:string):Promise<generation.GenerateSDPromptResult>;
 
 export function GetPresetType(arg1:number):Promise<preset.PresetType>;
+
+export function GetResolution(arg1:number):Promise<preset.Resolution>;
 
 export function GetSDLoRAs():Promise<Array<sd.LoRA>>;
 
@@ -136,6 +148,8 @@ export function ListDescriptions():Promise<Array<preset.SavedDescription>>;
 
 export function ListExportPresets():Promise<Array<preset.ExportPreset>>;
 
+export function ListHiresProfiles():Promise<Array<preset.HiresProfile>>;
+
 export function ListPresetTypes():Promise<Array<preset.PresetType>>;
 
 export function ListPresets():Promise<Array<preset.Preset>>;
@@ -143,6 +157,8 @@ export function ListPresets():Promise<Array<preset.Preset>>;
 export function ListPresetsByType(arg1:string):Promise<Array<preset.Preset>>;
 
 export function ListPrompts():Promise<Array<preset.SavedPrompt>>;
+
+export function ListResolutions():Promise<Array<preset.Resolution>>;
 
 export function ListSavedScenes():Promise<Array<preset.SavedScene>>;
 
@@ -190,9 +206,13 @@ export function UpdateCompoundPreset(arg1:preset.CompoundPreset):Promise<preset.
 
 export function UpdateDescription(arg1:preset.SavedDescription):Promise<void>;
 
+export function UpdateHiresProfile(arg1:preset.HiresProfile):Promise<preset.HiresProfile>;
+
 export function UpdatePreset(arg1:preset.Preset):Promise<preset.Preset>;
 
 export function UpdatePresetType(arg1:preset.PresetType):Promise<preset.PresetType>;
+
+export function UpdateResolution(arg1:preset.Resolution):Promise<preset.Resolution>;
 
 export function UpdateSavedScene(arg1:preset.SavedScene):Promise<preset.SavedScene>;
 

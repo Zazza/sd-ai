@@ -75,6 +75,7 @@ type CompoundPresetStep struct {
 	Width             int     `json:"width"`
 	Height            int     `json:"height"`
 	DenoisingStrength float64 `json:"denoising_strength"`
+	ResolutionID      *int64  `json:"resolution_id"`
 	Preset            *Preset `json:"preset,omitempty"`
 }
 
@@ -125,4 +126,23 @@ type ExportPreset struct {
 	Interpolation string `json:"interpolation"`
 	CreatedAt     string `json:"created_at"`
 	UpdatedAt     string `json:"updated_at"`
+}
+
+type Resolution struct {
+	ID        int64  `json:"id"`
+	Name      string `json:"name"`
+	Width     int    `json:"width"`
+	Height    int    `json:"height"`
+	IsBuiltin bool   `json:"is_builtin"`
+	CreatedAt string `json:"created_at"`
+}
+
+type HiresProfile struct {
+	ID                int64   `json:"id"`
+	Name              string  `json:"name"`
+	Upscale           float64 `json:"upscale"`
+	DenoisingStrength float64 `json:"denoising_strength"`
+	Upscaler          string  `json:"upscaler"`
+	IsBuiltin         bool    `json:"is_builtin"`
+	CreatedAt         string  `json:"created_at"`
 }
