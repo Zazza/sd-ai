@@ -764,6 +764,8 @@ func (s *Service) GenerateImage(params GenerateImageParams) (*GenerateImageResul
 
 	if p.VAE != "" {
 		_ = s.sd.SetVAE(p.VAE)
+	} else {
+		_ = s.sd.SetVAE("Automatic")
 	}
 
 	samplerName := buildSamplerName(p.Sampler, p.ScheduleType)
@@ -974,6 +976,8 @@ func (s *Service) BatchGenerate(params BatchGenerateParams) error {
 	}
 	if p.VAE != "" {
 		_ = s.sd.SetVAE(p.VAE)
+	} else {
+		_ = s.sd.SetVAE("Automatic")
 	}
 
 	samplerName := buildSamplerName(p.Sampler, p.ScheduleType)
@@ -1189,6 +1193,8 @@ func (s *Service) TestGenerate(params TestGenerateParams) ([]TestGenerateResultI
 			}
 			if p.VAE != "" {
 				_ = s.sd.SetVAE(p.VAE)
+			} else {
+				_ = s.sd.SetVAE("Automatic")
 			}
 		} else {
 			modelTitle := params.SelectedModels[idx]
@@ -1495,6 +1501,8 @@ func (s *Service) UpscaleImage(params UpscaleImageParams) (*GenerateImageResult,
 		}
 		if p.VAE != "" {
 			_ = s.sd.SetVAE(p.VAE)
+		} else {
+			_ = s.sd.SetVAE("Automatic")
 		}
 	}
 
@@ -1569,6 +1577,8 @@ func (s *Service) UpscalePreview(params UpscalePreviewParams) (*GenerateImageRes
 
 	if p.VAE != "" {
 		_ = s.sd.SetVAE(p.VAE)
+	} else {
+		_ = s.sd.SetVAE("Automatic")
 	}
 
 	samplerName := buildSamplerName(p.Sampler, p.ScheduleType)

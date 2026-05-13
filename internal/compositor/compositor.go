@@ -75,6 +75,8 @@ func (c *Compositor) GenerateScene(scene Scene) (*MultiPassResult, error) {
 	}
 	if p.VAE != "" {
 		_ = c.sd.SetVAE(p.VAE)
+	} else {
+		_ = c.sd.SetVAE("Automatic")
 	}
 
 	loraSuffix := ""

@@ -524,6 +524,8 @@ func (s *Service) GenerateFromImage(params GenerateFromImageParams) (*GenerateIm
 	}
 	if p.VAE != "" {
 		_ = s.sd.SetVAE(p.VAE)
+	} else {
+		_ = s.sd.SetVAE("Automatic")
 	}
 
 	samplerName := buildSamplerName(p.Sampler, p.ScheduleType)
@@ -716,6 +718,8 @@ func (s *Service) generateFromImageCompound(params GenerateFromImageParams, tags
 		}
 		if p.VAE != "" {
 			_ = s.sd.SetVAE(p.VAE)
+		} else {
+			_ = s.sd.SetVAE("Automatic")
 		}
 
 		samplerName := buildSamplerName(p.Sampler, p.ScheduleType)
@@ -916,6 +920,8 @@ func (s *Service) GenerateCompoundImage(params GenerateCompoundImageParams) (*Ge
 		}
 		if p.VAE != "" {
 			_ = s.sd.SetVAE(p.VAE)
+		} else {
+			_ = s.sd.SetVAE("Automatic")
 		}
 
 		samplerName := buildSamplerName(p.Sampler, p.ScheduleType)
@@ -1146,6 +1152,8 @@ func (s *Service) BatchCompoundGenerate(params BatchCompoundGenerateParams) erro
 			}
 			if p.VAE != "" {
 				_ = s.sd.SetVAE(p.VAE)
+			} else {
+				_ = s.sd.SetVAE("Automatic")
 			}
 
 			samplerName := buildSamplerName(p.Sampler, p.ScheduleType)
@@ -1380,6 +1388,8 @@ func (s *Service) TestCompoundGenerate(params TestCompoundGenerateParams) ([]Tes
 			}
 			if p.VAE != "" {
 				_ = s.sd.SetVAE(p.VAE)
+			} else {
+				_ = s.sd.SetVAE("Automatic")
 			}
 
 			samplerName := buildSamplerName(p.Sampler, p.ScheduleType)

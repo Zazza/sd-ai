@@ -684,6 +684,62 @@ func TestGenerateImage_SetsModelAndVAE(t *testing.T) {
 	assert.True(t, setVAECalled)
 }
 
+func TestGenerateImage_VAEFallback(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		presetVAE    string
+		expectedVAE  string
+	}{
+		{
+			name:        "explicit_vae_passed_through",
+			presetVAE:   "sdxl_vae",
+			expectedVAE: "sdxl_vae",
+		},
+		{
+			name:        "empty_vae_falls_back_to_automatic",
+			presetVAE:   "",
+			expectedVAE: "Automatic",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			db := openTestDB(t)
+			makeTestPreset(t, db, &preset.Preset{
+				Name:           "vae-test",
+				Prompt:         "1girl",
+				NegativePrompt: "lowres",
+				Sampler:        "Euler a",
+				Steps:          20,
+				CfgScale:       7.0,
+				VAE:            tc.presetVAE,
+			})
+
+			var capturedVAE string
+			sdSvc := &mockSD{
+				setVAE: func(vaeName string) error {
+					capturedVAE = vaeName
+					return nil
+				},
+				txt2img: func(req sd.Txt2ImgRequest) (*sd.Txt2ImgResponse, error) {
+					return &sd.Txt2ImgResponse{Images: []string{"img"}}, nil
+				},
+			}
+
+			svc := newTestService(t, db, &mockLLM{}, sdSvc)
+			svc.ctx = context.Background()
+
+			_, err := svc.GenerateImage(GenerateImageParams{PresetID: 1})
+			require.NoError(t, err)
+			assert.Equal(t, tc.expectedVAE, capturedVAE)
+		})
+	}
+}
+
 func TestUpscaleImage_EmptyImage(t *testing.T) {
 	t.Parallel()
 	db := openTestDB(t)
