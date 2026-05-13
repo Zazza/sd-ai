@@ -112,6 +112,8 @@ Key-value settings store.
 | `fi_analyze_mode` | From Image: quick/deep | `quick` |
 | `fi_mask_padding` | From Image: mask dilation (px) | `8` |
 | `fi_mask_feather` | From Image: mask feathering (px) | `8` |
+| `gen_resolution_id` | Generate: selected resolution profile | first from list |
+| `gen_hires_profile_id` | Generate: selected hires profile | — (disabled) |
 | `browser_folder` | File browser: folder | — |
 
 ### saved_descriptions
@@ -195,6 +197,35 @@ Image export presets.
 | interpolation | TEXT | nearest/bilinear/bicubic/lanczos |
 | created_at | TEXT | |
 | updated_at | TEXT | |
+
+### resolutions
+Resolution profiles for generation.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| id | INTEGER PK | Auto-increment |
+| name | TEXT | Profile name |
+| width | INTEGER | Width in pixels |
+| height | INTEGER | Height in pixels |
+| sort_order | INTEGER | Sort order |
+| created_at | TEXT | ISO 8601 |
+
+### hires_profiles
+Hires fix profiles for generation.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| id | INTEGER PK | Auto-increment |
+| name | TEXT | Profile name |
+| enable | BOOLEAN | Enable hires fix |
+| upscaler | TEXT | Upscaler name |
+| scale | REAL | Upscale factor |
+| denoising | REAL | Denoising strength |
+| resize_x | INTEGER | Target width |
+| resize_y | INTEGER | Target height |
+| steps | INTEGER | Hires steps |
+| sort_order | INTEGER | Sort order |
+| created_at | TEXT | ISO 8601 |
 
 ## Raw SQL Patterns
 

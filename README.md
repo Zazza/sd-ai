@@ -43,6 +43,9 @@ SD Studio bridges your local Stable Diffusion and LLM into a single workflow: de
 | Batch Generation | Generate N images with progress tracking |
 | Pipelines | Multi-step compound presets for complex workflows |
 | Upscale | Preview mode with one-click upscale to full resolution |
+| Resolution Profiles | Independent resolution presets stored in DB, persistent across sessions |
+| Hires Profiles | Configurable hires fix profiles, disabled by default |
+| Pipeline Import/Export | Import/export pipeline configurations as JSON files |
 
 ### LLM Integration
 

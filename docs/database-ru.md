@@ -112,6 +112,8 @@ Key-value хранилище настроек.
 | `fi_analyze_mode` | From Image: quick/deep | `quick` |
 | `fi_mask_padding` | From Image: mask dilation (px) | `8` |
 | `fi_mask_feather` | From Image: mask feathering (px) | `8` |
+| `gen_resolution_id` | Generate: выбранный профиль разрешения | первый из списка |
+| `gen_hires_profile_id` | Generate: выбранный профиль hires | — (отключен) |
 | `browser_folder` | File browser: папка | — |
 
 ### saved_descriptions
@@ -195,6 +197,35 @@ Key-value хранилище настроек.
 | interpolation | TEXT | nearest/bilinear/bicubic/lanczos |
 | created_at | TEXT | |
 | updated_at | TEXT | |
+
+### resolutions
+Профили разрешений для генерации.
+
+| Поле | Тип | Описание |
+|------|-----|----------|
+| id | INTEGER PK | Auto-increment |
+| name | TEXT | Название профиля |
+| width | INTEGER | Ширина в пикселях |
+| height | INTEGER | Высота в пикселях |
+| sort_order | INTEGER | Порядок сортировки |
+| created_at | TEXT | ISO 8601 |
+
+### hires_profiles
+Профили hires fix для генерации.
+
+| Поле | Тип | Описание |
+|------|-----|----------|
+| id | INTEGER PK | Auto-increment |
+| name | TEXT | Название профиля |
+| enable | BOOLEAN | Включить hires fix |
+| upscaler | TEXT | Название upscaler |
+| scale | REAL | Множитель увеличения |
+| denoising | REAL | Сила denoising |
+| resize_x | INTEGER | Целевая ширина |
+| resize_y | INTEGER | Целевая высота |
+| steps | INTEGER | Шаги hires |
+| sort_order | INTEGER | Порядок сортировки |
+| created_at | TEXT | ISO 8601 |
 
 ## Raw SQL паттерны
 

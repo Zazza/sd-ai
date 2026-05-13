@@ -4,6 +4,20 @@ All notable changes to SD Studio are documented here.
 
 ## [Unreleased]
 
+## [0.6.0] — 2026-05-13
+
+### Added
+- Resolution profiles — independent resolution entities stored in DB (`resolutions` table), selectable via `ResolutionSelector` component
+- Hires profiles — independent hires fix entities stored in DB (`hires_profiles` table), selectable via `HiresProfileSelector` component
+- Resolution and hires profile persistence — saved in settings (`gen_resolution_id`, `gen_hires_profile_id`), restored on app restart and page transitions
+- Default resolution: first from list when no saved value; hires disabled by default
+- Pipeline JSON import/export — sample pipeline files in `data/pipelines/` (anime-realistic, photo-stylize, style-transfer)
+
+### Changed
+- Removed `width`/`height` fields from presets — resolution now managed via independent resolution profiles
+- Removed `hires_*` fields from preset form — hires now managed via independent hires profiles
+- Generation flow uses selected resolution and hires profile instead of preset-embedded values
+
 ## [0.5.6] — 2026-05-11
 
 ### Added

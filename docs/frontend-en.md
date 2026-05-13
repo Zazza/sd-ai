@@ -26,6 +26,8 @@ frontend/src/
 │   ├── ImageViewer.vue            # Fullscreen image viewer
 │   ├── ImportModal.vue            # Import modal
 │   ├── SavedDescriptionsModal.vue # Saved descriptions
+│   ├── ResolutionSelector.vue     # Resolution profile selector
+│   ├── HiresProfileSelector.vue   # Hires profile selector
 │   ├── PinModal.vue               # PIN code for kids mode
 │   ├── ToggleSwitch.vue           # Toggle component
 │   └── AppFooter.vue              # Footer
