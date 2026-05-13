@@ -4,6 +4,8 @@ import { EventsOn, EventsOff } from '../wailsjs/runtime/runtime'
 import { api } from '../api.js'
 import { t } from '../i18n/index.js'
 import { useGenerationProgress } from '../composables/useGenerationProgress.js'
+import ResolutionSelector from './ResolutionSelector.vue'
+import HiresProfileSelector from './HiresProfileSelector.vue'
 
 const shared = inject('sharedGenState', null)
 
@@ -30,6 +32,8 @@ const { sdProgress, interrupt: interruptGeneration, reset: resetProgress } = use
 const error = ref('')
 const progress = ref(null)
 const results = ref([])
+const selectedResolutionId = ref(null)
+const selectedHiresProfileId = ref(null)
 
 const selectedItems = computed(() => {
   if (mode.value === 'presets') return selectedPresetIds.value
@@ -117,6 +121,8 @@ async function generate() {
         selected_ids: selectedCompoundIds.value,
         prompt: prompt.value,
         negative_prompt: negativePrompt.value,
+        resolution_id: selectedResolutionId.value,
+        hires_profile_id: selectedHiresProfileId.value,
       })
     } else {
       res = await api.testGenerate({
@@ -131,6 +137,8 @@ async function generate() {
         cfg_scale: showAdvanced.value ? cfgScale.value : 0,
         width: showAdvanced.value ? width.value : 0,
         height: showAdvanced.value ? height.value : 0,
+        resolution_id: selectedResolutionId.value,
+        hires_profile_id: selectedHiresProfileId.value,
       })
     }
     results.value = res || []
@@ -312,6 +320,9 @@ function saveTestState() {
           <input class="form-input" type="number" v-model.number="cfgScale" min="1" max="30" step="0.5" :disabled="generating" />
         </div>
       </div>
+
+      <ResolutionSelector v-model="selectedResolutionId" />
+      <HiresProfileSelector v-model="selectedHiresProfileId" />
 
       <div v-if="generating && progress" style="margin-bottom: 12px;">
         <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">

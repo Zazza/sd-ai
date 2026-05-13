@@ -5,6 +5,8 @@ import { BatchGenerate, BatchCompoundGenerate, SelectFolder } from '../wailsjs/g
 import { api } from '../api.js'
 import { t } from '../i18n/index.js'
 import { useGenerationProgress } from '../composables/useGenerationProgress.js'
+import ResolutionSelector from './ResolutionSelector.vue'
+import HiresProfileSelector from './HiresProfileSelector.vue'
 
 const shared = inject('sharedGenState', null)
 
@@ -22,6 +24,8 @@ const { sdProgress, interrupt: interruptGeneration, reset: resetProgress } = use
 const error = ref('')
 const progress = ref(null)
 const generatedFiles = ref([])
+const selectedResolutionId = ref(null)
+const selectedHiresProfileId = ref(null)
 
 const props = defineProps({
   prefillDescription: { type: String, default: '' },
@@ -107,6 +111,8 @@ async function startGeneration() {
         extra_negative_prompt: batchNegative,
         count: count.value,
         output_folder: outputFolder.value,
+        resolution_id: selectedResolutionId.value,
+        hires_profile_id: selectedHiresProfileId.value,
       })
     } else {
       await BatchGenerate({
@@ -115,6 +121,8 @@ async function startGeneration() {
         negative_prompt: batchNegative,
         count: count.value,
         output_folder: outputFolder.value,
+        resolution_id: selectedResolutionId.value,
+        hires_profile_id: selectedHiresProfileId.value,
       })
     }
   } catch (e) {
@@ -261,6 +269,9 @@ function saveBatchState() {
           <input class="form-input" type="number" v-model.number="count" min="1" max="100" :disabled="generating" style="width: 80px;" />
         </div>
       </div>
+
+      <ResolutionSelector v-model="selectedResolutionId" />
+      <HiresProfileSelector v-model="selectedHiresProfileId" />
 
       <button class="btn btn-primary" style="width: 100%; justify-content: center; padding: 12px; margin-top: 12px;" @click="startGeneration" :disabled="generating || !description.trim() || !outputFolder.trim() || (batchMode === 'compound' && !selectedCompoundPresetId)">
         <span v-if="generating" style="display: inline-flex; align-items: center; gap: 6px;">
