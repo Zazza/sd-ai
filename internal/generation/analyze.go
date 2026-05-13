@@ -950,7 +950,7 @@ func (s *Service) GenerateCompoundImage(params GenerateCompoundImageParams) (*Ge
 			if hiresEnabled {
 				hiresFix = &hiresEnabled
 			}
-			result, err := s.sd.Txt2Img(sd.Txt2ImgRequest{
+			req := sd.Txt2ImgRequest{
 				Prompt:                 prompt,
 				NegativePrompt:         negativePrompt,
 				SamplerName:            samplerName,
@@ -969,11 +969,41 @@ func (s *Service) GenerateCompoundImage(params GenerateCompoundImageParams) (*Ge
 				HiresUpscaler:          hiresUpscaler,
 				DoNotSaveImages:        true,
 				DoNotSaveGrid:          true,
-			})
+			}
+			result, err := s.sd.Txt2Img(req)
 			if err != nil {
 				if ierr := s.checkSDInterrupted(); ierr != nil {
 					return nil, ierr
 				}
+				if hiresFix != nil {
+					s.log.Warn("step %d: SD error with hires fix, retrying without: %s", stepIdx+1, err)
+					time.Sleep(3 * time.Second)
+					req.HiresFix = nil
+					req.HiresUpscale = nil
+					req.HiresDenoisingStrength = nil
+					req.HiresUpscaler = ""
+					req.HiresResizeX = 0
+					req.HiresResizeY = 0
+					req.HiresSecondPassSteps = 0
+					result, err = s.sd.Txt2Img(req)
+					if err == nil && len(result.Images) > 0 {
+						scale := 2.0
+						if hiresUpscale != nil {
+							scale = *hiresUpscale
+						}
+						ds := 0.5
+						if hiresDenoising != nil {
+							ds = *hiresDenoising
+						}
+						s.log.Info("step %d: manual hires upscale: %.1fx, denoise=%.2f", stepIdx+1, scale, ds)
+						hrResult, hrErr := s.manualHiresUpscale(result.Images[0], req, scale, ds)
+						if hrErr == nil && len(hrResult.Images) > 0 {
+							result = hrResult
+						}
+					}
+				}
+			}
+			if err != nil {
 				return nil, fmt.Errorf("step %d (txt2img): %w", stepIdx+1, err)
 			}
 			if len(result.Images) == 0 {
@@ -1157,7 +1187,7 @@ func (s *Service) BatchCompoundGenerate(params BatchCompoundGenerateParams) erro
 				if hiresEnabled {
 					hiresFix = &hiresEnabled
 				}
-				result, err := s.sd.Txt2Img(sd.Txt2ImgRequest{
+				req := sd.Txt2ImgRequest{
 					Prompt:                 prompt,
 					NegativePrompt:         negativePrompt,
 					SamplerName:            samplerName,
@@ -1176,11 +1206,41 @@ func (s *Service) BatchCompoundGenerate(params BatchCompoundGenerateParams) erro
 					HiresUpscaler:          hiresUpscaler,
 					DoNotSaveImages:        true,
 					DoNotSaveGrid:   true,
-				})
+				}
+				result, err := s.sd.Txt2Img(req)
 				if err != nil {
 					if ierr := s.checkSDInterrupted(); ierr != nil {
 						return ierr
 					}
+					if hiresFix != nil {
+						s.log.Warn("batch %d step %d: SD error with hires fix, retrying without: %s", batchIdx+1, stepIdx+1, err)
+						time.Sleep(3 * time.Second)
+						req.HiresFix = nil
+						req.HiresUpscale = nil
+						req.HiresDenoisingStrength = nil
+						req.HiresUpscaler = ""
+						req.HiresResizeX = 0
+						req.HiresResizeY = 0
+						req.HiresSecondPassSteps = 0
+						result, err = s.sd.Txt2Img(req)
+						if err == nil && len(result.Images) > 0 {
+							scale := 2.0
+							if hiresUpscale != nil {
+								scale = *hiresUpscale
+							}
+							ds := 0.5
+							if hiresDenoising != nil {
+								ds = *hiresDenoising
+							}
+							s.log.Info("batch %d step %d: manual hires upscale: %.1fx, denoise=%.2f", batchIdx+1, stepIdx+1, scale, ds)
+							hrResult, hrErr := s.manualHiresUpscale(result.Images[0], req, scale, ds)
+							if hrErr == nil && len(hrResult.Images) > 0 {
+								result = hrResult
+							}
+						}
+					}
+				}
+				if err != nil {
 					return fmt.Errorf("batch %d, step %d (txt2img): %w", batchIdx+1, stepIdx+1, err)
 				}
 				if len(result.Images) == 0 {
