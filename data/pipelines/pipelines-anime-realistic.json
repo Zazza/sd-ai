@@ -1,0 +1,138 @@
+{
+  "version": 1,
+  "exported_at": "2026-05-13T00:00:00Z",
+  "pipelines": [
+    {
+      "name": "Anime -> Realistic",
+      "description": "Convert anime-style art into photorealistic imagery, preserving composition and subject",
+      "steps": [
+        {
+          "step_order": 1,
+          "width": 1024,
+          "height": 1024,
+          "denoising_strength": 1.0,
+          "preset": {
+            "name": "[Pipeline] Anime->Realistic - Anime Base",
+            "preset_type": "pipeline",
+            "type_name": "anime-realistic",
+            "prompt": "anime, masterpiece, best quality, detailed anime face, vibrant colors, cel shading, anime illustration, 1girl, detailed hair, expressive eyes",
+            "negative_prompt": "worst quality, low quality, bad anatomy, bad hands, missing fingers, extra digits, cropped, ugly, mutated, poorly drawn face, mutation, deformed, blurry, bad proportions, extra limbs, cloned face, disfigured, realistic, photorealistic",
+            "sampler": "Euler a",
+            "schedule_type": "Karras",
+            "steps": 28,
+            "cfg_scale": 8.0,
+            "model_name": "veteAnthroAnime_v02",
+            "seed": null,
+            "denoising_strength": null,
+            "clip_skip": 2,
+            "batch_size": null,
+            "batch_count": null,
+            "hires_fix": null,
+            "hires_upscale": null,
+            "hires_denoising_strength": null,
+            "hires_upscaler": "",
+            "vae": "",
+            "tags": "anime, base",
+            "loras": ""
+          }
+        },
+        {
+          "step_order": 2,
+          "width": 1024,
+          "height": 1024,
+          "denoising_strength": 0.5,
+          "preset": {
+            "name": "[Pipeline] Anime->Realistic - Realistic Conversion",
+            "preset_type": "pipeline",
+            "type_name": "anime-realistic",
+            "prompt": "cinematic, dramatic lighting, volumetric fog, depth of field, 8k, photorealistic, film still, anamorphic lens, color grading, natural skin texture, dslr quality, realistic proportions, professional photography",
+            "negative_prompt": "worst quality, low quality, bad anatomy, bad hands, missing fingers, extra digits, cropped, ugly, mutated, poorly drawn face, mutation, deformed, blurry, bad proportions, extra limbs, cloned face, disfigured, anime, cartoon, illustration",
+            "sampler": "DPM++ 2M",
+            "schedule_type": "Karras",
+            "steps": 30,
+            "cfg_scale": 8.0,
+            "model_name": "cyberrealistic_final",
+            "seed": null,
+            "denoising_strength": null,
+            "clip_skip": 1,
+            "batch_size": null,
+            "batch_count": null,
+            "hires_fix": null,
+            "hires_upscale": null,
+            "hires_denoising_strength": null,
+            "hires_upscaler": "",
+            "vae": "",
+            "tags": "realistic, conversion",
+            "loras": ""
+          }
+        }
+      ]
+    },
+    {
+      "name": "Realistic -> Fantasy",
+      "description": "Transform realistic imagery into fantasy art while keeping the subject recognizable",
+      "steps": [
+        {
+          "step_order": 1,
+          "width": 1024,
+          "height": 768,
+          "denoising_strength": 1.0,
+          "preset": {
+            "name": "[Pipeline] Realistic->Fantasy - Realistic Base",
+            "preset_type": "pipeline",
+            "type_name": "anime-realistic",
+            "prompt": "cinematic, dramatic lighting, volumetric fog, depth of field, 8k, photorealistic, film still, anamorphic lens, color grading, rim lights, professional photography",
+            "negative_prompt": "worst quality, low quality, bad anatomy, bad hands, missing fingers, extra digits, cropped, ugly, mutated, poorly drawn face, mutation, deformed, blurry, bad proportions, extra limbs, cloned face, disfigured",
+            "sampler": "DPM++ 2M",
+            "schedule_type": "Karras",
+            "steps": 30,
+            "cfg_scale": 8.0,
+            "model_name": "cyberrealistic_final",
+            "seed": null,
+            "denoising_strength": null,
+            "clip_skip": 1,
+            "batch_size": null,
+            "batch_count": null,
+            "hires_fix": null,
+            "hires_upscale": null,
+            "hires_denoising_strength": null,
+            "hires_upscaler": "",
+            "vae": "",
+            "tags": "realistic, base",
+            "loras": ""
+          }
+        },
+        {
+          "step_order": 2,
+          "width": 1024,
+          "height": 768,
+          "denoising_strength": 0.5,
+          "preset": {
+            "name": "[Pipeline] Realistic->Fantasy - Fantasy Stylization",
+            "preset_type": "pipeline",
+            "type_name": "anime-realistic",
+            "prompt": "score_9, score_8_up, score_7_up, masterpiece, best quality, fantasy art, magical atmosphere, ethereal glow, fantasy elements, enchanted environment, glowing particles, mystical aura, detailed fantasy illustration, concept art, artstation",
+            "negative_prompt": "score_6, score_5, score_4, (worst quality, low quality:1.4), deformed, bad anatomy, bad hands, missing fingers, extra digit, blurry, watermark, text, modern, urban, photograph, plain",
+            "sampler": "DPM++ 2M",
+            "schedule_type": "Karras",
+            "steps": 28,
+            "cfg_scale": 7.0,
+            "model_name": "riMixPONYIllustrious_riMixV2",
+            "seed": null,
+            "denoising_strength": null,
+            "clip_skip": 2,
+            "batch_size": null,
+            "batch_count": null,
+            "hires_fix": null,
+            "hires_upscale": null,
+            "hires_denoising_strength": null,
+            "hires_upscaler": "",
+            "vae": "",
+            "tags": "fantasy, magical",
+            "loras": ""
+          }
+        }
+      ]
+    }
+  ]
+}
