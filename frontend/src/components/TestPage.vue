@@ -168,6 +168,8 @@ onMounted(async () => {
   if (shared) {
     if (!prompt.value) prompt.value = shared.description || ''
     if (!negativePrompt.value) negativePrompt.value = shared.negative || ''
+    if (shared.selectedResolutionId) selectedResolutionId.value = shared.selectedResolutionId
+    if (shared.selectedHiresProfileId !== undefined) selectedHiresProfileId.value = shared.selectedHiresProfileId
   }
   try {
     const s = await api.getSettings()
@@ -182,6 +184,8 @@ onMounted(async () => {
     if (s.test_cfg_scale) cfgScale.value = Number(s.test_cfg_scale)
     if (s.test_width) width.value = Number(s.test_width)
     if (s.test_height) height.value = Number(s.test_height)
+    if (s.test_resolution_id) selectedResolutionId.value = Number(s.test_resolution_id)
+    if (s.test_hires_profile_id) selectedHiresProfileId.value = Number(s.test_hires_profile_id)
   } catch {}
 })
 
@@ -191,6 +195,8 @@ onUnmounted(() => {
   if (shared) {
     if (prompt.value) shared.description = prompt.value
     if (negativePrompt.value) shared.negative = negativePrompt.value
+    shared.selectedResolutionId = selectedResolutionId.value
+    shared.selectedHiresProfileId = selectedHiresProfileId.value
   }
 })
 
@@ -205,6 +211,8 @@ function saveTestState() {
     test_cfg_scale: String(cfgScale.value || ''),
     test_width: String(width.value || ''),
     test_height: String(height.value || ''),
+    test_resolution_id: String(selectedResolutionId.value || ''),
+    test_hires_profile_id: String(selectedHiresProfileId.value || ''),
   }).catch(() => {})
 }
 </script>

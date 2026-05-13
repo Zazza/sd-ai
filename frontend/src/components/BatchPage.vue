@@ -169,6 +169,8 @@ onMounted(async () => {
     if (s.batch_mode) batchMode.value = s.batch_mode
     if (s.batch_output_folder) outputFolder.value = s.batch_output_folder
     if (s.batch_count) count.value = Number(s.batch_count) || 4
+    if (s.batch_resolution_id) selectedResolutionId.value = Number(s.batch_resolution_id)
+    if (s.batch_hires_profile_id) selectedHiresProfileId.value = Number(s.batch_hires_profile_id)
   } catch {}
 
   if (shared) {
@@ -177,6 +179,8 @@ onMounted(async () => {
     if (shared.genMode) batchMode.value = shared.genMode
     if (!props.prefillDescription && shared.description) description.value = shared.description
     if (!props.prefillNegative && shared.negative) negative.value = shared.negative
+    if (shared.selectedResolutionId) selectedResolutionId.value = shared.selectedResolutionId
+    if (shared.selectedHiresProfileId !== undefined) selectedHiresProfileId.value = shared.selectedHiresProfileId
   }
 })
 
@@ -189,6 +193,8 @@ onUnmounted(() => {
     shared.genMode = batchMode.value
     if (description.value) shared.description = description.value
     if (negative.value) shared.negative = negative.value
+    shared.selectedResolutionId = selectedResolutionId.value
+    shared.selectedHiresProfileId = selectedHiresProfileId.value
   }
 })
 
@@ -201,6 +207,8 @@ function saveBatchState() {
     batch_negative: negative.value || '',
     batch_count: String(count.value || ''),
     batch_output_folder: outputFolder.value || '',
+    batch_resolution_id: String(selectedResolutionId.value || ''),
+    batch_hires_profile_id: String(selectedHiresProfileId.value || ''),
   }).catch(() => {})
 }
 </script>
