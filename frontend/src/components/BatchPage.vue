@@ -27,6 +27,13 @@ const generatedFiles = ref([])
 const selectedResolutionId = ref(null)
 const selectedHiresProfileId = ref(null)
 
+watch([selectedResolutionId, selectedHiresProfileId], () => {
+  api.updateSettings({
+    batch_resolution_id: String(selectedResolutionId.value || ''),
+    batch_hires_profile_id: String(selectedHiresProfileId.value || ''),
+  }).catch(() => {})
+})
+
 const props = defineProps({
   prefillDescription: { type: String, default: '' },
   prefillNegative: { type: String, default: '' },

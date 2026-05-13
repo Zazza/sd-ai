@@ -86,6 +86,13 @@ watch(selectedTypeId, () => {
   api.updateSettings({ gen_type_id: String(selectedTypeId.value || '') }).catch(() => {})
 })
 
+watch([selectedResolutionId, selectedHiresProfileId], () => {
+  api.updateSettings({
+    gen_resolution_id: String(selectedResolutionId.value || ''),
+    gen_hires_profile_id: String(selectedHiresProfileId.value || ''),
+  }).catch(() => {})
+})
+
 async function loadKidsMode() {
   try {
     kidsModeActive.value = await api.isKidsModeActive()

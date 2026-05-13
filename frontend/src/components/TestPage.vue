@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, onUnmounted, inject } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, inject } from 'vue'
 import { EventsOn, EventsOff } from '../wailsjs/runtime/runtime'
 import { api } from '../api.js'
 import { t } from '../i18n/index.js'
@@ -34,6 +34,13 @@ const progress = ref(null)
 const results = ref([])
 const selectedResolutionId = ref(null)
 const selectedHiresProfileId = ref(null)
+
+watch([selectedResolutionId, selectedHiresProfileId], () => {
+  api.updateSettings({
+    test_resolution_id: String(selectedResolutionId.value || ''),
+    test_hires_profile_id: String(selectedHiresProfileId.value || ''),
+  }).catch(() => {})
+})
 
 const selectedItems = computed(() => {
   if (mode.value === 'presets') return selectedPresetIds.value
