@@ -27,7 +27,7 @@ function openCreate() {
   editing.value = null
   formName.value = ''
   formDescription.value = ''
-  formSteps.value = [{ preset_id: null, width: 512, height: 512, denoising_strength: 0.5 }]
+  formSteps.value = [{ preset_id: null, denoising_strength: 0.5 }]
   showForm.value = true
   error.value = ''
 }
@@ -38,8 +38,6 @@ function openEdit(cp) {
   formDescription.value = cp.description
   formSteps.value = cp.steps.map(s => ({
     preset_id: s.preset_id,
-    width: s.width || 512,
-    height: s.height || 512,
     denoising_strength: s.denoising_strength || 0.5,
   }))
   showForm.value = true
@@ -53,7 +51,7 @@ function cancelForm() {
 }
 
 function addStep() {
-  formSteps.value.push({ preset_id: null, width: 512, height: 512, denoising_strength: 0.5 })
+  formSteps.value.push({ preset_id: null, denoising_strength: 0.5 })
 }
 
 function removeStep(idx) {
@@ -92,8 +90,6 @@ async function saveCompound() {
     steps: formSteps.value.map((s, i) => ({
       step_order: i + 1,
       preset_id: s.preset_id,
-      width: s.width,
-      height: s.height,
       denoising_strength: s.denoising_strength,
     })),
   }
@@ -111,6 +107,20 @@ async function saveCompound() {
   } catch (e) {
     error.value = String(e)
   }
+}
+
+async function handleDuplicate(cp) {
+  const { id, created_at, updated_at, steps, ...data } = cp
+  await api.createCompoundPreset({
+    ...data,
+    name: data.name + ' (copy)',
+    steps: steps.map((s, i) => ({
+      step_order: i + 1,
+      preset_id: s.preset_id,
+      denoising_strength: s.denoising_strength,
+    })),
+  })
+  await loadData()
 }
 
 async function deleteCompound(id) {
@@ -177,17 +187,6 @@ onMounted(loadData)
               </select>
             </div>
 
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
-              <div class="form-group" style="margin: 0;">
-                <label class="form-label">{{ t('compound.label_width') }}</label>
-                <input class="form-input" type="number" v-model.number="step.width" min="64" max="2048" step="64" />
-              </div>
-              <div class="form-group" style="margin: 0;">
-                <label class="form-label">{{ t('compound.label_height') }}</label>
-                <input class="form-input" type="number" v-model.number="step.height" min="64" max="2048" step="64" />
-              </div>
-            </div>
-
             <div v-if="idx > 0" class="form-group" style="margin: 0;">
               <label class="form-label">{{ t('compound.label_denoising') }}</label>
               <input class="form-input" type="number" v-model.number="step.denoising_strength" min="0" max="1" step="0.05" />
@@ -215,6 +214,7 @@ onMounted(loadData)
           </div>
           <div style="display: flex; gap: 6px;">
             <button class="btn btn-sm btn-secondary" @click="openEdit(cp)">{{ t('compound.btn_edit') }}</button>
+            <button class="btn btn-sm btn-secondary" @click="handleDuplicate(cp)">{{ t('presets.btn_duplicate') }}</button>
             <button class="btn btn-sm btn-secondary" style="color: var(--error, #e55);" @click="deleteCompound(cp.id)">{{ t('compound.btn_delete') }}</button>
           </div>
         </div>
@@ -224,7 +224,6 @@ onMounted(loadData)
             <div v-if="idx > 0" style="color: var(--text-dim);">&#8594;</div>
             <div style="background: var(--surface-2); border-radius: 4px; padding: 4px 10px; font-size: 12px;">
               <span style="font-weight: 600;">{{ getPresetName(step.preset_id) }}</span>
-              <span style="color: var(--text-dim);">{{ step.width }}&times;{{ step.height }}</span>
             </div>
           </template>
         </div>

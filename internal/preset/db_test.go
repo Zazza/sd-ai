@@ -887,8 +887,8 @@ func TestCompoundPreset_CRUD(t *testing.T) {
 		Name:        "Multi-step",
 		Description: "Background + character",
 		Steps: []CompoundPresetStep{
-			{PresetID: p1.ID, Width: 1024, Height: 768, DenoisingStrength: 1.0},
-			{PresetID: p2.ID, Width: 1024, Height: 768, DenoisingStrength: 0.5},
+			{PresetID: p1.ID, DenoisingStrength: 1.0},
+			{PresetID: p2.ID, DenoisingStrength: 0.5},
 		},
 	}
 	err := db.CreateCompoundPreset(cp)
@@ -902,7 +902,6 @@ func TestCompoundPreset_CRUD(t *testing.T) {
 	require.Len(t, got.Steps, 2)
 	assert.Equal(t, p1.ID, got.Steps[0].PresetID)
 	assert.Equal(t, int(1), got.Steps[0].StepOrder)
-	assert.Equal(t, 1024, got.Steps[0].Width)
 	assert.Equal(t, 1.0, got.Steps[0].DenoisingStrength)
 	assert.Equal(t, p2.ID, got.Steps[1].PresetID)
 	assert.Equal(t, int(2), got.Steps[1].StepOrder)
@@ -911,7 +910,7 @@ func TestCompoundPreset_CRUD(t *testing.T) {
 	got.Name = "Updated"
 	got.Description = "Updated desc"
 	got.Steps = []CompoundPresetStep{
-		{PresetID: p2.ID, Width: 512, Height: 512, DenoisingStrength: 0.8},
+		{PresetID: p2.ID, DenoisingStrength: 0.8},
 	}
 	err = db.UpdateCompoundPreset(got)
 	require.NoError(t, err)
@@ -937,8 +936,8 @@ func TestCompoundPreset_List(t *testing.T) {
 	p := &Preset{Name: "step"}
 	require.NoError(t, db.Create(p))
 
-	cp1 := &CompoundPreset{Name: "First", Steps: []CompoundPresetStep{{PresetID: p.ID, Width: 512, Height: 512, DenoisingStrength: 0.5}}}
-	cp2 := &CompoundPreset{Name: "Second", Steps: []CompoundPresetStep{{PresetID: p.ID, Width: 512, Height: 512, DenoisingStrength: 0.5}}}
+	cp1 := &CompoundPreset{Name: "First", Steps: []CompoundPresetStep{{PresetID: p.ID, DenoisingStrength: 0.5}}}
+	cp2 := &CompoundPreset{Name: "Second", Steps: []CompoundPresetStep{{PresetID: p.ID, DenoisingStrength: 0.5}}}
 	require.NoError(t, db.CreateCompoundPreset(cp1))
 	require.NoError(t, db.CreateCompoundPreset(cp2))
 

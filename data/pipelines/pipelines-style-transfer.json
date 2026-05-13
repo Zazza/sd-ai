@@ -8,8 +8,6 @@
       "steps": [
         {
           "step_order": 1,
-          "width": 1024,
-          "height": 1024,
           "denoising_strength": 1.0,
           "preset": {
             "name": "[Pipeline] Oil Painting - Base Realistic",
@@ -38,8 +36,6 @@
         },
         {
           "step_order": 2,
-          "width": 1024,
-          "height": 1024,
           "denoising_strength": 0.55,
           "preset": {
             "name": "[Pipeline] Oil Painting - Brushstroke Style",
@@ -74,8 +70,6 @@
       "steps": [
         {
           "step_order": 1,
-          "width": 1024,
-          "height": 1024,
           "denoising_strength": 1.0,
           "preset": {
             "name": "[Pipeline] Anime Portrait - Base Realistic",
@@ -104,8 +98,6 @@
         },
         {
           "step_order": 2,
-          "width": 1024,
-          "height": 1024,
           "denoising_strength": 0.5,
           "preset": {
             "name": "[Pipeline] Anime Portrait - Anime Conversion",
@@ -140,8 +132,6 @@
       "steps": [
         {
           "step_order": 1,
-          "width": 1024,
-          "height": 768,
           "denoising_strength": 1.0,
           "preset": {
             "name": "[Pipeline] Cinematic - Base Realistic",
@@ -170,8 +160,6 @@
         },
         {
           "step_order": 2,
-          "width": 1024,
-          "height": 768,
           "denoising_strength": 0.45,
           "preset": {
             "name": "[Pipeline] Cinematic - Color Grading",
@@ -206,8 +194,6 @@
       "steps": [
         {
           "step_order": 1,
-          "width": 1024,
-          "height": 1024,
           "denoising_strength": 1.0,
           "preset": {
             "name": "[Pipeline] Fantasy - Base Realistic",
@@ -236,8 +222,6 @@
         },
         {
           "step_order": 2,
-          "width": 1024,
-          "height": 1024,
           "denoising_strength": 0.5,
           "preset": {
             "name": "[Pipeline] Fantasy - Magical Stylization",
@@ -272,8 +256,6 @@
       "steps": [
         {
           "step_order": 1,
-          "width": 1024,
-          "height": 768,
           "denoising_strength": 1.0,
           "preset": {
             "name": "[Pipeline] Dark Gothic - Base Realistic",
@@ -302,8 +284,6 @@
         },
         {
           "step_order": 2,
-          "width": 1024,
-          "height": 768,
           "denoising_strength": 0.5,
           "preset": {
             "name": "[Pipeline] Dark Gothic - Gothic Atmosphere",
@@ -338,8 +318,6 @@
       "steps": [
         {
           "step_order": 1,
-          "width": 1024,
-          "height": 1024,
           "denoising_strength": 1.0,
           "preset": {
             "name": "[Pipeline] Watercolor - Base Realistic",
@@ -368,8 +346,6 @@
         },
         {
           "step_order": 2,
-          "width": 1024,
-          "height": 1024,
           "denoising_strength": 0.6,
           "preset": {
             "name": "[Pipeline] Watercolor - Paint Wash",

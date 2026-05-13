@@ -769,8 +769,6 @@ export namespace preset {
 	    compound_preset_id: number;
 	    step_order: number;
 	    preset_id: number;
-	    width: number;
-	    height: number;
 	    denoising_strength: number;
 	    resolution_id?: number;
 	    preset?: Preset;
@@ -785,8 +783,6 @@ export namespace preset {
 	        this.compound_preset_id = source["compound_preset_id"];
 	        this.step_order = source["step_order"];
 	        this.preset_id = source["preset_id"];
-	        this.width = source["width"];
-	        this.height = source["height"];
 	        this.denoising_strength = source["denoising_strength"];
 	        this.resolution_id = source["resolution_id"];
 	        this.preset = this.convertValues(source["preset"], Preset);

@@ -1763,7 +1763,7 @@ func TestBatchCompoundGenerate_Success(t *testing.T) {
 		Name:        "test-compound",
 		Description: "test",
 		Steps: []preset.CompoundPresetStep{
-			{PresetID: p.ID, Width: 512, Height: 512, DenoisingStrength: 0.5},
+			{PresetID: p.ID, DenoisingStrength: 0.5},
 		},
 	}
 	require.NoError(t, db.CreateCompoundPreset(cp))
@@ -1875,8 +1875,8 @@ func TestGenerateCompoundImage_Success(t *testing.T) {
 		Name:        "two-step",
 		Description: "two steps",
 		Steps: []preset.CompoundPresetStep{
-			{PresetID: p.ID, Width: 512, Height: 512},
-			{PresetID: p.ID, Width: 768, Height: 768, DenoisingStrength: 0.6},
+			{PresetID: p.ID},
+			{PresetID: p.ID, DenoisingStrength: 0.6},
 		},
 	}
 	require.NoError(t, db.CreateCompoundPreset(cp))
@@ -1954,7 +1954,7 @@ func TestTestCompoundGenerate_Success(t *testing.T) {
 		Name:        "test-cp",
 		Description: "test",
 		Steps: []preset.CompoundPresetStep{
-			{PresetID: p.ID, Width: 512, Height: 512},
+			{PresetID: p.ID},
 		},
 	}
 	require.NoError(t, db.CreateCompoundPreset(cp))

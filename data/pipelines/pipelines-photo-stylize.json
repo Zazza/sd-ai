@@ -8,8 +8,6 @@
       "steps": [
         {
           "step_order": 1,
-          "width": 768,
-          "height": 1024,
           "denoising_strength": 1.0,
           "preset": {
             "name": "[Pipeline] Renaissance - Base Portrait",
@@ -38,8 +36,6 @@
         },
         {
           "step_order": 2,
-          "width": 768,
-          "height": 1024,
           "denoising_strength": 0.5,
           "preset": {
             "name": "[Pipeline] Renaissance - Classical Painting",
@@ -74,8 +70,6 @@
       "steps": [
         {
           "step_order": 1,
-          "width": 1024,
-          "height": 1024,
           "denoising_strength": 1.0,
           "preset": {
             "name": "[Pipeline] Pencil Sketch - Base Portrait",
@@ -104,8 +98,6 @@
         },
         {
           "step_order": 2,
-          "width": 1024,
-          "height": 1024,
           "denoising_strength": 0.65,
           "preset": {
             "name": "[Pipeline] Pencil Sketch - Graphite Drawing",
@@ -140,8 +132,6 @@
       "steps": [
         {
           "step_order": 1,
-          "width": 1024,
-          "height": 1024,
           "denoising_strength": 1.0,
           "preset": {
             "name": "[Pipeline] Pop Art - Base Portrait",
@@ -170,8 +160,6 @@
         },
         {
           "step_order": 2,
-          "width": 1024,
-          "height": 1024,
           "denoising_strength": 0.6,
           "preset": {
             "name": "[Pipeline] Pop Art - Andy Warhol Style",
@@ -206,8 +194,6 @@
       "steps": [
         {
           "step_order": 1,
-          "width": 1024,
-          "height": 768,
           "denoising_strength": 1.0,
           "preset": {
             "name": "[Pipeline] Vintage Film - Base Portrait",
@@ -236,8 +222,6 @@
         },
         {
           "step_order": 2,
-          "width": 1024,
-          "height": 768,
           "denoising_strength": 0.4,
           "preset": {
             "name": "[Pipeline] Vintage Film - 1970s Grain",
@@ -272,8 +256,6 @@
       "steps": [
         {
           "step_order": 1,
-          "width": 1024,
-          "height": 1024,
           "denoising_strength": 1.0,
           "preset": {
             "name": "[Pipeline] Comic Book - Base Portrait",
@@ -302,8 +284,6 @@
         },
         {
           "step_order": 2,
-          "width": 1024,
-          "height": 1024,
           "denoising_strength": 0.55,
           "preset": {
             "name": "[Pipeline] Comic Book - Ink and Halftone",
@@ -338,8 +318,6 @@
       "steps": [
         {
           "step_order": 1,
-          "width": 768,
-          "height": 1024,
           "denoising_strength": 1.0,
           "preset": {
             "name": "[Pipeline] Fashion Editorial - Base Photo",
@@ -368,8 +346,6 @@
         },
         {
           "step_order": 2,
-          "width": 768,
-          "height": 1024,
           "denoising_strength": 0.4,
           "preset": {
             "name": "[Pipeline] Fashion Editorial - Studio Retouch",

@@ -720,13 +720,15 @@ func (s *Service) generateFromImageCompound(params GenerateFromImageParams, tags
 
 		samplerName := buildSamplerName(p.Sampler, p.ScheduleType)
 
-		width := step.Width
-		if width == 0 {
-			width = 512
+		var width, height int
+		if step.ResolutionID != nil && *step.ResolutionID > 0 {
+			if r, err := s.db.GetResolution(*step.ResolutionID); err == nil {
+				width = r.Width
+				height = r.Height
+			}
 		}
-		height := step.Height
-		if height == 0 {
-			height = 512
+		if width == 0 || height == 0 {
+			width, height = s.resolveResolution(p, params.ResolutionID)
 		}
 
 		clipSkip := 1
@@ -918,8 +920,7 @@ func (s *Service) GenerateCompoundImage(params GenerateCompoundImageParams) (*Ge
 
 		samplerName := buildSamplerName(p.Sampler, p.ScheduleType)
 
-		width := step.Width
-		height := step.Height
+		var width, height int
 		if step.ResolutionID != nil && *step.ResolutionID > 0 {
 			if r, err := s.db.GetResolution(*step.ResolutionID); err == nil {
 				width = r.Width
@@ -927,13 +928,7 @@ func (s *Service) GenerateCompoundImage(params GenerateCompoundImageParams) (*Ge
 			}
 		}
 		if width == 0 || height == 0 {
-			rw, rh := s.resolveResolution(p, params.ResolutionID)
-			if width == 0 {
-				width = rw
-			}
-			if height == 0 {
-				height = rh
-			}
+			width, height = s.resolveResolution(p, params.ResolutionID)
 		}
 
 		hiresEnabled, hiresUpscale, hiresDenoising, hiresUpscaler := s.resolveHires(p, params.HiresProfileID)
@@ -1155,8 +1150,7 @@ func (s *Service) BatchCompoundGenerate(params BatchCompoundGenerateParams) erro
 
 			samplerName := buildSamplerName(p.Sampler, p.ScheduleType)
 
-			width := step.Width
-			height := step.Height
+			var width, height int
 			if step.ResolutionID != nil && *step.ResolutionID > 0 {
 				if r, err := s.db.GetResolution(*step.ResolutionID); err == nil {
 					width = r.Width
@@ -1164,13 +1158,7 @@ func (s *Service) BatchCompoundGenerate(params BatchCompoundGenerateParams) erro
 				}
 			}
 			if width == 0 || height == 0 {
-				rw, rh := s.resolveResolution(p, params.ResolutionID)
-				if width == 0 {
-					width = rw
-				}
-				if height == 0 {
-					height = rh
-				}
+				width, height = s.resolveResolution(p, params.ResolutionID)
 			}
 
 			hiresEnabled, hiresUpscale, hiresDenoising, hiresUpscaler := s.resolveHires(p, params.HiresProfileID)
@@ -1396,8 +1384,7 @@ func (s *Service) TestCompoundGenerate(params TestCompoundGenerateParams) ([]Tes
 
 			samplerName := buildSamplerName(p.Sampler, p.ScheduleType)
 
-			width := step.Width
-			height := step.Height
+			var width, height int
 			if step.ResolutionID != nil && *step.ResolutionID > 0 {
 				if r, err := s.db.GetResolution(*step.ResolutionID); err == nil {
 					width = r.Width
@@ -1405,13 +1392,7 @@ func (s *Service) TestCompoundGenerate(params TestCompoundGenerateParams) ([]Tes
 				}
 			}
 			if width == 0 || height == 0 {
-				rw, rh := s.resolveResolution(p, params.ResolutionID)
-				if width == 0 {
-					width = rw
-				}
-				if height == 0 {
-					height = rh
-				}
+				width, height = s.resolveResolution(p, params.ResolutionID)
 			}
 
 			hiresEnabled, hiresUpscale, hiresDenoising, hiresUpscaler := s.resolveHires(p, params.HiresProfileID)

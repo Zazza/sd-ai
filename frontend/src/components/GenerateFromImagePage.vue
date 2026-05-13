@@ -453,8 +453,8 @@ watch(mode, (newMode) => {
   }
   if (newMode === 'remove') {
     denoisingStrength.value = 0.6
-    maskBlur.value = 4
-    inpaintFill.value = 0
+    maskBlur.value = 8
+    inpaintFill.value = 1
     inpaintFullRes.value = true
   }
 })

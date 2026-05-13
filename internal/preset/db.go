@@ -94,6 +94,10 @@ func Open(dbPath string) (*DB, error) {
 		return nil, fmt.Errorf("migrate v17: %w", err)
 	}
 
+	if err := migrateV18(db); err != nil {
+		return nil, fmt.Errorf("migrate v18: %w", err)
+	}
+
 	return &DB{db: db}, nil
 }
 
@@ -681,7 +685,7 @@ func (d *DB) GetCompoundPreset(id int64) (*CompoundPreset, error) {
 
 func (d *DB) getCompoundSteps(compoundPresetID int64) ([]CompoundPresetStep, error) {
 	rows, err := d.db.Query(
-		`SELECT id, compound_preset_id, step_order, preset_id, width, height, denoising_strength, resolution_id FROM compound_preset_steps WHERE compound_preset_id = ? ORDER BY step_order`,
+		`SELECT id, compound_preset_id, step_order, preset_id, denoising_strength, resolution_id FROM compound_preset_steps WHERE compound_preset_id = ? ORDER BY step_order`,
 		compoundPresetID,
 	)
 	if err != nil {
@@ -693,7 +697,7 @@ func (d *DB) getCompoundSteps(compoundPresetID int64) ([]CompoundPresetStep, err
 	for rows.Next() {
 		var s CompoundPresetStep
 		var resolutionID sql.NullInt64
-		if err := rows.Scan(&s.ID, &s.CompoundPresetID, &s.StepOrder, &s.PresetID, &s.Width, &s.Height, &s.DenoisingStrength, &resolutionID); err != nil {
+		if err := rows.Scan(&s.ID, &s.CompoundPresetID, &s.StepOrder, &s.PresetID, &s.DenoisingStrength, &resolutionID); err != nil {
 			return nil, err
 		}
 		if resolutionID.Valid {
@@ -719,8 +723,8 @@ func (d *DB) CreateCompoundPreset(cp *CompoundPreset) error {
 
 	for i, step := range cp.Steps {
 		_, err := tx.Exec(
-			`INSERT INTO compound_preset_steps (compound_preset_id, step_order, preset_id, width, height, denoising_strength, resolution_id) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-			cp.ID, i+1, step.PresetID, step.Width, step.Height, step.DenoisingStrength, step.ResolutionID,
+			`INSERT INTO compound_preset_steps (compound_preset_id, step_order, preset_id, denoising_strength, resolution_id) VALUES (?, ?, ?, ?, ?)`,
+			cp.ID, i+1, step.PresetID, step.DenoisingStrength, step.ResolutionID,
 		)
 		if err != nil {
 			tx.Rollback()
@@ -752,8 +756,8 @@ func (d *DB) UpdateCompoundPreset(cp *CompoundPreset) error {
 
 	for i, step := range cp.Steps {
 		_, err := tx.Exec(
-			`INSERT INTO compound_preset_steps (compound_preset_id, step_order, preset_id, width, height, denoising_strength, resolution_id) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-			cp.ID, i+1, step.PresetID, step.Width, step.Height, step.DenoisingStrength, step.ResolutionID,
+			`INSERT INTO compound_preset_steps (compound_preset_id, step_order, preset_id, denoising_strength, resolution_id) VALUES (?, ?, ?, ?, ?)`,
+			cp.ID, i+1, step.PresetID, step.DenoisingStrength, step.ResolutionID,
 		)
 		if err != nil {
 			tx.Rollback()
@@ -1116,4 +1120,15 @@ func migrateV16(db *sql.DB) error {
 func migrateV17(db *sql.DB) error {
 	_, err := db.Exec("UPDATE hires_profiles SET upscaler = 'Latent' WHERE upscaler = '' OR upscaler IS NULL")
 	return err
+}
+
+func migrateV18(db *sql.DB) error {
+	cols := []string{"width", "height"}
+	for _, col := range cols {
+		_, err := db.Exec("ALTER TABLE compound_preset_steps DROP COLUMN " + col)
+		if err != nil && !strings.Contains(err.Error(), "no such column") {
+			return err
+		}
+	}
+	return nil
 }

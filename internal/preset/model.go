@@ -70,8 +70,6 @@ type CompoundPresetStep struct {
 	CompoundPresetID  int64   `json:"compound_preset_id"`
 	StepOrder         int     `json:"step_order"`
 	PresetID          int64   `json:"preset_id"`
-	Width             int     `json:"width"`
-	Height            int     `json:"height"`
 	DenoisingStrength float64 `json:"denoising_strength"`
 	ResolutionID      *int64  `json:"resolution_id"`
 	Preset            *Preset `json:"preset,omitempty"`

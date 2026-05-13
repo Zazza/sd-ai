@@ -4,6 +4,18 @@ All notable changes to SD Studio are documented here.
 
 ## [Unreleased]
 
+## [0.6.1] — 2026-05-13
+
+### Fixed
+- Remove tool: fixed inpaint parameters — use Original fill + denoising 0.6 for proper object removal instead of generating new content
+
+### Changed
+- Removed `width`/`height` from pipeline (compound preset) steps — resolution now comes from the resolution selector on generation page, same as regular presets
+- DB migration v18: drops `width`/`height` columns from `compound_preset_steps` table
+
+### Added
+- Duplicate button for pipelines (Presets → Pipelines)
+
 ## [0.6.0] — 2026-05-13
 
 ### Added
