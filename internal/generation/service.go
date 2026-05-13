@@ -1275,7 +1275,7 @@ func (s *Service) TestGenerate(params TestGenerateParams) ([]TestGenerateResultI
 			hiresFix = &hiresEnabled
 		}
 
-		result, err := s.sd.Txt2Img(sd.Txt2ImgRequest{
+		req := sd.Txt2ImgRequest{
 			Prompt:                 prompt,
 			NegativePrompt:         negPrompt,
 			SamplerName:            samplerName,
@@ -1294,7 +1294,40 @@ func (s *Service) TestGenerate(params TestGenerateParams) ([]TestGenerateResultI
 			HiresUpscaler:          hiresUpscaler,
 			DoNotSaveImages:        true,
 			DoNotSaveGrid:          true,
-		})
+		}
+		result, err := s.sd.Txt2Img(req)
+		if err != nil {
+			if ierr := s.checkSDInterrupted(); ierr != nil {
+				return nil, ierr
+			}
+			if hiresFix != nil {
+				s.log.Warn("compound step %d: SD error with hires fix, retrying without: %s", idx+1, err)
+				time.Sleep(3 * time.Second)
+				req.HiresFix = nil
+				req.HiresUpscale = nil
+				req.HiresDenoisingStrength = nil
+				req.HiresUpscaler = ""
+				req.HiresResizeX = 0
+				req.HiresResizeY = 0
+				req.HiresSecondPassSteps = 0
+				result, err = s.sd.Txt2Img(req)
+				if err == nil && len(result.Images) > 0 {
+					scale := 2.0
+					if hiresUpscale != nil {
+						scale = *hiresUpscale
+					}
+					ds := 0.5
+					if hiresDenoising != nil {
+						ds = *hiresDenoising
+					}
+					s.log.Info("compound step %d: manual hires upscale: %.1fx, denoise=%.2f", idx+1, scale, ds)
+					hrResult, hrErr := s.manualHiresUpscale(result.Images[0], req, scale, ds)
+					if hrErr == nil && len(hrResult.Images) > 0 {
+						result = hrResult
+					}
+				}
+			}
+		}
 		if err != nil {
 			item.Error = err.Error()
 			item.Sampler = sampler
