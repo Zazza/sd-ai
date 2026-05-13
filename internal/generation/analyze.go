@@ -889,12 +889,22 @@ func (s *Service) GenerateCompoundImage(params GenerateCompoundImageParams) (*Ge
 
 	var lastImage string
 	var lastInfo json.RawMessage
+	isLastStep := false
+	lastStepIdx := len(cp.Steps) - 1
+
+	var lastPrompt, lastNegativePrompt string
+	var lastSamplerName string
+	var lastWidth, lastHeight int
+	var lastClipSkip int
+	var lastBatchSize, lastBatchCount int
 
 	for stepIdx, step := range cp.Steps {
 		p, err := s.db.Get(step.PresetID)
 		if err != nil {
 			return nil, fmt.Errorf("step %d: preset not found: %w", stepIdx+1, err)
 		}
+
+		isLastStep = stepIdx == lastStepIdx
 
 		s.emitter.Emit("compound:progress", map[string]any{
 			"current": stepIdx + 1,
@@ -937,8 +947,6 @@ func (s *Service) GenerateCompoundImage(params GenerateCompoundImageParams) (*Ge
 			width, height = s.resolveResolution(p, params.ResolutionID)
 		}
 
-		hiresEnabled, hiresUpscale, hiresDenoising, hiresUpscaler := s.resolveHires(p, params.HiresProfileID)
-
 		clipSkip := 1
 		if p.ClipSkip != nil {
 			clipSkip = *p.ClipSkip
@@ -947,64 +955,27 @@ func (s *Service) GenerateCompoundImage(params GenerateCompoundImageParams) (*Ge
 		if stepIdx == 0 {
 			batchSize := 1
 			batchCount := 1
-			var hiresFix *bool
-			if hiresEnabled {
-				hiresFix = &hiresEnabled
-			}
 			req := sd.Txt2ImgRequest{
-				Prompt:                 prompt,
-				NegativePrompt:         negativePrompt,
-				SamplerName:            samplerName,
-				Scheduler:              p.ScheduleType,
-				Steps:                  p.Steps,
-				CfgScale:               p.CfgScale,
-				Width:                  width,
-				Height:                 height,
-				Seed:                   p.Seed,
-				ClipSkip:               &clipSkip,
-				BatchSize:              &batchSize,
-				BatchCount:             &batchCount,
-				HiresFix:               hiresFix,
-				HiresUpscale:           hiresUpscale,
-				HiresDenoisingStrength: hiresDenoising,
-				HiresUpscaler:          hiresUpscaler,
-				DoNotSaveImages:        true,
-				DoNotSaveGrid:          true,
+				Prompt:          prompt,
+				NegativePrompt:  negativePrompt,
+				SamplerName:     samplerName,
+				Scheduler:       p.ScheduleType,
+				Steps:           p.Steps,
+				CfgScale:        p.CfgScale,
+				Width:           width,
+				Height:          height,
+				Seed:            p.Seed,
+				ClipSkip:        &clipSkip,
+				BatchSize:       &batchSize,
+				BatchCount:      &batchCount,
+				DoNotSaveImages: true,
+				DoNotSaveGrid:   true,
 			}
 			result, err := s.sd.Txt2Img(req)
 			if err != nil {
 				if ierr := s.checkSDInterrupted(); ierr != nil {
 					return nil, ierr
 				}
-				if hiresFix != nil {
-					s.log.Warn("step %d: SD error with hires fix, retrying without: %s", stepIdx+1, err)
-					time.Sleep(3 * time.Second)
-					req.HiresFix = nil
-					req.HiresUpscale = nil
-					req.HiresDenoisingStrength = nil
-					req.HiresUpscaler = ""
-					req.HiresResizeX = 0
-					req.HiresResizeY = 0
-					req.HiresSecondPassSteps = 0
-					result, err = s.sd.Txt2Img(req)
-					if err == nil && len(result.Images) > 0 {
-						scale := 2.0
-						if hiresUpscale != nil {
-							scale = *hiresUpscale
-						}
-						ds := 0.5
-						if hiresDenoising != nil {
-							ds = *hiresDenoising
-						}
-						s.log.Info("step %d: manual hires upscale: %.1fx, denoise=%.2f, upscaler=%s", stepIdx+1, scale, ds, hiresUpscaler)
-						hrResult, hrErr := s.manualHiresUpscale(result.Images[0], req, scale, ds, hiresUpscaler)
-						if hrErr == nil && len(hrResult.Images) > 0 {
-							result = hrResult
-						}
-					}
-				}
-			}
-			if err != nil {
 				return nil, fmt.Errorf("step %d (txt2img): %w", stepIdx+1, err)
 			}
 			if len(result.Images) == 0 {
@@ -1015,6 +986,17 @@ func (s *Service) GenerateCompoundImage(params GenerateCompoundImageParams) (*Ge
 			}
 			lastImage = result.Images[0]
 			lastInfo = result.Info
+
+			if isLastStep {
+				lastPrompt = prompt
+				lastNegativePrompt = negativePrompt
+				lastSamplerName = samplerName
+				lastWidth = width
+				lastHeight = height
+				lastClipSkip = clipSkip
+				lastBatchSize = batchSize
+				lastBatchCount = batchCount
+			}
 		} else {
 			denoising := step.DenoisingStrength
 			if denoising <= 0 {
@@ -1054,6 +1036,52 @@ func (s *Service) GenerateCompoundImage(params GenerateCompoundImageParams) (*Ge
 			}
 			lastImage = result.Images[0]
 			lastInfo = result.Info
+
+			if isLastStep {
+				lastPrompt = prompt
+				lastNegativePrompt = negativePrompt
+				lastSamplerName = samplerName
+				lastWidth = width
+				lastHeight = height
+				lastClipSkip = clipSkip
+				lastBatchSize = batchSize
+				lastBatchCount = batchCount
+			}
+		}
+	}
+
+	hiresEnabled, hiresUpscale, hiresDenoising, hiresUpscaler := s.resolveHires(&preset.Preset{}, params.HiresProfileID)
+	if hiresEnabled && lastImage != "" {
+		scale := 2.0
+		if hiresUpscale != nil {
+			scale = *hiresUpscale
+		}
+		ds := 0.45
+		if hiresDenoising != nil {
+			ds = *hiresDenoising
+		}
+		s.log.Info("compound: applying hires upscale on final step: %.1fx, denoise=%.2f, upscaler=%s", scale, ds, hiresUpscaler)
+
+		hiresReq := sd.Txt2ImgRequest{
+			Prompt:          lastPrompt,
+			NegativePrompt:  lastNegativePrompt,
+			SamplerName:     lastSamplerName,
+			Steps:           20,
+			CfgScale:        7.0,
+			Width:           lastWidth,
+			Height:          lastHeight,
+			ClipSkip:        &lastClipSkip,
+			BatchSize:       &lastBatchSize,
+			BatchCount:      &lastBatchCount,
+			DoNotSaveImages: true,
+			DoNotSaveGrid:   true,
+		}
+		hrResult, hrErr := s.manualHiresUpscale(lastImage, hiresReq, scale, ds, hiresUpscaler)
+		if hrErr != nil {
+			s.log.Warn("compound: hires upscale failed, using base image: %s", hrErr)
+		} else if len(hrResult.Images) > 0 {
+			lastImage = hrResult.Images[0]
+			lastInfo = hrResult.Info
 		}
 	}
 
