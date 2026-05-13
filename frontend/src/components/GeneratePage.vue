@@ -518,6 +518,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   document.removeEventListener('keydown', onKeydown)
+  saveGenState()
   if (shared) {
     shared.selectedPresetId = selectedPresetId.value
     shared.selectedCompoundPresetId = selectedCompoundPresetId.value
