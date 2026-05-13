@@ -112,6 +112,7 @@ func (m *mockSDService) SetURL(baseURL string) {
 }
 func (m *mockSDService) SetModel(string) error { return nil }
 func (m *mockSDService) SetVAE(string) error   { return nil }
+func (m *mockSDService) UpscaleImage(string, string, float64) (string, error) { return "", nil }
 
 func testService(t *testing.T, llmSvc *mockLLMService, sdSvc *mockSDService) (*Service, *preset.DB) {
 	t.Helper()

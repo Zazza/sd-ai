@@ -98,6 +98,10 @@ func Open(dbPath string) (*DB, error) {
 		return nil, fmt.Errorf("migrate v18: %w", err)
 	}
 
+	if err := migrateV19(db); err != nil {
+		return nil, fmt.Errorf("migrate v19: %w", err)
+	}
+
 	return &DB{db: db}, nil
 }
 
@@ -1050,10 +1054,10 @@ func migrateV12(db *sql.DB) error {
 		denoisingStrength float64
 		upscaler          string
 	}{
-		{"Light", 1.5, 0.3, "Latent"},
-		{"Standard", 2.0, 0.45, "Latent"},
-		{"Heavy", 2.5, 0.55, "Latent"},
-		{"Max", 4.0, 0.4, "Latent"},
+		{"Light", 1.5, 0.3, "R-ESRGAN 4x+"},
+		{"Standard", 2.0, 0.45, "R-ESRGAN 4x+"},
+		{"Heavy", 2.5, 0.55, "R-ESRGAN 4x+"},
+		{"Max", 4.0, 0.4, "R-ESRGAN 4x+"},
 	}
 	for _, h := range builtins {
 		_, err := db.Exec(
@@ -1131,4 +1135,9 @@ func migrateV18(db *sql.DB) error {
 		}
 	}
 	return nil
+}
+
+func migrateV19(db *sql.DB) error {
+	_, err := db.Exec("UPDATE hires_profiles SET upscaler = 'R-ESRGAN 4x+' WHERE upscaler = 'Latent'")
+	return err
 }

@@ -161,6 +161,10 @@ func (m *mockSD) SetVAE(vaeName string) error {
 	return nil
 }
 
+func (m *mockSD) UpscaleImage(base64Img string, upscaler string, scale float64) (string, error) {
+	return "", fmt.Errorf("not implemented")
+}
+
 type mockEmitter struct {
 	mu     sync.Mutex
 	events []emittedEvent

@@ -140,6 +140,10 @@ func (m *mockSD) SetVAE(_ string) error {
 	return nil
 }
 
+func (m *mockSD) UpscaleImage(base64Img string, upscaler string, scale float64) (string, error) {
+	return "", nil
+}
+
 func openTestDB(t *testing.T) *preset.DB {
 	t.Helper()
 	tmpDir := t.TempDir()

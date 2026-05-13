@@ -996,8 +996,8 @@ func (s *Service) GenerateCompoundImage(params GenerateCompoundImageParams) (*Ge
 						if hiresDenoising != nil {
 							ds = *hiresDenoising
 						}
-						s.log.Info("step %d: manual hires upscale: %.1fx, denoise=%.2f", stepIdx+1, scale, ds)
-						hrResult, hrErr := s.manualHiresUpscale(result.Images[0], req, scale, ds)
+						s.log.Info("step %d: manual hires upscale: %.1fx, denoise=%.2f, upscaler=%s", stepIdx+1, scale, ds, hiresUpscaler)
+						hrResult, hrErr := s.manualHiresUpscale(result.Images[0], req, scale, ds, hiresUpscaler)
 						if hrErr == nil && len(hrResult.Images) > 0 {
 							result = hrResult
 						}
@@ -1228,8 +1228,8 @@ func (s *Service) BatchCompoundGenerate(params BatchCompoundGenerateParams) erro
 							if hiresDenoising != nil {
 								ds = *hiresDenoising
 							}
-							s.log.Info("batch %d step %d: manual hires upscale: %.1fx, denoise=%.2f", batchIdx+1, stepIdx+1, scale, ds)
-							hrResult, hrErr := s.manualHiresUpscale(result.Images[0], req, scale, ds)
+							s.log.Info("batch %d step %d: manual hires upscale: %.1fx, denoise=%.2f, upscaler=%s", batchIdx+1, stepIdx+1, scale, ds, hiresUpscaler)
+							hrResult, hrErr := s.manualHiresUpscale(result.Images[0], req, scale, ds, hiresUpscaler)
 							if hrErr == nil && len(hrResult.Images) > 0 {
 								result = hrResult
 							}

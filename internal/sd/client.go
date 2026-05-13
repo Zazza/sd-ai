@@ -409,3 +409,42 @@ func (c *Client) GetLoRAs() ([]LoRA, error) {
 	}
 	return loras, nil
 }
+
+type ExtraImageResponse struct {
+	Image string `json:"image"`
+}
+
+func (c *Client) UpscaleImage(base64Img string, upscaler string, scale float64) (string, error) {
+	body, _ := json.Marshal(map[string]any{
+		"image":                          base64Img,
+		"resize_mode":                    0,
+		"show_extras":                    true,
+		"gfpgan_visibility":              0,
+		"codeformer_visibility":          0,
+		"codeformer_weight":              0,
+		"upscaling_resize":               scale,
+		"upscaler_1":                     upscaler,
+		"upscaler_2":                     "None",
+		"extras_upscaler_2_visibility":   0,
+		"upscale_first":                  false,
+	})
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, c.baseURL+"/sdapi/v1/extra-single-img", bytes.NewReader(body))
+	if err != nil {
+		return "", fmt.Errorf("upscale image: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("upscale image: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var result ExtraImageResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", fmt.Errorf("decode upscale response: %w", err)
+	}
+	if result.Image == "" {
+		return "", fmt.Errorf("upscale image: empty response")
+	}
+	return result.Image, nil
+}

@@ -27,6 +27,8 @@ import (
 	"go-sd/internal/promptutil"
 	"go-sd/internal/rembg"
 	"go-sd/internal/sd"
+
+	xdraw "golang.org/x/image/draw"
 )
 
 // --- Interfaces ---
@@ -333,11 +335,41 @@ func (s *Service) checkSDInterrupted() error {
 	return nil
 }
 
-func (s *Service) manualHiresUpscale(base64Img string, req sd.Txt2ImgRequest, scale float64, denoiseStrength float64) (*sd.Txt2ImgResponse, error) {
+func (s *Service) manualHiresUpscale(base64Img string, req sd.Txt2ImgRequest, scale float64, denoiseStrength float64, upscaler string) (*sd.Txt2ImgResponse, error) {
 	targetW := int(float64(req.Width) * scale)
 	targetH := int(float64(req.Height) * scale)
+
+	upscaledB64 := ""
+	if upscaler != "" && upscaler != "Latent" {
+		neural, err := s.sd.UpscaleImage(base64Img, upscaler, scale)
+		if err != nil {
+			s.log.Warn("Neural upscale failed (%s), falling back to CatmullRom: %s", upscaler, err)
+		} else {
+			upscaledB64 = neural
+			s.log.Info("Neural upscale with %s OK", upscaler)
+		}
+	}
+
+	if upscaledB64 == "" {
+		imgData, err := base64.StdEncoding.DecodeString(base64Img)
+		if err != nil {
+			return nil, fmt.Errorf("decode base64: %w", err)
+		}
+		img, err := png.Decode(bytes.NewReader(imgData))
+		if err != nil {
+			return nil, fmt.Errorf("decode png: %w", err)
+		}
+		dst := image.NewRGBA(image.Rect(0, 0, targetW, targetH))
+		xdraw.CatmullRom.Scale(dst, dst.Bounds(), img, img.Bounds(), xdraw.Over, nil)
+		var buf bytes.Buffer
+		if err := png.Encode(&buf, dst); err != nil {
+			return nil, fmt.Errorf("encode png: %w", err)
+		}
+		upscaledB64 = base64.StdEncoding.EncodeToString(buf.Bytes())
+	}
+
 	i2iReq := sd.Img2ImgRequest{
-		InitImages:        []string{base64Img},
+		InitImages:        []string{upscaledB64},
 		Prompt:            req.Prompt,
 		NegativePrompt:    req.NegativePrompt,
 		SamplerName:       req.SamplerName,
@@ -559,7 +591,7 @@ func (s *Service) resolveHires(p *preset.Preset, hiresProfileID *int64) (enabled
 	}
 	upscaler = h.Upscaler
 	if upscaler == "" {
-		upscaler = "Latent"
+		upscaler = "R-ESRGAN 4x+"
 	}
 	return true, &h.Upscale, &h.DenoisingStrength, upscaler
 }
@@ -856,8 +888,8 @@ func (s *Service) GenerateImage(params GenerateImageParams) (*GenerateImageResul
 				if hiresDenoising != nil {
 					ds = *hiresDenoising
 				}
-				s.log.Info("Manual hires upscale: %.1fx, denoise=%.2f", scale, ds)
-				hrResult, hrErr := s.manualHiresUpscale(result.Images[0], req, scale, ds)
+				s.log.Info("Manual hires upscale: %.1fx, denoise=%.2f, upscaler=%s", scale, ds, hiresUpscaler)
+				hrResult, hrErr := s.manualHiresUpscale(result.Images[0], req, scale, ds, hiresUpscaler)
 				if hrErr != nil {
 					s.log.Warn("Manual hires upscale failed, using base image: %s", hrErr)
 					hiresSkipped = true
@@ -1066,8 +1098,8 @@ func (s *Service) BatchGenerate(params BatchGenerateParams) error {
 					if hiresDenoising != nil {
 						ds = *hiresDenoising
 					}
-					s.log.Info("Manual hires upscale: %.1fx, denoise=%.2f", scale, ds)
-					hrResult, hrErr := s.manualHiresUpscale(result.Images[0], req, scale, ds)
+					s.log.Info("Manual hires upscale: %.1fx, denoise=%.2f, upscaler=%s", scale, ds, hiresUpscaler)
+					hrResult, hrErr := s.manualHiresUpscale(result.Images[0], req, scale, ds, hiresUpscaler)
 					if hrErr == nil && len(hrResult.Images) > 0 {
 						result = hrResult
 					}
@@ -1326,8 +1358,8 @@ func (s *Service) TestGenerate(params TestGenerateParams) ([]TestGenerateResultI
 					if hiresDenoising != nil {
 						ds = *hiresDenoising
 					}
-					s.log.Info("compound step %d: manual hires upscale: %.1fx, denoise=%.2f", idx+1, scale, ds)
-					hrResult, hrErr := s.manualHiresUpscale(result.Images[0], req, scale, ds)
+					s.log.Info("compound step %d: manual hires upscale: %.1fx, denoise=%.2f, upscaler=%s", idx+1, scale, ds, hiresUpscaler)
+					hrResult, hrErr := s.manualHiresUpscale(result.Images[0], req, scale, ds, hiresUpscaler)
 					if hrErr == nil && len(hrResult.Images) > 0 {
 						result = hrResult
 					}
