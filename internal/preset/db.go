@@ -90,6 +90,10 @@ func Open(dbPath string) (*DB, error) {
 		return nil, fmt.Errorf("migrate v16: %w", err)
 	}
 
+	if err := migrateV17(db); err != nil {
+		return nil, fmt.Errorf("migrate v17: %w", err)
+	}
+
 	return &DB{db: db}, nil
 }
 
@@ -1040,16 +1044,17 @@ func migrateV12(db *sql.DB) error {
 		name              string
 		upscale           float64
 		denoisingStrength float64
+		upscaler          string
 	}{
-		{"Light", 1.5, 0.3},
-		{"Standard", 2.0, 0.45},
-		{"Heavy", 2.5, 0.55},
-		{"Max", 4.0, 0.4},
+		{"Light", 1.5, 0.3, "Latent"},
+		{"Standard", 2.0, 0.45, "Latent"},
+		{"Heavy", 2.5, 0.55, "Latent"},
+		{"Max", 4.0, 0.4, "Latent"},
 	}
 	for _, h := range builtins {
 		_, err := db.Exec(
-			`INSERT INTO hires_profiles (name, upscale, denoising_strength, upscaler, is_builtin) VALUES (?, ?, ?, '', 1)`,
-			h.name, h.upscale, h.denoisingStrength,
+			`INSERT INTO hires_profiles (name, upscale, denoising_strength, upscaler, is_builtin) VALUES (?, ?, ?, ?, 1)`,
+			h.name, h.upscale, h.denoisingStrength, h.upscaler,
 		)
 		if err != nil {
 			return err
@@ -1106,4 +1111,9 @@ func migrateV16(db *sql.DB) error {
 		}
 	}
 	return nil
+}
+
+func migrateV17(db *sql.DB) error {
+	_, err := db.Exec("UPDATE hires_profiles SET upscaler = 'Latent' WHERE upscaler = '' OR upscaler IS NULL")
+	return err
 }

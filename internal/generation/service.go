@@ -557,7 +557,11 @@ func (s *Service) resolveHires(p *preset.Preset, hiresProfileID *int64) (enabled
 		}
 		return hf, p.HiresUpscale, p.HiresDenoisingStrength, p.HiresUpscaler
 	}
-	return true, &h.Upscale, &h.DenoisingStrength, h.Upscaler
+	upscaler = h.Upscaler
+	if upscaler == "" {
+		upscaler = "Latent"
+	}
+	return true, &h.Upscale, &h.DenoisingStrength, upscaler
 }
 
 // --- GenerateSDPrompt ---
