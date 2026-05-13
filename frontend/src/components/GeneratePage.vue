@@ -113,6 +113,8 @@ function saveGenState() {
     gen_extra_negative: extraNegativePrompt.value || '',
     gen_mode: genMode.value,
     gen_compound_preset_id: String(selectedCompoundPresetId.value || ''),
+    gen_resolution_id: String(selectedResolutionId.value || ''),
+    gen_hires_profile_id: String(selectedHiresProfileId.value || ''),
   }).catch(() => {})
 }
 
@@ -461,6 +463,7 @@ onMounted(async () => {
   await loadPresets()
   loadKidsMode()
   loadSavedDescs()
+  let resolutionLoaded = false
   try {
     const s = await api.getSettings()
     previewMode.value = s.preview_mode === 'true'
@@ -472,6 +475,11 @@ onMounted(async () => {
     if (s.gen_negative) negative.value = s.gen_negative
     if (s.gen_mode) genMode.value = s.gen_mode
     if (s.gen_compound_preset_id) selectedCompoundPresetId.value = Number(s.gen_compound_preset_id)
+    if (s.gen_resolution_id) {
+      selectedResolutionId.value = Number(s.gen_resolution_id)
+      resolutionLoaded = true
+    }
+    if (s.gen_hires_profile_id) selectedHiresProfileId.value = Number(s.gen_hires_profile_id)
   } catch {}
   if (shared) {
     if (shared.selectedPresetId) selectedPresetId.value = shared.selectedPresetId
@@ -479,6 +487,17 @@ onMounted(async () => {
     if (shared.genMode) genMode.value = shared.genMode
     if (shared.description) description.value = shared.description
     if (shared.negative) negative.value = shared.negative
+    if (shared.selectedResolutionId) {
+      selectedResolutionId.value = shared.selectedResolutionId
+      resolutionLoaded = true
+    }
+    if (shared.selectedHiresProfileId !== undefined) selectedHiresProfileId.value = shared.selectedHiresProfileId
+  }
+  if (!resolutionLoaded) {
+    try {
+      const resolutions = await api.listResolutions()
+      if (resolutions && resolutions.length > 0) selectedResolutionId.value = resolutions[0].id
+    } catch {}
   }
   try {
     const item = await api.getActiveSessionItem()
@@ -505,6 +524,8 @@ onUnmounted(() => {
     shared.genMode = genMode.value
     shared.description = description.value
     shared.negative = negative.value
+    shared.selectedResolutionId = selectedResolutionId.value
+    shared.selectedHiresProfileId = selectedHiresProfileId.value
   }
 })
 
