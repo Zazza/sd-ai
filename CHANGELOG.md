@@ -4,6 +4,19 @@ All notable changes to SD Studio are documented here.
 
 ## [Unreleased]
 
+## [0.6.2] — 2026-05-20
+
+### Added
+- Pipeline (compound preset) export/import — select pipelines, export to JSON, import from file with preset auto-creation
+- Resolution and hires profile selectors on Batch and Compare pages
+
+### Fixed
+- Hires upscale applied only on last compound pipeline step (was applying on every step)
+- Resolution and hires profile selections persisted in Generate, Batch, and Test pages on unmount
+- Resolution/hires keys added to AllowedSettings whitelist and saved via watch
+- Hires upscaler defaults improved, neural pre-upscale added for Forge fallback
+- VAE reset to Automatic when preset has no VAE set
+
 ## [0.6.1] — 2026-05-13
 
 ### Fixed
