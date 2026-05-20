@@ -122,6 +122,10 @@ export function DeleteSessionItem(arg1) {
   return window['go']['main']['App']['DeleteSessionItem'](arg1);
 }
 
+export function ExportCompoundPresets(arg1) {
+  return window['go']['main']['App']['ExportCompoundPresets'](arg1);
+}
+
 export function ExportImage(arg1) {
   return window['go']['main']['App']['ExportImage'](arg1);
 }
@@ -254,6 +258,10 @@ export function HasSessionItems() {
   return window['go']['main']['App']['HasSessionItems']();
 }
 
+export function ImportCompoundPresets(arg1) {
+  return window['go']['main']['App']['ImportCompoundPresets'](arg1);
+}
+
 export function ImportPresets(arg1) {
   return window['go']['main']['App']['ImportPresets'](arg1);
 }
@@ -308,6 +316,10 @@ export function ListSavedScenes() {
 
 export function ListSessions() {
   return window['go']['main']['App']['ListSessions']();
+}
+
+export function OpenImportCompoundFile() {
+  return window['go']['main']['App']['OpenImportCompoundFile']();
 }
 
 export function OpenImportFile() {

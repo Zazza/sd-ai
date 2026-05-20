@@ -1,7 +1,8 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { api } from '../api.js'
 import { t } from '../i18n/index.js'
+import PipelineImportModal from './PipelineImportModal.vue'
 
 const compounds = ref([])
 const presets = ref([])
@@ -12,6 +13,26 @@ const error = ref('')
 const formName = ref('')
 const formDescription = ref('')
 const formSteps = ref([])
+
+const selectedIds = ref(new Set())
+const showImport = ref(false)
+const importPipelines = ref([])
+
+const selectedCount = computed(() => selectedIds.value.size)
+
+function toggleSelect(id) {
+  const s = new Set(selectedIds.value)
+  if (s.has(id)) { s.delete(id) } else { s.add(id) }
+  selectedIds.value = s
+}
+
+function toggleSelectAll() {
+  if (selectedIds.value.size === compounds.value.length) {
+    selectedIds.value = new Set()
+  } else {
+    selectedIds.value = new Set(compounds.value.map(c => c.id))
+  }
+}
 
 async function loadData() {
   try {
@@ -132,6 +153,32 @@ async function deleteCompound(id) {
   }
 }
 
+async function handleExport() {
+  try {
+    await api.exportCompoundPresets([...selectedIds.value])
+  } catch (e) {
+    if (String(e)) alert('Export failed: ' + e)
+  }
+}
+
+async function handleOpenImport() {
+  try {
+    const result = await api.openImportCompoundFile()
+    if (result && result.pipelines) {
+      importPipelines.value = result.pipelines
+      showImport.value = true
+    }
+  } catch (e) {
+    if (String(e)) alert('Import failed: ' + e)
+  }
+}
+
+function handleImportDone() {
+  showImport.value = false
+  importPipelines.value = []
+  loadData()
+}
+
 function getPresetName(presetId) {
   const p = presets.value.find(p => p.id === presetId)
   return p ? p.name : `#${presetId}`
@@ -144,7 +191,13 @@ onMounted(loadData)
   <div>
     <div class="page-header">
       <h1 class="page-title">{{ t('compound.title') }}</h1>
-      <button class="btn btn-primary" @click="openCreate">{{ t('compound.btn_new') }}</button>
+      <div style="display: flex; gap: 8px;">
+        <button class="btn btn-primary" @click="openCreate">{{ t('compound.btn_new') }}</button>
+        <button class="btn btn-primary btn-sm" @click="handleExport" :disabled="selectedCount === 0">
+          {{ t('compound.btn_export', { count: selectedCount }) }}
+        </button>
+        <button class="btn btn-secondary" @click="handleOpenImport">{{ t('compound.btn_import') }}</button>
+      </div>
     </div>
 
     <div v-if="error" class="status status-error">{{ error }}</div>
@@ -205,12 +258,23 @@ onMounted(loadData)
       <p style="color: var(--text-dim);">{{ t('compound.no_pipelines') }}</p>
     </div>
 
+    <div v-if="!showForm && compounds.length > 0" style="margin-bottom: 8px; display: flex; align-items: center; gap: 8px;">
+      <label style="display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--text-dim); cursor: pointer;">
+        <input type="checkbox" :checked="selectedCount === compounds.length && compounds.length > 0" @change="toggleSelectAll" />
+        {{ t('compound.select_all') }}
+      </label>
+      <span style="font-size: 12px; color: var(--text-dim);">{{ t('compound.selected_count', { count: selectedCount }) }}</span>
+    </div>
+
     <div v-if="!showForm" style="display: grid; gap: 12px; max-width: 700px;">
-      <div v-for="cp in compounds" :key="cp.id" class="card">
+      <div v-for="cp in compounds" :key="cp.id" class="card" :style="{ borderColor: selectedIds.has(cp.id) ? 'var(--accent)' : undefined }">
         <div style="display: flex; justify-content: space-between; align-items: start;">
-          <div>
-            <h3 style="margin-bottom: 4px;">{{ cp.name }}</h3>
-            <p v-if="cp.description" style="color: var(--text-dim); font-size: 13px; margin-bottom: 8px;">{{ cp.description }}</p>
+          <div style="display: flex; gap: 8px; align-items: start;">
+            <input type="checkbox" :checked="selectedIds.has(cp.id)" @change="toggleSelect(cp.id)" style="margin-top: 4px;" />
+            <div>
+              <h3 style="margin-bottom: 4px;">{{ cp.name }}</h3>
+              <p v-if="cp.description" style="color: var(--text-dim); font-size: 13px; margin-bottom: 8px;">{{ cp.description }}</p>
+            </div>
           </div>
           <div style="display: flex; gap: 6px;">
             <button class="btn btn-sm btn-secondary" @click="openEdit(cp)">{{ t('compound.btn_edit') }}</button>
@@ -229,5 +293,12 @@ onMounted(loadData)
         </div>
       </div>
     </div>
+
+    <PipelineImportModal
+      v-if="showImport"
+      :pipelines="importPipelines"
+      @done="handleImportDone"
+      @close="showImport = false"
+    />
   </div>
 </template>

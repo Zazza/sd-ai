@@ -471,6 +471,10 @@ export const en = {
   'compound.btn_delete': 'Delete',
   'compound.error_name_required': 'Name is required',
   'compound.error_step_preset': 'Each step must have a preset',
+  'compound.btn_export': 'Export ({count})',
+  'compound.btn_import': 'Import',
+  'compound.select_all': 'Select all',
+  'compound.selected_count': '{count} selected',
 
   // PresetForm.vue
   'preset.edit_title': 'Edit Preset',
@@ -563,6 +567,16 @@ export const en = {
   'progress.sd_step': 'Step {current}/{total}',
   'progress.btn_interrupt': 'Interrupt',
   'progress.interrupted': 'Generation interrupted',
+
+  // PipelineImportModal.vue
+  'pipeline_import.title': 'Import Pipelines ({count} found)',
+  'pipeline_import.select_all': 'Select all',
+  'pipeline_import.selected': '{count} selected',
+  'pipeline_import.untitled': 'Untitled',
+  'pipeline_import.btn_cancel': 'Cancel',
+  'pipeline_import.btn_import_short': 'Import',
+  'pipeline_import.btn_import': 'Import ({count})',
+  'pipeline_import.importing': 'Importing...',
 }
 
 export function t(key, params) {

@@ -75,6 +75,29 @@ type ExportImageParams struct {
 	Filename      string `json:"filename"`
 }
 
+type CompoundExportFile struct {
+	Version    int                   `json:"version"`
+	ExportedAt time.Time             `json:"exported_at"`
+	Pipelines  []CompoundExportData  `json:"pipelines"`
+}
+
+type CompoundExportData struct {
+	Name        string                    `json:"name"`
+	Description string                    `json:"description"`
+	Steps       []CompoundStepExportData  `json:"steps"`
+}
+
+type CompoundStepExportData struct {
+	StepOrder         int        `json:"step_order"`
+	DenoisingStrength float64    `json:"denoising_strength"`
+	Preset            PresetData `json:"preset"`
+}
+
+type CompoundImportPreview struct {
+	Pipelines []CompoundExportData `json:"pipelines"`
+	Total     int                  `json:"total"`
+}
+
 type ProcessedImage struct {
 	Data     []byte
 	Filename string
@@ -494,6 +517,220 @@ func (s *Service) SaveExportPreset(ep preset.ExportPreset) (*preset.ExportPreset
 
 func (s *Service) DeleteExportPreset(id int64) error {
 	return s.db.DeleteExportPreset(id)
+}
+
+func (s *Service) PrepareCompoundExportData(ids []int64) ([]CompoundExportData, error) {
+	if len(ids) == 0 {
+		return nil, fmt.Errorf("no pipelines selected")
+	}
+
+	compounds, err := s.db.GetCompoundPresetsByIDs(ids)
+	if err != nil {
+		return nil, err
+	}
+
+	typeMap := make(map[int64]string)
+	types, _ := s.db.ListPresetTypes()
+	for _, t := range types {
+		typeMap[t.ID] = t.Name
+	}
+
+	result := make([]CompoundExportData, len(compounds))
+	for i, cp := range compounds {
+		steps := make([]CompoundStepExportData, len(cp.Steps))
+		for j, step := range cp.Steps {
+			var pd PresetData
+			p, err := s.db.Get(step.PresetID)
+			if err == nil {
+				typeName := p.PresetType
+				if p.TypeID != nil {
+					if n, ok := typeMap[*p.TypeID]; ok {
+						typeName = n
+					}
+				}
+				pd = PresetData{
+					Name:                   p.Name,
+					PresetType:             p.PresetType,
+					TypeName:               typeName,
+					Prompt:                 p.Prompt,
+					NegativePrompt:         p.NegativePrompt,
+					Sampler:                p.Sampler,
+					ScheduleType:           p.ScheduleType,
+					Steps:                  p.Steps,
+					CfgScale:               p.CfgScale,
+					ModelName:              p.ModelName,
+					Seed:                   p.Seed,
+					DenoisingStrength:      p.DenoisingStrength,
+					ClipSkip:               p.ClipSkip,
+					BatchSize:              p.BatchSize,
+					BatchCount:             p.BatchCount,
+					HiresFix:               p.HiresFix,
+					HiresUpscale:           p.HiresUpscale,
+					HiresDenoisingStrength: p.HiresDenoisingStrength,
+					HiresUpscaler:          p.HiresUpscaler,
+					VAE:                    p.VAE,
+					Tags:                   p.Tags,
+					Loras:                  p.Loras,
+				}
+			}
+			steps[j] = CompoundStepExportData{
+				StepOrder:         step.StepOrder,
+				DenoisingStrength: step.DenoisingStrength,
+				Preset:            pd,
+			}
+		}
+		result[i] = CompoundExportData{
+			Name:        cp.Name,
+			Description: cp.Description,
+			Steps:       steps,
+		}
+	}
+
+	return result, nil
+}
+
+func (s *Service) BuildCompoundExportFile(pipelines []CompoundExportData) ([]byte, error) {
+	data := CompoundExportFile{
+		Version:    1,
+		ExportedAt: time.Now().UTC(),
+		Pipelines:  pipelines,
+	}
+	return json.MarshalIndent(data, "", "  ")
+}
+
+func (s *Service) ParseCompoundImportFile(filePath string) ([]CompoundExportData, error) {
+	info, err := os.Stat(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("stat file: %w", err)
+	}
+	if info.Size() > 10*1024*1024 {
+		return nil, fmt.Errorf("file too large (max 10 MB)")
+	}
+
+	jsonBytes, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("read file: %w", err)
+	}
+
+	var data CompoundExportFile
+	if err := json.Unmarshal(jsonBytes, &data); err != nil {
+		return nil, fmt.Errorf("parse json: %w", err)
+	}
+	if data.Version < 1 || data.Version > 1 {
+		return nil, fmt.Errorf("unsupported version: %d", data.Version)
+	}
+
+	return data.Pipelines, nil
+}
+
+func (s *Service) ImportCompoundItems(items []CompoundExportData) ([]preset.CompoundPreset, error) {
+	if len(items) == 0 {
+		return nil, fmt.Errorf("no pipelines selected")
+	}
+	if len(items) > 100 {
+		return nil, fmt.Errorf("too many pipelines (max 100)")
+	}
+
+	for _, item := range items {
+		if strings.TrimSpace(item.Name) == "" {
+			return nil, fmt.Errorf("pipeline name is required")
+		}
+		if len(item.Steps) == 0 {
+			return nil, fmt.Errorf("pipeline %q has no steps", item.Name)
+		}
+		for _, step := range item.Steps {
+			if strings.TrimSpace(step.Preset.Name) == "" {
+				return nil, fmt.Errorf("step preset name is required in pipeline %q", item.Name)
+			}
+		}
+	}
+
+	typeCache := make(map[string]*int64)
+
+	result := make([]preset.CompoundPreset, len(items))
+	for i, item := range items {
+		var steps []preset.CompoundPresetStep
+		for j, se := range item.Steps {
+			pd := se.Preset
+			typeName := pd.TypeName
+			if typeName == "" {
+				typeName = pd.PresetType
+			}
+			var typeID *int64
+			if typeName != "" {
+				if id, ok := typeCache[typeName]; ok {
+					typeID = id
+				} else {
+					existing, _ := s.db.ListPresetTypes()
+					for _, t := range existing {
+						if t.Name == typeName {
+							typeCache[typeName] = &t.ID
+							typeID = &t.ID
+							break
+						}
+					}
+					if typeID == nil {
+						pt := &preset.PresetType{Name: typeName}
+						if err := s.db.CreatePresetType(pt); err == nil {
+							typeCache[typeName] = &pt.ID
+							typeID = &pt.ID
+						}
+					}
+				}
+			}
+
+			sampler, scheduleType := promptutil.SplitCompositeSampler(pd.Sampler, pd.ScheduleType)
+			p := preset.Preset{
+				Name:                   pd.Name,
+				PresetType:             pd.PresetType,
+				Prompt:                 pd.Prompt,
+				NegativePrompt:         pd.NegativePrompt,
+				Sampler:                sampler,
+				ScheduleType:           scheduleType,
+				Steps:                  pd.Steps,
+				CfgScale:               pd.CfgScale,
+				ModelName:              pd.ModelName,
+				Seed:                   pd.Seed,
+				DenoisingStrength:      pd.DenoisingStrength,
+				ClipSkip:               pd.ClipSkip,
+				BatchSize:              pd.BatchSize,
+				BatchCount:             pd.BatchCount,
+				HiresFix:               pd.HiresFix,
+				HiresUpscale:           pd.HiresUpscale,
+				HiresDenoisingStrength: pd.HiresDenoisingStrength,
+				HiresUpscaler:          pd.HiresUpscaler,
+				VAE:                    pd.VAE,
+				Tags:                   pd.Tags,
+				Loras:                  pd.Loras,
+				TypeID:                 typeID,
+			}
+			created, err := s.db.CreateBatch([]preset.Preset{p})
+			if err != nil {
+				return nil, fmt.Errorf("create preset %q: %w", p.Name, err)
+			}
+			if len(created) == 0 {
+				return nil, fmt.Errorf("failed to create preset %q", p.Name)
+			}
+
+			steps = append(steps, preset.CompoundPresetStep{
+				StepOrder:         j + 1,
+				PresetID:          created[0].ID,
+				DenoisingStrength: se.DenoisingStrength,
+			})
+		}
+
+		cp := &preset.CompoundPreset{
+			Name:        item.Name,
+			Description: item.Description,
+			Steps:       steps,
+		}
+		if err := s.db.CreateCompoundPreset(cp); err != nil {
+			return nil, fmt.Errorf("create pipeline %q: %w", item.Name, err)
+		}
+		result[i] = *cp
+	}
+
+	return result, nil
 }
 
 func WriteImageToPath(img *ProcessedImage, path string) error {

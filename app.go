@@ -646,6 +646,59 @@ func (a *App) ImportPresets(items []PresetData) ([]preset.Preset, error) {
 	return a.ieSvc.ImportItems(items)
 }
 
+// --- Compound Preset Export/Import ---
+
+type CompoundExportData = importexport.CompoundExportData
+type CompoundImportPreview = importexport.CompoundImportPreview
+
+func (a *App) ExportCompoundPresets(ids []int64) (string, error) {
+	pipelines, err := a.ieSvc.PrepareCompoundExportData(ids)
+	if err != nil {
+		return "", err
+	}
+	jsonBytes, err := a.ieSvc.BuildCompoundExportFile(pipelines)
+	if err != nil {
+		return "", err
+	}
+	path, err := runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{
+		DefaultFilename: "sd-studio-pipelines.json",
+		Filters: []runtime.FileFilter{
+			{DisplayName: "JSON Files", Pattern: "*.json"},
+		},
+	})
+	if err != nil || path == "" {
+		return "", err
+	}
+	return path, os.WriteFile(path, jsonBytes, 0o644)
+}
+
+func (a *App) OpenImportCompoundFile() (*CompoundImportPreview, error) {
+	paths, err := runtime.OpenMultipleFilesDialog(a.ctx, runtime.OpenDialogOptions{
+		Filters: []runtime.FileFilter{
+			{DisplayName: "JSON Files", Pattern: "*.json"},
+		},
+	})
+	if err != nil || len(paths) == 0 {
+		return nil, err
+	}
+	var all []CompoundExportData
+	for _, p := range paths {
+		parsed, err := a.ieSvc.ParseCompoundImportFile(p)
+		if err != nil {
+			continue
+		}
+		all = append(all, parsed...)
+	}
+	if len(all) == 0 {
+		return nil, fmt.Errorf("no pipelines found in selected files")
+	}
+	return &CompoundImportPreview{Pipelines: all, Total: len(all)}, nil
+}
+
+func (a *App) ImportCompoundPresets(items []CompoundExportData) ([]preset.CompoundPreset, error) {
+	return a.ieSvc.ImportCompoundItems(items)
+}
+
 // --- Compound Presets ---
 
 func (a *App) ListCompoundPresets() ([]preset.CompoundPreset, error) {

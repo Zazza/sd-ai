@@ -26,7 +26,7 @@ async function doImport() {
   importing.value = true
   error.value = ''
   try {
-    await api.importPipelines(items)
+    await api.importCompoundPresets(items)
     emit('done')
   } catch (e) {
     error.value = e.message || String(e)

@@ -790,6 +790,41 @@ func (d *DB) DeleteCompoundPreset(id int64) error {
 	return tx.Commit()
 }
 
+func (d *DB) GetCompoundPresetsByIDs(ids []int64) ([]CompoundPreset, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	placeholders := ""
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		if i > 0 {
+			placeholders += ","
+		}
+		placeholders += "?"
+		args[i] = id
+	}
+	rows, err := d.db.Query(`SELECT id, name, description, created_at, updated_at FROM compound_presets WHERE id IN (`+placeholders+`) ORDER BY created_at DESC`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var items []CompoundPreset
+	for rows.Next() {
+		var cp CompoundPreset
+		if err := rows.Scan(&cp.ID, &cp.Name, &cp.Description, &cp.CreatedAt, &cp.UpdatedAt); err != nil {
+			return nil, err
+		}
+		steps, err := d.getCompoundSteps(cp.ID)
+		if err != nil {
+			return nil, err
+		}
+		cp.Steps = steps
+		items = append(items, cp)
+	}
+	return items, nil
+}
+
 func migrateV7(db *sql.DB) error {
 	_, err := db.Exec(`
 		CREATE TABLE IF NOT EXISTS saved_scenes (

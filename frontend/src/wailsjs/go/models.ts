@@ -528,32 +528,6 @@ export namespace generation {
 
 export namespace importexport {
 	
-	export class ExportImageParams {
-	    image_base64: string;
-	    format: string;
-	    width: number;
-	    height: number;
-	    lock_ratio: boolean;
-	    quality: number;
-	    interpolation: string;
-	    filename: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new ExportImageParams(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.image_base64 = source["image_base64"];
-	        this.format = source["format"];
-	        this.width = source["width"];
-	        this.height = source["height"];
-	        this.lock_ratio = source["lock_ratio"];
-	        this.quality = source["quality"];
-	        this.interpolation = source["interpolation"];
-	        this.filename = source["filename"];
-	    }
-	}
 	export class PresetData {
 	    name: string;
 	    preset_type: string;
@@ -608,6 +582,133 @@ export namespace importexport {
 	        this.tags = source["tags"];
 	        this.loras = source["loras"];
 	        this.source_file = source["source_file"];
+	    }
+	}
+	export class CompoundStepExportData {
+	    step_order: number;
+	    denoising_strength: number;
+	    preset: PresetData;
+	
+	    static createFrom(source: any = {}) {
+	        return new CompoundStepExportData(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.step_order = source["step_order"];
+	        this.denoising_strength = source["denoising_strength"];
+	        this.preset = this.convertValues(source["preset"], PresetData);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class CompoundExportData {
+	    name: string;
+	    description: string;
+	    steps: CompoundStepExportData[];
+	
+	    static createFrom(source: any = {}) {
+	        return new CompoundExportData(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.description = source["description"];
+	        this.steps = this.convertValues(source["steps"], CompoundStepExportData);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class CompoundImportPreview {
+	    pipelines: CompoundExportData[];
+	    total: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new CompoundImportPreview(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.pipelines = this.convertValues(source["pipelines"], CompoundExportData);
+	        this.total = source["total"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
+	export class ExportImageParams {
+	    image_base64: string;
+	    format: string;
+	    width: number;
+	    height: number;
+	    lock_ratio: boolean;
+	    quality: number;
+	    interpolation: string;
+	    filename: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ExportImageParams(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.image_base64 = source["image_base64"];
+	        this.format = source["format"];
+	        this.width = source["width"];
+	        this.height = source["height"];
+	        this.lock_ratio = source["lock_ratio"];
+	        this.quality = source["quality"];
+	        this.interpolation = source["interpolation"];
+	        this.filename = source["filename"];
 	    }
 	}
 	export class ImportPreview {

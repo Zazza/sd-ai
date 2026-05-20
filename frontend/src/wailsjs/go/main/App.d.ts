@@ -70,6 +70,8 @@ export function DeleteSession(arg1:number):Promise<void>;
 
 export function DeleteSessionItem(arg1:number):Promise<void>;
 
+export function ExportCompoundPresets(arg1:Array<number>):Promise<string>;
+
 export function ExportImage(arg1:importexport.ExportImageParams):Promise<string>;
 
 export function ExportPresets(arg1:Array<number>):Promise<string>;
@@ -136,6 +138,8 @@ export function GetSettings():Promise<Record<string, string>>;
 
 export function HasSessionItems():Promise<boolean>;
 
+export function ImportCompoundPresets(arg1:Array<importexport.CompoundExportData>):Promise<Array<preset.CompoundPreset>>;
+
 export function ImportPresets(arg1:Array<importexport.PresetData>):Promise<Array<preset.Preset>>;
 
 export function InterruptGeneration():Promise<void>;
@@ -163,6 +167,8 @@ export function ListResolutions():Promise<Array<preset.Resolution>>;
 export function ListSavedScenes():Promise<Array<preset.SavedScene>>;
 
 export function ListSessions():Promise<Array<preset.SessionInfo>>;
+
+export function OpenImportCompoundFile():Promise<importexport.CompoundImportPreview>;
 
 export function OpenImportFile():Promise<importexport.ImportPreview>;
 
