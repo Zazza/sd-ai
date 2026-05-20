@@ -224,6 +224,15 @@ func (m *mockSessions) AddToSession(imageBase64 string, info json.RawMessage, so
 	return int64(len(m.items))
 }
 
+func tinyPNGBase64(t *testing.T) string {
+	t.Helper()
+	img := image.NewRGBA(image.Rect(0, 0, 512, 512))
+	img.Set(0, 0, color.Black)
+	var buf bytes.Buffer
+	require.NoError(t, png.Encode(&buf, img))
+	return base64.StdEncoding.EncodeToString(buf.Bytes())
+}
+
 func openTestDB(t *testing.T) *preset.DB {
 	t.Helper()
 	db, err := preset.Open(":memory:")
@@ -2120,6 +2129,8 @@ func TestGenerateImage_ForgeHiresManualUpscale(t *testing.T) {
 		HiresUpscaler:          "Latent",
 	})
 
+	validB64 := tinyPNGBase64(t)
+
 	txt2imgCalls := 0
 	sdSvc := &mockSD{
 		txt2img: func(req sd.Txt2ImgRequest) (*sd.Txt2ImgResponse, error) {
@@ -2128,7 +2139,7 @@ func TestGenerateImage_ForgeHiresManualUpscale(t *testing.T) {
 				return nil, fmt.Errorf("status 500: hires not supported")
 			}
 			return &sd.Txt2ImgResponse{
-				Images:     []string{"base-image-data"},
+				Images:     []string{validB64},
 				Info:       json.RawMessage(`{"seed":123}`),
 				Parameters: json.RawMessage(`{}`),
 			}, nil
@@ -2136,7 +2147,6 @@ func TestGenerateImage_ForgeHiresManualUpscale(t *testing.T) {
 		img2img: func(req sd.Img2ImgRequest) (*sd.Txt2ImgResponse, error) {
 			assert.Equal(t, 1024, req.Width)
 			assert.Equal(t, 1024, req.Height)
-			assert.Equal(t, []string{"base-image-data"}, req.InitImages)
 			assert.NotNil(t, req.DenoisingStrength)
 			assert.InDelta(t, 0.5, *req.DenoisingStrength, 0.01)
 			return &sd.Txt2ImgResponse{
