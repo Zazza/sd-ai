@@ -124,7 +124,7 @@ make build   # production-бинарник → build/bin/sd-studio
 
 ## Сервер
 
-Серверный компонент выделен в отдельный репозиторий: [sd-ai-server](https://github.com/thread-of-the-world/sd-ai-server).
+Серверный компонент выделен в отдельный репозиторий: [sd-ai-server](https://github.com/Zazza/sd-ai-server).
 
 ## Стек
 

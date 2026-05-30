@@ -22,7 +22,7 @@ All notable changes to SD Studio are documented here.
 - User-scene-first prompt generation — LLM generates only user scene tags with SD weights, preset style added after BREAK separator for better CLIP attention
 - User prompt placed first in final SD prompt (gets full first-chunk attention), preset quality/style after BREAK
 - System prompt labels changed to STYLE REFERENCE / USER SCENE to prevent LLM from duplicating preset tags
-- Server component extracted to separate repository: [sd-ai-server](https://github.com/thread-of-the-world/sd-ai-server)
+- Server component extracted to separate repository: [sd-ai-server](https://github.com/Zazza/sd-ai-server)
 
 ### Fixed
 - Various bug fixes and UI improvements

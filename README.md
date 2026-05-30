@@ -124,7 +124,7 @@ make build   # production binary → build/bin/sd-studio
 
 ## Server
 
-The server component has been extracted to a separate repository: [sd-ai-server](https://github.com/thread-of-the-world/sd-ai-server).
+The server component has been extracted to a separate repository: [sd-ai-server](https://github.com/Zazza/sd-ai-server).
 
 ## Tech Stack
 
