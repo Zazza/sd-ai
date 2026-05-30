@@ -9,6 +9,7 @@
 - [LM Studio](#lm-studio)
 - [llama.cpp](#llamacpp)
 - [Rembg](#rembg)
+- [SD Studio Server](#sd-studio-server)
 
 ---
 
@@ -73,7 +74,7 @@ Download `.safetensors` into `models/Stable-diffusion/`:
 - [Civitai](https://civitai.com/) — main model repository
 - [HuggingFace](https://huggingface.co/models?pipeline_tag=text-to-image)
 
-LoRA → `models/Lora/`, VAE → `models/VAE/`.
+LoRA -> `models/Lora/`, VAE -> `models/VAE/`.
 
 ---
 
@@ -143,7 +144,7 @@ Environment="OLLAMA_HOST=0.0.0.0:11434"
 curl http://localhost:11434/api/tags
 ```
 
-In SD Studio → Settings → Connection: select **Ollama**, URL `http://localhost:11434`.
+In SD Studio -> Settings -> Connection: select **Ollama**, URL `http://localhost:11434`.
 
 ---
 
@@ -168,7 +169,7 @@ Download from [lmstudio.ai](https://lmstudio.ai/) (macOS / Windows / Linux).
 
 ### Network Access
 
-In LM Studio: Settings → Advanced → **Enable CORS** and set server host to `0.0.0.0`.
+In LM Studio: Settings -> Advanced -> **Enable CORS** and set server host to `0.0.0.0`.
 
 ### Verification
 
@@ -176,7 +177,7 @@ In LM Studio: Settings → Advanced → **Enable CORS** and set server host to `
 curl http://localhost:1234/v1/models
 ```
 
-In SD Studio → Settings → Connection: select **LM Studio**, URL `http://localhost:1234`.
+In SD Studio -> Settings -> Connection: select **LM Studio**, URL `http://localhost:1234`.
 
 ---
 
@@ -234,7 +235,7 @@ Download `.gguf` files from [HuggingFace](https://huggingface.co/models?search=g
 curl http://localhost:8081/v1/models
 ```
 
-In SD Studio → Settings → Connection: select **llama.cpp**, URL `http://localhost:8081`.
+In SD Studio -> Settings -> Connection: select **llama.cpp**, URL `http://localhost:8081`.
 
 > **Note:** llama.cpp does not support model switching via API. The model is set at server startup.
 
@@ -301,9 +302,103 @@ curl -s -F file=@test.png http://localhost:7000/api/remove -o result.png
 
 ### SD Studio Configuration
 
-Settings → Rembg → enter URL (e.g. `http://192.168.1.100:7000`) → **Test** → **Save**.
+Settings -> Rembg -> enter URL (e.g. `http://192.168.1.100:7000`) -> **Test** -> **Save**.
 
 If rembg is not configured, SD Studio falls back to built-in Go-based background removal (lower quality, visible edge artifacts).
+
+---
+
+## SD Studio Server
+
+A standalone service that automatically manages all AI components (SD WebUI, Ollama, Rembg) — installation, startup, health monitoring, GPU optimization, and model management. Ideal for headless or server deployments.
+
+### Installation
+
+```bash
+cd server
+go build -o sd-studio-server .
+```
+
+Or use Docker:
+```bash
+docker compose up --build
+```
+
+### First Run
+
+```bash
+./sd-studio-server --data ~/sd-studio-server
+```
+
+On first run, an interactive setup wizard will guide you through:
+- Selecting which components to install (SD WebUI, Ollama, Rembg)
+- Choosing data directory
+- Configuring GPU backend (Forge / A1111)
+
+### Configuration
+
+Configuration is stored in `{data-dir}/server-config.yaml`:
+
+```yaml
+port: 8080
+data_dir: ~/sd-studio-server
+active_sd: forge
+mdns: true
+proxy:
+  enabled: true
+  gpu_slots: 1
+  endpoints:
+    sd:
+      listen_addr: ":7860"
+      target_url: "http://localhost:7860"
+    ollama:
+      listen_addr: ":11434"
+      target_url: "http://localhost:11434"
+```
+
+### Running Modes
+
+| Mode | Command | Description |
+|------|---------|-------------|
+| TUI (interactive) | `./sd-studio-server` | Terminal dashboard with service controls |
+| Headless | `./sd-studio-server --headless` | Log output only, no TUI |
+| Custom port | `./sd-studio-server --port 9090` | Override HTTP port |
+| Custom config | `./sd-studio-server --config /path/to/config.yaml` | Use specific config file |
+
+### GPU Proxy
+
+When `proxy.enabled: true`, the server acts as a smart reverse proxy:
+- **Priority queue** — studio requests get higher priority than external
+- **GPU slot limiting** — only N concurrent requests share the GPU
+- **VRAM cooldown** — waits for >= 50% free VRAM between jobs (prevents OOM)
+- Per-endpoint configuration (separate proxy ports for SD and Ollama)
+
+### API Endpoints
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /` | Server info |
+| `GET /api/health` | Service health status |
+| `GET /api/processes` | Process status |
+| `POST /api/processes/:name/start` | Start a service |
+| `POST /api/processes/:name/stop` | Stop a service |
+| `POST /api/processes/:name/restart` | Restart a service |
+| `GET /api/gpu` | GPU info |
+| `GET /api/models` | Available models |
+| `POST /api/models/download` | Download a model |
+| `DELETE /api/models/:name` | Delete a model |
+| `GET /api/backends` | Available backends |
+| `POST /api/backends/switch` | Switch backend |
+
+### mDNS Discovery
+
+When `mdns: true`, the server advertises itself as `_sd-studio._tcp` on the local network. Desktop apps can auto-discover the server.
+
+### Verification
+
+```bash
+curl http://localhost:8080/
+```
 
 ---
 
@@ -316,3 +411,4 @@ If rembg is not configured, SD Studio falls back to built-in Go-based background
 | LM Studio | 1234 | `http://localhost:1234` |
 | llama.cpp | 8081 | `http://localhost:8081` |
 | Rembg | 7000 | `http://localhost:7000` |
+| SD Studio Server | 8080 | `http://localhost:8080` |

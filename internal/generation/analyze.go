@@ -10,8 +10,6 @@ import (
 	"image/draw"
 	"image/png"
 	"math"
-	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -370,9 +368,9 @@ func (s *Service) generateLLMPromptFromTags(p *preset.Preset, tags string, mode,
 RESPONSE LENGTH: your response is limited to ~%d tokens. You MUST fit within this limit.`, maxTokens)
 
 	userParts := []string{
-		"BASE POSITIVE PROMPT: " + p.Prompt,
-		"BASE NEGATIVE PROMPT: " + p.NegativePrompt,
-		"USER DESCRIPTION (extracted from image): " + tags,
+		"STYLE REFERENCE (do NOT include in output): " + p.Prompt,
+		"STYLE NEGATIVE REFERENCE (do NOT include in output): " + p.NegativePrompt,
+		"USER SCENE (convert this to SD tags with weights): " + tags,
 	}
 	if mode == "inpaint" {
 		userParts = []string{
@@ -494,12 +492,9 @@ func (s *Service) GenerateFromImage(params GenerateFromImageParams) (*GenerateIm
 
 	var prompt, negativePrompt string
 	if tags == "" {
-		prompt = p.Prompt
-		negativePrompt = p.NegativePrompt
-		if params.ExtraNegativePrompt != "" {
-			negativePrompt += ", " + params.ExtraNegativePrompt
-		}
-		negativePrompt = s.kids.ApplyNegative(negativePrompt)
+		bp := s.buildPrompts(p.Prompt, p.NegativePrompt, p.Loras, "", params.ExtraNegativePrompt)
+		prompt = bp.Prompt
+		negativePrompt = bp.NegativePrompt
 	} else {
 		promptResult, err := s.generateLLMPromptFromTags(p, tags, params.Mode, params.ExtraNegativePrompt)
 		if err != nil {
@@ -510,14 +505,9 @@ func (s *Service) GenerateFromImage(params GenerateFromImageParams) (*GenerateIm
 		if params.Mode == "inpaint" {
 			prompt += ", " + tags
 		}
-		negativePrompt = promptResult.NegativePrompt
-		if params.ExtraNegativePrompt != "" {
-			negativePrompt += ", " + params.ExtraNegativePrompt
-		}
-		negativePrompt = s.kids.ApplyNegative(negativePrompt)
+		prompt = appendLorasToPrompt(prompt, p.Loras)
+		negativePrompt = s.buildPrompts("", promptResult.NegativePrompt, "", "", params.ExtraNegativePrompt).NegativePrompt
 	}
-
-	prompt = appendLorasToPrompt(prompt, p.Loras)
 
 	if p.ModelName != "" {
 		_ = s.sd.SetModel(p.ModelName)
@@ -528,7 +518,7 @@ func (s *Service) GenerateFromImage(params GenerateFromImageParams) (*GenerateIm
 		_ = s.sd.SetVAE("Automatic")
 	}
 
-	samplerName := buildSamplerName(p.Sampler, p.ScheduleType)
+	samplerName := promptutil.BuildSamplerName(p.Sampler, p.ScheduleType)
 
 	clipSkip := 1
 	if p.ClipSkip != nil {
@@ -597,23 +587,18 @@ func (s *Service) GenerateFromImage(params GenerateFromImageParams) (*GenerateIm
 	}
 
 	width, height := s.resolveResolution(p, params.ResolutionID)
-	hiresFix := p.HiresFix
 
 	isPreview := false
 	if pw, ph, preview := s.getPreviewDimensions(width, height); preview {
 		isPreview = true
 		width = pw
 		height = ph
-		hiresFix = nil
 	}
 
-	denoisingStrength := p.DenoisingStrength
-	if denoisingStrength == nil && p.HiresFix != nil && *p.HiresFix {
-		ds := 0.5
-		if p.HiresDenoisingStrength != nil {
-			ds = *p.HiresDenoisingStrength
-		}
-		denoisingStrength = &ds
+	hiresEnabled, hiresUpscale, hiresDenoising, hiresUpscaler := s.resolveHires(p, params.HiresProfileID)
+	var hiresFix *bool
+	if hiresEnabled && !isPreview {
+		hiresFix = &hiresEnabled
 	}
 
 	result, err := s.sd.Txt2Img(sd.Txt2ImgRequest{
@@ -626,14 +611,14 @@ func (s *Service) GenerateFromImage(params GenerateFromImageParams) (*GenerateIm
 		Width:                  width,
 		Height:                 height,
 		Seed:                   p.Seed,
-		DenoisingStrength:      denoisingStrength,
+		DenoisingStrength:      hiresDenoising,
 		ClipSkip:               &clipSkip,
 		BatchSize:              &batchSize,
 		BatchCount:             &batchCount,
 		HiresFix:               hiresFix,
-		HiresUpscale:           p.HiresUpscale,
-		HiresDenoisingStrength: p.HiresDenoisingStrength,
-		HiresUpscaler:          p.HiresUpscaler,
+		HiresUpscale:           hiresUpscale,
+		HiresDenoisingStrength: hiresDenoising,
+		HiresUpscaler:          hiresUpscaler,
 		DoNotSaveImages:        true,
 		DoNotSaveGrid:          true,
 	})
@@ -701,17 +686,9 @@ func (s *Service) generateFromImageCompound(params GenerateFromImageParams, tags
 			"status":  "generating",
 		})
 
-		prompt := p.Prompt
-		if stepIdx == 0 {
-			prompt = promptResult.Prompt
-		}
-		prompt = appendLorasToPrompt(prompt, p.Loras)
-
-		negativePrompt := promptResult.NegativePrompt
-		if params.ExtraNegativePrompt != "" {
-			negativePrompt += ", " + params.ExtraNegativePrompt
-		}
-		negativePrompt = s.kids.ApplyNegative(negativePrompt)
+		bp := s.buildPrompts(p.Prompt, p.NegativePrompt, p.Loras, promptResult.Prompt, promptResult.NegativePrompt)
+		prompt := bp.Prompt
+		negativePrompt := bp.NegativePrompt
 
 		if p.ModelName != "" {
 			_ = s.sd.SetModel(p.ModelName)
@@ -722,7 +699,7 @@ func (s *Service) generateFromImageCompound(params GenerateFromImageParams, tags
 			_ = s.sd.SetVAE("Automatic")
 		}
 
-		samplerName := buildSamplerName(p.Sampler, p.ScheduleType)
+		samplerName := promptutil.BuildSamplerName(p.Sampler, p.ScheduleType)
 
 		var width, height int
 		if step.ResolutionID != nil && *step.ResolutionID > 0 {
@@ -898,6 +875,20 @@ func (s *Service) GenerateCompoundImage(params GenerateCompoundImageParams) (*Ge
 	var lastClipSkip int
 	var lastBatchSize, lastBatchCount int
 
+	var userScenePrompt, userSceneNeg string
+	if strings.TrimSpace(params.ExtraPrompt) != "" {
+		firstPreset, err := s.db.Get(cp.Steps[0].PresetID)
+		if err != nil {
+			return nil, fmt.Errorf("step 1: preset not found: %w", err)
+		}
+		llmResult, err := s.generateLLMPromptFromTags(firstPreset, params.ExtraPrompt, "default", params.ExtraNegativePrompt)
+		if err != nil {
+			return nil, err
+		}
+		userScenePrompt = llmResult.Prompt
+		userSceneNeg = llmResult.NegativePrompt
+	}
+
 	for stepIdx, step := range cp.Steps {
 		p, err := s.db.Get(step.PresetID)
 		if err != nil {
@@ -913,28 +904,26 @@ func (s *Service) GenerateCompoundImage(params GenerateCompoundImageParams) (*Ge
 			"step":    stepIdx + 1,
 		})
 
-		prompt := p.Prompt
-		if params.ExtraPrompt != "" {
-			prompt = params.ExtraPrompt
-		}
-		prompt = appendLorasToPrompt(prompt, p.Loras)
-
-		negativePrompt := p.NegativePrompt
-		if params.ExtraNegativePrompt != "" {
-			negativePrompt = params.ExtraNegativePrompt
-		}
-		negativePrompt = s.kids.ApplyNegative(negativePrompt)
+		bp := s.buildPrompts(p.Prompt, p.NegativePrompt, p.Loras, userScenePrompt, userSceneNeg)
+		prompt := bp.Prompt
+		negativePrompt := bp.NegativePrompt
 
 		if p.ModelName != "" {
-			_ = s.sd.SetModel(p.ModelName)
+			if err := s.sd.SetModel(p.ModelName); err != nil {
+				s.log.Warn("compound step %d: set model %q: %s", stepIdx+1, p.ModelName, err)
+			}
 		}
 		if p.VAE != "" {
-			_ = s.sd.SetVAE(p.VAE)
+			if err := s.sd.SetVAE(p.VAE); err != nil {
+				s.log.Warn("compound step %d: set vae %q: %s", stepIdx+1, p.VAE, err)
+			}
 		} else {
-			_ = s.sd.SetVAE("Automatic")
+			if err := s.sd.SetVAE("Automatic"); err != nil {
+				s.log.Warn("compound step %d: set vae automatic: %s", stepIdx+1, err)
+			}
 		}
 
-		samplerName := buildSamplerName(p.Sampler, p.ScheduleType)
+		samplerName := promptutil.BuildSamplerName(p.Sampler, p.ScheduleType)
 
 		var width, height int
 		if step.ResolutionID != nil && *step.ResolutionID > 0 {
@@ -955,28 +944,67 @@ func (s *Service) GenerateCompoundImage(params GenerateCompoundImageParams) (*Ge
 		if stepIdx == 0 {
 			batchSize := 1
 			batchCount := 1
+			hiresEnabled, hiresUpscale, hiresDenoising, hiresUpscaler := s.resolveHires(p, params.HiresProfileID)
+			var hiresFix *bool
+			if hiresEnabled {
+				hiresFix = &hiresEnabled
+			}
 			req := sd.Txt2ImgRequest{
-				Prompt:          prompt,
-				NegativePrompt:  negativePrompt,
-				SamplerName:     samplerName,
-				Scheduler:       p.ScheduleType,
-				Steps:           p.Steps,
-				CfgScale:        p.CfgScale,
-				Width:           width,
-				Height:          height,
-				Seed:            p.Seed,
-				ClipSkip:        &clipSkip,
-				BatchSize:       &batchSize,
-				BatchCount:      &batchCount,
-				DoNotSaveImages: true,
-				DoNotSaveGrid:   true,
+				Prompt:                 prompt,
+				NegativePrompt:         negativePrompt,
+				SamplerName:            samplerName,
+				Scheduler:              p.ScheduleType,
+				Steps:                  p.Steps,
+				CfgScale:               p.CfgScale,
+				Width:                  width,
+				Height:                 height,
+				Seed:                   p.Seed,
+				ClipSkip:               &clipSkip,
+				BatchSize:              &batchSize,
+				BatchCount:             &batchCount,
+				HiresFix:               hiresFix,
+				HiresUpscale:           hiresUpscale,
+				HiresDenoisingStrength: hiresDenoising,
+				HiresUpscaler:          hiresUpscaler,
+				DoNotSaveImages:        true,
+				DoNotSaveGrid:          true,
 			}
 			result, err := s.sd.Txt2Img(req)
 			if err != nil {
 				if ierr := s.checkSDInterrupted(); ierr != nil {
 					return nil, ierr
 				}
-				return nil, fmt.Errorf("step %d (txt2img): %w", stepIdx+1, err)
+				if hiresFix != nil {
+					s.log.Warn("compound step %d: SD error with hires, retrying without: %s", stepIdx+1, err)
+					time.Sleep(3 * time.Second)
+					req.HiresFix = nil
+					req.HiresUpscale = nil
+					req.HiresDenoisingStrength = nil
+					req.HiresUpscaler = ""
+					req.HiresResizeX = 0
+					req.HiresResizeY = 0
+					req.HiresSecondPassSteps = 0
+					result, err = s.sd.Txt2Img(req)
+					if err == nil && len(result.Images) > 0 {
+						scale := 2.0
+						if hiresUpscale != nil {
+							scale = *hiresUpscale
+						}
+						ds := 0.5
+						if hiresDenoising != nil {
+							ds = *hiresDenoising
+						}
+						hrResult, hrErr := s.manualHiresUpscale(result.Images[0], req, scale, ds, hiresUpscaler)
+						if hrErr != nil {
+							s.log.Warn("compound step %d: manual hires failed, using base image: %s", stepIdx+1, hrErr)
+						} else if len(hrResult.Images) > 0 {
+							result = hrResult
+						}
+					}
+				}
+				if err != nil {
+					return nil, fmt.Errorf("step %d (txt2img): %w", stepIdx+1, err)
+				}
 			}
 			if len(result.Images) == 0 {
 				if ierr := s.checkSDInterrupted(); ierr != nil {
@@ -1102,246 +1130,6 @@ func (s *Service) GenerateCompoundImage(params GenerateCompoundImageParams) (*Ge
 	return img, nil
 }
 
-// --- BatchCompoundGenerate ---
-
-func (s *Service) BatchCompoundGenerate(params BatchCompoundGenerateParams) error {
-	s.StartSDPolling()
-	defer s.StopSDPolling()
-	if params.Count <= 0 || params.Count > 100 {
-		return fmt.Errorf("count must be between 1 and 100")
-	}
-	if params.OutputFolder == "" {
-		return fmt.Errorf("output folder is required")
-	}
-
-	s.batchMu.Lock()
-	if s.batchRunning {
-		s.batchMu.Unlock()
-		return fmt.Errorf("batch generation is already running")
-	}
-	s.batchRunning = true
-	s.batchMu.Unlock()
-	defer func() {
-		s.batchMu.Lock()
-		s.batchRunning = false
-		s.batchMu.Unlock()
-	}()
-
-	if err := os.MkdirAll(params.OutputFolder, 0755); err != nil {
-		return fmt.Errorf("create output folder: %w", err)
-	}
-
-	cp, err := s.db.GetCompoundPreset(params.CompoundPresetID)
-	if err != nil {
-		return fmt.Errorf("compound preset not found: %w", err)
-	}
-	if len(cp.Steps) == 0 {
-		return fmt.Errorf("compound preset has no steps")
-	}
-
-	for batchIdx := 0; batchIdx < params.Count; batchIdx++ {
-		s.emitter.Emit("batch:progress", map[string]any{
-			"current": batchIdx + 1,
-			"total":   params.Count,
-			"status":  "generating",
-		})
-
-		var lastImage string
-
-		for stepIdx, step := range cp.Steps {
-			p, err := s.db.Get(step.PresetID)
-			if err != nil {
-				return fmt.Errorf("step %d: preset not found: %w", stepIdx+1, err)
-			}
-
-			prompt := p.Prompt
-			if params.ExtraPrompt != "" {
-				prompt = params.ExtraPrompt
-			}
-			prompt = appendLorasToPrompt(prompt, p.Loras)
-
-			negativePrompt := p.NegativePrompt
-			if params.ExtraNegativePrompt != "" {
-				negativePrompt = params.ExtraNegativePrompt
-			}
-			var filterErr error
-			prompt, filterErr = s.kids.FilterInput(prompt)
-			if filterErr != nil {
-				return fmt.Errorf("step %d: %w", stepIdx+1, filterErr)
-			}
-			negativePrompt, filterErr = s.kids.FilterInput(negativePrompt)
-			if filterErr != nil {
-				return fmt.Errorf("step %d: %w", stepIdx+1, filterErr)
-			}
-			negativePrompt = s.kids.ApplyNegative(negativePrompt)
-
-			if p.ModelName != "" {
-				_ = s.sd.SetModel(p.ModelName)
-			}
-			if p.VAE != "" {
-				_ = s.sd.SetVAE(p.VAE)
-			} else {
-				_ = s.sd.SetVAE("Automatic")
-			}
-
-			samplerName := buildSamplerName(p.Sampler, p.ScheduleType)
-
-			var width, height int
-			if step.ResolutionID != nil && *step.ResolutionID > 0 {
-				if r, err := s.db.GetResolution(*step.ResolutionID); err == nil {
-					width = r.Width
-					height = r.Height
-				}
-			}
-			if width == 0 || height == 0 {
-				width, height = s.resolveResolution(p, params.ResolutionID)
-			}
-
-			hiresEnabled, hiresUpscale, hiresDenoising, hiresUpscaler := s.resolveHires(p, params.HiresProfileID)
-
-			clipSkip := 1
-			if p.ClipSkip != nil {
-				clipSkip = *p.ClipSkip
-			}
-
-			if stepIdx == 0 {
-				batchSize := 1
-				batchCount := 1
-				var hiresFix *bool
-				if hiresEnabled {
-					hiresFix = &hiresEnabled
-				}
-				req := sd.Txt2ImgRequest{
-					Prompt:                 prompt,
-					NegativePrompt:         negativePrompt,
-					SamplerName:            samplerName,
-					Scheduler:              p.ScheduleType,
-					Steps:                  p.Steps,
-					CfgScale:               p.CfgScale,
-					Width:                  width,
-					Height:                 height,
-					Seed:                   p.Seed,
-					ClipSkip:               &clipSkip,
-					BatchSize:              &batchSize,
-					BatchCount:             &batchCount,
-					HiresFix:               hiresFix,
-					HiresUpscale:           hiresUpscale,
-					HiresDenoisingStrength: hiresDenoising,
-					HiresUpscaler:          hiresUpscaler,
-					DoNotSaveImages:        true,
-					DoNotSaveGrid:   true,
-				}
-				result, err := s.sd.Txt2Img(req)
-				if err != nil {
-					if ierr := s.checkSDInterrupted(); ierr != nil {
-						return ierr
-					}
-					if hiresFix != nil {
-						s.log.Warn("batch %d step %d: SD error with hires fix, retrying without: %s", batchIdx+1, stepIdx+1, err)
-						time.Sleep(3 * time.Second)
-						req.HiresFix = nil
-						req.HiresUpscale = nil
-						req.HiresDenoisingStrength = nil
-						req.HiresUpscaler = ""
-						req.HiresResizeX = 0
-						req.HiresResizeY = 0
-						req.HiresSecondPassSteps = 0
-						result, err = s.sd.Txt2Img(req)
-						if err == nil && len(result.Images) > 0 {
-							scale := 2.0
-							if hiresUpscale != nil {
-								scale = *hiresUpscale
-							}
-							ds := 0.5
-							if hiresDenoising != nil {
-								ds = *hiresDenoising
-							}
-							s.log.Info("batch %d step %d: manual hires upscale: %.1fx, denoise=%.2f, upscaler=%s", batchIdx+1, stepIdx+1, scale, ds, hiresUpscaler)
-							hrResult, hrErr := s.manualHiresUpscale(result.Images[0], req, scale, ds, hiresUpscaler)
-							if hrErr == nil && len(hrResult.Images) > 0 {
-								result = hrResult
-							}
-						}
-					}
-				}
-				if err != nil {
-					return fmt.Errorf("batch %d, step %d (txt2img): %w", batchIdx+1, stepIdx+1, err)
-				}
-				if len(result.Images) == 0 {
-					if ierr := s.checkSDInterrupted(); ierr != nil {
-						return ierr
-					}
-					return fmt.Errorf("batch %d, step %d: no image returned", batchIdx+1, stepIdx+1)
-				}
-				lastImage = result.Images[0]
-			} else {
-				denoising := step.DenoisingStrength
-				if denoising <= 0 {
-					denoising = 0.5
-				}
-				batchSize := 1
-				batchCount := 1
-				result, err := s.sd.Img2Img(sd.Img2ImgRequest{
-					InitImages:        []string{lastImage},
-					Prompt:            prompt,
-					NegativePrompt:    negativePrompt,
-					SamplerName:       samplerName,
-					Scheduler:         p.ScheduleType,
-					Steps:             p.Steps,
-					CfgScale:          p.CfgScale,
-					Width:             width,
-					Height:            height,
-					Seed:              p.Seed,
-					DenoisingStrength: &denoising,
-					ClipSkip:          &clipSkip,
-					BatchSize:         &batchSize,
-					BatchCount:        &batchCount,
-					DoNotSaveImages:   true,
-					DoNotSaveGrid:     true,
-				})
-				if err != nil {
-					if ierr := s.checkSDInterrupted(); ierr != nil {
-						return ierr
-					}
-					return fmt.Errorf("batch %d, step %d (img2img): %w", batchIdx+1, stepIdx+1, err)
-				}
-				if len(result.Images) == 0 {
-					if ierr := s.checkSDInterrupted(); ierr != nil {
-						return ierr
-					}
-					return fmt.Errorf("batch %d, step %d: no image returned", batchIdx+1, stepIdx+1)
-				}
-				lastImage = result.Images[0]
-			}
-		}
-
-		imgData, err := base64.StdEncoding.DecodeString(lastImage)
-		if err != nil {
-			return fmt.Errorf("batch %d: decode image: %w", batchIdx+1, err)
-		}
-
-		filename := fmt.Sprintf("compound_%s_%d_%d.png", cp.Name, time.Now().Unix(), batchIdx+1)
-		filePath := filepath.Join(params.OutputFolder, filename)
-		if err := os.WriteFile(filePath, imgData, 0644); err != nil {
-			return fmt.Errorf("batch %d: save file: %w", batchIdx+1, err)
-		}
-
-		s.emitter.Emit("batch:progress", map[string]any{
-			"current":   batchIdx + 1,
-			"total":     params.Count,
-			"file_path": filePath,
-			"status":    "generating",
-		})
-	}
-
-	s.emitter.Emit("batch:progress", map[string]any{
-		"current": params.Count,
-		"total":   params.Count,
-		"status":  "done",
-	})
-	return nil
-}
-
 // --- TestCompoundGenerate ---
 
 func (s *Service) TestCompoundGenerate(params TestCompoundGenerateParams) ([]TestGenerateResultItem, error) {
@@ -1359,6 +1147,25 @@ func (s *Service) TestCompoundGenerate(params TestCompoundGenerateParams) ([]Tes
 
 	totalItems := len(params.SelectedIDs)
 	results := make([]TestGenerateResultItem, 0, totalItems)
+
+	var userScenePrompt, userSceneNeg string
+	{
+		firstCP, cpErr := s.db.GetCompoundPreset(params.SelectedIDs[0])
+		if cpErr == nil && len(firstCP.Steps) > 0 {
+			if firstPreset, pErr := s.db.Get(firstCP.Steps[0].PresetID); pErr == nil {
+				filtered, filterErr := s.kids.FilterInput(params.Prompt)
+				if filterErr == nil {
+					llmResult, llmErr := s.generateLLMPromptFromTags(firstPreset, filtered, "default", params.NegativePrompt)
+					if llmErr == nil {
+						userScenePrompt = llmResult.Prompt
+						userSceneNeg = llmResult.NegativePrompt
+					} else {
+						s.log.Warn("test compound: LLM conversion failed, using raw prompt: %s", llmErr)
+					}
+				}
+			}
+		}
+	}
 
 	for idx, compoundID := range params.SelectedIDs {
 		s.emitter.Emit("test:progress", map[string]any{
@@ -1393,34 +1200,26 @@ func (s *Service) TestCompoundGenerate(params TestCompoundGenerateParams) ([]Tes
 				break
 			}
 
-			prompt := params.Prompt
-			prompt, filterErr := s.kids.FilterInput(prompt)
-			if filterErr != nil {
-				item.Error = filterErr.Error()
-				break
-			}
-			prompt = appendLorasToPrompt(prompt, p.Loras)
-
-			negPrompt := params.NegativePrompt
-			if p.NegativePrompt != "" {
-				if negPrompt != "" {
-					negPrompt = p.NegativePrompt + ", " + negPrompt
-				} else {
-					negPrompt = p.NegativePrompt
-				}
-			}
-			negPrompt = s.kids.ApplyNegative(negPrompt)
+			bp := s.buildPrompts(p.Prompt, p.NegativePrompt, p.Loras, userScenePrompt, userSceneNeg)
+			prompt := bp.Prompt
+			negPrompt := bp.NegativePrompt
 
 			if p.ModelName != "" {
-				_ = s.sd.SetModel(p.ModelName)
+				if err := s.sd.SetModel(p.ModelName); err != nil {
+					s.log.Warn("test compound step %d: set model %q: %s", stepIdx+1, p.ModelName, err)
+				}
 			}
 			if p.VAE != "" {
-				_ = s.sd.SetVAE(p.VAE)
+				if err := s.sd.SetVAE(p.VAE); err != nil {
+					s.log.Warn("test compound step %d: set vae %q: %s", stepIdx+1, p.VAE, err)
+				}
 			} else {
-				_ = s.sd.SetVAE("Automatic")
+				if err := s.sd.SetVAE("Automatic"); err != nil {
+					s.log.Warn("test compound step %d: set vae automatic: %s", stepIdx+1, err)
+				}
 			}
 
-			samplerName := buildSamplerName(p.Sampler, p.ScheduleType)
+			samplerName := promptutil.BuildSamplerName(p.Sampler, p.ScheduleType)
 
 			var width, height int
 			if step.ResolutionID != nil && *step.ResolutionID > 0 {
@@ -1447,7 +1246,7 @@ func (s *Service) TestCompoundGenerate(params TestCompoundGenerateParams) ([]Tes
 				if hiresEnabled {
 					hiresFix = &hiresEnabled
 				}
-				result, err := s.sd.Txt2Img(sd.Txt2ImgRequest{
+				req := sd.Txt2ImgRequest{
 					Prompt:                 prompt,
 					NegativePrompt:         negPrompt,
 					SamplerName:            samplerName,
@@ -1466,10 +1265,41 @@ func (s *Service) TestCompoundGenerate(params TestCompoundGenerateParams) ([]Tes
 					BatchCount:      &batchCount,
 					DoNotSaveImages: true,
 					DoNotSaveGrid:   true,
-				})
+				}
+				result, err := s.sd.Txt2Img(req)
 				if err != nil {
-					item.Error = fmt.Sprintf("step %d: %v", stepIdx+1, err)
-					break
+					if hiresFix != nil {
+						s.log.Warn("test compound step %d: SD error with hires, retrying without: %s", stepIdx+1, err)
+						time.Sleep(3 * time.Second)
+						req.HiresFix = nil
+						req.HiresUpscale = nil
+						req.HiresDenoisingStrength = nil
+						req.HiresUpscaler = ""
+						req.HiresResizeX = 0
+						req.HiresResizeY = 0
+						req.HiresSecondPassSteps = 0
+						result, err = s.sd.Txt2Img(req)
+						if err == nil && len(result.Images) > 0 {
+							scale := 2.0
+							if hiresUpscale != nil {
+								scale = *hiresUpscale
+							}
+							ds := 0.5
+							if hiresDenoising != nil {
+								ds = *hiresDenoising
+							}
+							hrResult, hrErr := s.manualHiresUpscale(result.Images[0], req, scale, ds, hiresUpscaler)
+							if hrErr != nil {
+								s.log.Warn("test compound step %d: manual hires failed, using base image: %s", stepIdx+1, hrErr)
+							} else if len(hrResult.Images) > 0 {
+								result = hrResult
+							}
+						}
+					}
+					if err != nil {
+						item.Error = fmt.Sprintf("step %d: %v", stepIdx+1, err)
+						break
+					}
 				}
 				if len(result.Images) == 0 {
 					item.Error = fmt.Sprintf("step %d: no image", stepIdx+1)
@@ -1513,6 +1343,7 @@ func (s *Service) TestCompoundGenerate(params TestCompoundGenerateParams) ([]Tes
 
 		if item.Error == "" {
 			item.Image = lastImage
+			s.sessions.AddToSession(item.Image, nil, "compare", false, nil)
 		}
 		item.Sampler = ""
 		item.ScheduleType = ""

@@ -25,18 +25,37 @@ sd-ai/
 │   ├── llm/                   # LLM HTTP-клиент (OpenAI-compatible)
 │   ├── sd/                    # Stable Diffusion WebUI HTTP-клиент
 │   ├── preset/                # SQLite CRUD (presets, settings, sessions)
+│   ├── generation/            # Сервис генерации изображений
+│   ├── queue/                 # Очередь задач с повторами и паузой
 │   ├── compositor/            # Multi-pass генерация (background + characters)
+│   ├── session/               # Управление сессиями
+│   ├── importexport/          # Импорт/экспорт пресетов
+│   ├── settings/              # Сервис настроек
+│   ├── promptutil/            # Утилиты промптов (ExtractJSON, StripJunk)
+│   ├── filebrowser/           # Файловый браузер
+│   ├── serverclient/          # Клиент API сервера
 │   ├── rembg/                 # Удаление фона (rembg API)
 │   ├── kids/                  # Kids mode (фильтрация контента)
-│   └── logger/                # Логирование через Wails runtime
+│   └── logger/                # Логирование событий с LogBridge
+├── server/                    # Автономный оркестратор сервисов
+│   ├── main.go                # Entrypoint сервера (TUI / headless)
+│   ├── config/                # Конфигурация сервера (YAML)
+│   ├── gpu/                   # Мониторинг GPU (nvidia-smi)
+│   ├── gpuproxy/              # GPU-прокси с приоритетной очередью
+│   ├── health/                # Мониторинг здоровья сервисов
+│   ├── installer/             # Установщик компонентов
+│   ├── models/                # Управление моделями
+│   ├── process/               # Управление жизненным циклом процессов
+│   ├── tui/                   # Терминальный UI (bubbletea)
+│   └── api/                   # HTTP API обработчики
 ├── frontend/
 │   └── src/
 │       ├── components/        # Vue компоненты
+│       ├── composables/       # Vue composables (useQueue и др.)
 │       ├── api.js             # API-слой (маппинг Wails bindings)
-│       ├── i18n/              # Интернационализация (en.js + index.js)
-│       ├── assets/            # CSS
+│       ├── i18n/              # Интернационализация
 │       └── wailsjs/           # Auto-generated Wails bindings
-├── data/                      # SQLite DB
+├── data/                      # Runtime-данные (SQLite, пресеты)
 └── docs/                      # Документация
 ```
 
@@ -72,21 +91,48 @@ Backend → Frontend коммуникация через `runtime.EventsEmit(ctx
 ## Диаграмма модулей
 
 ```
-┌─────────────────────────────────────────┐
-│              frontend (Vue 3)            │
-│  components ← i18n/t() ← api.js ← wailsjs/bindings │
-└──────────────────┬──────────────────────┘
-                   │ Wails RPC
-┌──────────────────▼──────────────────────┐
-│                app.go (Facade)           │
-│  Wails bindings + business logic        │
-├────────┬──────────┬──────────┤
-│ llm    │   sd     │ preset   │
-│ Client │  Client  │   DB     │
-├────────┴──────────┴──────────┤
-│  Ollama/LM Studio │ SD WebUI │ SQLite   │
-└───────────────────┴──────────┴──────────┘
+┌─────────────────────────────────────────────────┐
+│                  frontend (Vue 3)                │
+│  components ← composables ← api.js ← wailsjs    │
+└──────────────────────┬──────────────────────────┘
+                       │ Wails RPC
+┌──────────────────────▼──────────────────────────┐
+│                  app.go (Facade)                  │
+├──────┬────────┬──────────┬──────────┬────────────┤
+│ llm  │   sd   │ preset   │ queue    │ generation │
+│Client│ Client │   DB     │ Service  │  Service   │
+├──────┴────────┴──────────┴──────────┴────────────┤
+│  Ollama/LM Studio  │  SD WebUI  │  SQLite        │
+└────────────────────┴────────────┴────────────────┘
 ```
+
+## Компонент Server
+
+Пакет `server/` — автономный Go-сервис для управления AI-инфраструктурой:
+
+```
+┌─────────────────────────────────────────┐
+│           SD Studio Server               │
+├────────┬──────────┬──────────┬──────────┤
+│Process │  GPU     │  Health  │   TUI    │
+│Manager │ Monitor  │ Monitor  │Dashboard │
+├────────┴──────────┴──────────┴──────────┤
+│  GPU Proxy (priority queue, VRAM guard)  │
+├─────────────────────────────────────────┤
+│  HTTP API + mDNS discovery              │
+└─────────────────────────────────────────┘
+```
+
+### Ключевые возможности
+- **Управление процессами** — жизненный цикл SD WebUI, Ollama, Rembg (start/stop/restart)
+- **Мониторинг GPU** — опрос nvidia-smi, отслеживание VRAM, автооптимизация
+- **GPU-прокси** — приоритетная очередь с VRAM cooldown (предотвращает OOM на GPU с малой VRAM)
+- **Мониторинг здоровья** — периодические HTTP-проверки всех сервисов
+- **TUI** — терминальный дашборд на bubbletea со статусом сервисов и управлением
+- **mDNS** — автоматическое обнаружение сервисов через `_sd-studio._tcp`
+- **Управление моделями** — загрузка/удаление SD-чекпоинтов и LLM-моделей
+- **Переключение бэкендов** — переключение между A1111 и Forge во время работы
+- **Установщик** — автоматическая установка Python, SD WebUI, Ollama
 
 ## Диаграмма БД
 

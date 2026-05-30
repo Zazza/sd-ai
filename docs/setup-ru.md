@@ -9,6 +9,7 @@
 - [LM Studio](#lm-studio)
 - [llama.cpp](#llamacpp)
 - [Rembg](#rembg)
+- [SD Studio Server](#sd-studio-server)
 
 ---
 
@@ -73,7 +74,7 @@ webui.bat --listen --api --enable-insecure-extension-access
 - [Civitai](https://civitai.com/) — основной репозиторий моделей
 - [HuggingFace](https://huggingface.co/models?pipeline_tag=text-to-image)
 
-LoRA → `models/Lora/`, VAE → `models/VAE/`.
+LoRA -> `models/Lora/`, VAE -> `models/VAE/`.
 
 ---
 
@@ -143,7 +144,7 @@ Environment="OLLAMA_HOST=0.0.0.0:11434"
 curl http://localhost:11434/api/tags
 ```
 
-В SD Studio → Настройки → Подключение: выберите **Ollama**, URL `http://localhost:11434`.
+В SD Studio -> Настройки -> Подключение: выберите **Ollama**, URL `http://localhost:11434`.
 
 ---
 
@@ -168,7 +169,7 @@ GUI-приложение для LLM. Проще в настройке, чем Ol
 
 ### Сетевой доступ
 
-В LM Studio: Settings → Advanced → **Enable CORS** и укажите хост сервера `0.0.0.0`.
+В LM Studio: Settings -> Advanced -> **Enable CORS** и укажите хост сервера `0.0.0.0`.
 
 ### Проверка
 
@@ -176,7 +177,7 @@ GUI-приложение для LLM. Проще в настройке, чем Ol
 curl http://localhost:1234/v1/models
 ```
 
-В SD Studio → Настройки → Подключение: выберите **LM Studio**, URL `http://localhost:1234`.
+В SD Studio -> Настройки -> Подключение: выберите **LM Studio**, URL `http://localhost:1234`.
 
 ---
 
@@ -234,7 +235,7 @@ brew install llama.cpp
 curl http://localhost:8081/v1/models
 ```
 
-В SD Studio → Настройки → Подключение: выберите **llama.cpp**, URL `http://localhost:8081`.
+В SD Studio -> Настройки -> Подключение: выберите **llama.cpp**, URL `http://localhost:8081`.
 
 > **Примечание:** llama.cpp не поддерживает переключение моделей через API. Модель задаётся при запуске сервера.
 
@@ -301,9 +302,103 @@ curl -s -F file=@test.png http://localhost:7000/api/remove -o result.png
 
 ### Настройка в SD Studio
 
-Настройки → Rembg → введите URL (например, `http://192.168.1.100:7000`) → **Тест** → **Сохранить**.
+Настройки -> Rembg -> введите URL (например, `http://192.168.1.100:7000`) -> **Тест** -> **Сохранить**.
 
 Если rembg не настроен, SD Studio использует встроенное удаление фона на Go (более низкое качество, заметные артефакты по краям).
+
+---
+
+## SD Studio Server
+
+Автономный сервис для автоматического управления всеми AI-компонентами (SD WebUI, Ollama, Rembg) — установка, запуск, мониторинг, оптимизация GPU и управление моделями. Идеально для headless-развертываний и серверов.
+
+### Установка
+
+```bash
+cd server
+go build -o sd-studio-server .
+```
+
+Или через Docker:
+```bash
+docker compose up --build
+```
+
+### Первый запуск
+
+```bash
+./sd-studio-server --data ~/sd-studio-server
+```
+
+При первом запуске интерактивный мастер настройки проведёт через:
+- Выбор компонентов для установки (SD WebUI, Ollama, Rembg)
+- Выбор директории данных
+- Настройку GPU-бэкенда (Forge / A1111)
+
+### Конфигурация
+
+Конфигурация хранится в `{data-dir}/server-config.yaml`:
+
+```yaml
+port: 8080
+data_dir: ~/sd-studio-server
+active_sd: forge
+mdns: true
+proxy:
+  enabled: true
+  gpu_slots: 1
+  endpoints:
+    sd:
+      listen_addr: ":7860"
+      target_url: "http://localhost:7860"
+    ollama:
+      listen_addr: ":11434"
+      target_url: "http://localhost:11434"
+```
+
+### Режимы запуска
+
+| Режим | Команда | Описание |
+|-------|---------|----------|
+| TUI (интерактивный) | `./sd-studio-server` | Терминальный дашборд с управлением сервисами |
+| Headless | `./sd-studio-server --headless` | Только вывод логов, без TUI |
+| Кастомный порт | `./sd-studio-server --port 9090` | Переопределить HTTP-порт |
+| Кастомный конфиг | `./sd-studio-server --config /path/to/config.yaml` | Использовать указанный файл конфигурации |
+
+### GPU Proxy
+
+При `proxy.enabled: true` сервер работает как умный обратный прокси:
+- **Очередь с приоритетом** — запросы от студии получают более высокий приоритет
+- **Ограничение GPU-слотов** — только N параллельных запросов разделяют GPU
+- **Охлаждение VRAM** — ожидание >= 50% свободной VRAM между задачами (предотвращает OOM)
+- Конфигурация на уровне эндпоинтов (отдельные порты прокси для SD и Ollama)
+
+### API-эндпоинты
+
+| Эндпоинт | Описание |
+|-----------|----------|
+| `GET /` | Информация о сервере |
+| `GET /api/health` | Статус здоровья сервисов |
+| `GET /api/processes` | Статус процессов |
+| `POST /api/processes/:name/start` | Запустить сервис |
+| `POST /api/processes/:name/stop` | Остановить сервис |
+| `POST /api/processes/:name/restart` | Перезапустить сервис |
+| `GET /api/gpu` | Информация о GPU |
+| `GET /api/models` | Доступные модели |
+| `POST /api/models/download` | Скачать модель |
+| `DELETE /api/models/:name` | Удалить модель |
+| `GET /api/backends` | Доступные бэкенды |
+| `POST /api/backends/switch` | Переключить бэкенд |
+
+### Обнаружение через mDNS
+
+При `mdns: true` сервер анонсирует себя как `_sd-studio._tcp` в локальной сети. Десктопные приложения могут автоматически обнаруживать сервер.
+
+### Проверка
+
+```bash
+curl http://localhost:8080/
+```
 
 ---
 
@@ -316,3 +411,4 @@ curl -s -F file=@test.png http://localhost:7000/api/remove -o result.png
 | LM Studio | 1234 | `http://localhost:1234` |
 | llama.cpp | 8081 | `http://localhost:8081` |
 | Rembg | 7000 | `http://localhost:7000` |
+| SD Studio Server | 8080 | `http://localhost:8080` |

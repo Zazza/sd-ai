@@ -29,6 +29,9 @@ type mockLLMService struct {
 func (m *mockLLMService) Chat(string, string, string, float64, int) (string, error) {
 	return "", nil
 }
+func (m *mockLLMService) ChatJSON(string, string, string, float64, int) (string, error) {
+	return "", nil
+}
 func (m *mockLLMService) ChatVision(string, string, string, string, float64, int) (string, error) {
 	return "", nil
 }
@@ -139,7 +142,7 @@ func testService(t *testing.T, llmSvc *mockLLMService, sdSvc *mockSDService) (*S
 	rembgClient := rembg.New("")
 	log := logger.New(nil)
 
-	svc := New(db, llmSvc, sdSvc, cfg, rembgClient, log)
+	svc := New(db, llmSvc, sdSvc, cfg, rembgClient, log, nil)
 	return svc, db
 }
 
@@ -681,4 +684,16 @@ func TestApplyLLMConfig_InvalidNumbersIgnored(t *testing.T) {
 	assert.Equal(t, 0, llmSvc.setBackendCfg.NumCtx)
 	assert.Equal(t, 0.0, llmSvc.setBackendCfg.TopP)
 	assert.Equal(t, 0, llmSvc.setBackendCfg.NumGPU)
+}
+
+func TestGetModelCatalog_LoadsEmbeddedData(t *testing.T) {
+	t.Parallel()
+
+	svc, _ := testService(t, nil, nil)
+
+	cat, err := svc.GetModelCatalog()
+	require.NoError(t, err)
+	assert.NotEmpty(t, cat.LLMGenerate)
+	assert.NotEmpty(t, cat.SDModels)
+	assert.NotEmpty(t, cat.LoRA)
 }

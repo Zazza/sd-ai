@@ -1,9 +1,11 @@
 <script setup>
-import { ref, computed, onMounted, onUnmounted, reactive } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { EventsOn, EventsOff } from '../wailsjs/runtime/runtime'
 import { api } from '../api.js'
 import { t } from '../i18n/index.js'
 import { useGenerationProgress } from '../composables/useGenerationProgress.js'
+import ResolutionSelector from './ResolutionSelector.vue'
+import HiresProfileSelector from './HiresProfileSelector.vue'
 
 const presets = ref([])
 const selectedPresetId = ref(null)
@@ -23,6 +25,8 @@ const savedScenes = ref([])
 const batchCount = ref(1)
 const batchResults = ref([])
 const batchCurrent = ref(0)
+const selectedResolutionId = ref(null)
+const selectedHiresProfileId = ref(null)
 
 const presetOptions = computed(() =>
   presets.value.map(p => ({ id: p.id, name: p.name }))
@@ -63,12 +67,25 @@ async function loadPresets() {
   }
 }
 
+let svcInterval = null
+
 async function checkServices() {
   try {
-    const status = await api.checkServices()
-    llmAvailable.value = status.llm?.available || false
-    sdAvailable.value = status.sd?.available || false
-  } catch {}
+    const settings = await api.getSettings()
+    if (settings.connection_mode === 'server') {
+      const status = await api.getServerStatus()
+      const health = status.health || {}
+      llmAvailable.value = health.ollama?.healthy || false
+      sdAvailable.value = health.sd?.healthy || false
+    } else {
+      const status = await api.checkServices()
+      llmAvailable.value = status.llm?.available || false
+      sdAvailable.value = status.sd?.available || false
+    }
+  } catch {
+    llmAvailable.value = false
+    sdAvailable.value = false
+  }
 }
 
 async function loadSavedScenes() {
@@ -106,7 +123,7 @@ async function decompose() {
     return
   }
   if (!selectedPresetId.value) {
-    error.value = t('scene.error_select_preset')
+    error.value = t('scene.error_select_style')
     return
   }
 
@@ -134,6 +151,17 @@ async function decompose() {
 
 async function generate() {
   if (!scene.value) return
+
+  if (selectedResolutionId.value) {
+    scene.value.resolution_id = selectedResolutionId.value
+  } else {
+    delete scene.value.resolution_id
+  }
+  if (selectedHiresProfileId.value) {
+    scene.value.hires_profile_id = selectedHiresProfileId.value
+  } else {
+    delete scene.value.hires_profile_id
+  }
 
   const count = Math.max(1, Math.min(batchCount.value || 1, 20))
 
@@ -212,7 +240,12 @@ async function saveScene() {
 onMounted(() => {
   loadPresets()
   checkServices()
+  svcInterval = setInterval(checkServices, 30000)
   loadSavedScenes()
+})
+
+onUnmounted(() => {
+  if (svcInterval) clearInterval(svcInterval)
 })
 </script>
 
@@ -225,9 +258,9 @@ onMounted(() => {
     <!-- Step 1: Description + Preset -->
     <div class="section" v-if="!scene">
       <div class="form-group">
-        <label>{{ t('scene.label_preset') }}</label>
+        <label>{{ t('scene.label_style') }}</label>
         <select v-model="selectedPresetId">
-          <option :value="null" disabled>{{ t('scene.select_preset') }}</option>
+          <option :value="null" disabled>{{ t('scene.select_style') }}</option>
           <option v-for="p in presetOptions" :key="p.id" :value="p.id">{{ p.name }}</option>
         </select>
       </div>
@@ -238,8 +271,8 @@ onMounted(() => {
       </div>
 
       <div class="form-group">
-        <label>{{ t('scene.label_negative') }}</label>
-        <input v-model="negativePrompt" type="text" :placeholder="t('scene.placeholder_negative')" />
+        <label>{{ t('scene.label_exclude') }}</label>
+        <input v-model="negativePrompt" type="text" :placeholder="t('scene.placeholder_exclude')" />
       </div>
 
       <button @click="decompose" :disabled="decomposing || !llmAvailable || !selectedPresetId" class="btn-primary">
@@ -266,7 +299,7 @@ onMounted(() => {
       </div>
 
       <div class="form-group">
-        <label>{{ t('scene.label_preset') }}</label>
+        <label>{{ t('scene.label_style') }}</label>
         <select v-model="selectedPresetId" @change="scene.preset_id = selectedPresetId">
           <option v-for="p in presetOptions" :key="p.id" :value="p.id">{{ p.name }}</option>
         </select>
@@ -278,8 +311,20 @@ onMounted(() => {
       </div>
 
       <div class="form-group">
-        <label>{{ t('scene.label_negative') }}</label>
+        <label>{{ t('scene.label_exclude') }}</label>
         <input v-model="scene.negative_prompt" type="text" />
+      </div>
+
+      <div class="form-group">
+        <label>{{ t('scene.label_refine_prompt') }}</label>
+        <textarea v-model="scene.refine_prompt" rows="2" :placeholder="t('scene.placeholder_refine_prompt')"></textarea>
+      </div>
+
+      <div class="form-group">
+        <label>{{ t('scene.label_refine_strength', { value: (scene.refine_denoise || 0.45).toFixed(2) }) }}</label>
+        <input type="range" min="0.1" max="0.8" step="0.05" :value="scene.refine_denoise || 0.45"
+          @input="scene.refine_denoise = parseFloat($event.target.value)" />
+        <span class="hint">{{ t('scene.hint_refine_strength') }}</span>
       </div>
 
       <div class="characters-list">
@@ -334,6 +379,10 @@ onMounted(() => {
       </div>
 
       <div class="editor-actions">
+        <div class="editor-settings">
+          <ResolutionSelector v-model="selectedResolutionId" />
+          <HiresProfileSelector v-model="selectedHiresProfileId" />
+        </div>
         <div class="form-group" style="margin-bottom: 0;">
           <label>{{ t('scene.label_count') }}</label>
           <input type="number" v-model.number="batchCount" min="1" max="20" style="width: 70px;" />
@@ -412,12 +461,13 @@ h2 { margin-bottom: 20px; }
   margin-bottom: 16px;
 }
 
-.online { color: #4caf50; font-weight: bold; }
-.offline { color: #f44336; }
+.online { color: var(--success); font-weight: bold; }
+.offline { color: var(--danger); }
 
 .section {
-  background: var(--color-bg-soft, #1e1e2e);
-  border-radius: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
   padding: 20px;
   margin-bottom: 16px;
 }
@@ -430,7 +480,7 @@ h2 { margin-bottom: 20px; }
   display: block;
   margin-bottom: 4px;
   font-size: 0.9em;
-  color: var(--color-text-secondary, #aaa);
+  color: var(--text-dim);
 }
 
 .form-group input[type="text"],
@@ -438,21 +488,28 @@ h2 { margin-bottom: 20px; }
 .form-group select {
   width: 100%;
   padding: 8px;
-  border: 1px solid var(--color-border, #444);
-  border-radius: 4px;
-  background: var(--color-input-bg, #2a2a3a);
-  color: var(--color-text, #eee);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text);
   font-size: 0.95em;
   box-sizing: border-box;
 }
 
 textarea { resize: vertical; font-family: inherit; }
 
+.hint {
+  display: block;
+  font-size: 0.8em;
+  color: var(--text-dim);
+  margin-top: 2px;
+}
+
 .error {
-  color: #f44336;
+  color: var(--danger);
   padding: 8px 12px;
-  background: rgba(244, 67, 54, 0.1);
-  border-radius: 4px;
+  background: rgba(224, 85, 85, 0.12);
+  border-radius: var(--radius-sm);
   margin-bottom: 12px;
 }
 
@@ -473,7 +530,7 @@ textarea { resize: vertical; font-family: inherit; }
 }
 
 .character-card {
-  background: var(--color-bg-mute, #252535);
+  background: var(--surface-2);
   border-radius: 6px;
   padding: 12px;
   margin: 12px 0;
@@ -490,9 +547,9 @@ textarea { resize: vertical; font-family: inherit; }
   font-weight: bold;
   background: transparent;
   border: none;
-  color: var(--color-text, #eee);
+  color: var(--text-bright);
   font-size: 1em;
-  border-bottom: 1px solid var(--color-border, #444);
+  border-bottom: 1px solid var(--border);
   padding: 2px 4px;
 }
 
@@ -510,7 +567,7 @@ textarea { resize: vertical; font-family: inherit; }
 .control-group label {
   display: block;
   font-size: 0.8em;
-  color: var(--color-text-secondary, #aaa);
+  color: var(--text-dim);
   margin-bottom: 2px;
 }
 
@@ -526,8 +583,8 @@ textarea { resize: vertical; font-family: inherit; }
   position: relative;
   width: 200px;
   height: 120px;
-  background: var(--color-bg, #333);
-  border: 1px dashed var(--color-border, #555);
+  background: var(--bg);
+  border: 1px dashed var(--border);
   border-radius: 4px;
   overflow: hidden;
 }
@@ -541,7 +598,7 @@ textarea { resize: vertical; font-family: inherit; }
   align-items: center;
   justify-content: center;
   font-size: 0.7em;
-  color: var(--color-text, #ccc);
+  color: var(--text);
   overflow: hidden;
 }
 
@@ -550,6 +607,19 @@ textarea { resize: vertical; font-family: inherit; }
   gap: 10px;
   margin-top: 16px;
   flex-wrap: wrap;
+  align-items: flex-end;
+}
+
+.editor-settings {
+  display: flex;
+  gap: 12px;
+  flex: 1;
+  min-width: 300px;
+}
+
+.editor-settings > * {
+  flex: 1;
+  min-width: 140px;
 }
 
 .progress-info {
@@ -562,14 +632,14 @@ textarea { resize: vertical; font-family: inherit; }
 .progress-bar {
   flex: 1;
   height: 6px;
-  background: var(--color-bg-mute, #333);
+  background: var(--surface-2);
   border-radius: 3px;
   overflow: hidden;
 }
 
 .progress-fill {
   height: 100%;
-  background: #4caf50;
+  background: var(--success);
   transition: width 0.3s;
 }
 
@@ -586,22 +656,22 @@ textarea { resize: vertical; font-family: inherit; }
 
 .btn-primary {
   padding: 8px 20px;
-  background: #4caf50;
+  background: var(--accent);
   color: #fff;
   border: none;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   font-size: 0.95em;
 }
 
-.btn-primary:disabled { background: #666; cursor: not-allowed; }
+.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .btn-secondary {
   padding: 8px 16px;
-  background: transparent;
-  color: var(--color-text, #eee);
-  border: 1px solid var(--color-border, #555);
-  border-radius: 4px;
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
   cursor: pointer;
 }
 
@@ -609,23 +679,23 @@ textarea { resize: vertical; font-family: inherit; }
 
 .btn-danger {
   padding: 4px 10px;
-  background: #f44336;
+  background: var(--danger);
   color: #fff;
   border: none;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   font-size: 0.85em;
 }
 
 .saved-scenes {
   margin-top: 20px;
-  border-top: 1px solid var(--color-border, #444);
+  border-top: 1px solid var(--border);
   padding-top: 16px;
 }
 
 .saved-scenes h4 {
   margin-bottom: 10px;
-  color: var(--color-text-secondary, #aaa);
+  color: var(--text-dim);
 }
 
 .saved-scene-item {
@@ -633,7 +703,7 @@ textarea { resize: vertical; font-family: inherit; }
   justify-content: space-between;
   align-items: center;
   padding: 8px 0;
-  border-bottom: 1px solid var(--color-border, #333);
+  border-bottom: 1px solid var(--border);
 }
 
 .saved-scene-info {
@@ -643,7 +713,7 @@ textarea { resize: vertical; font-family: inherit; }
 }
 
 .saved-scene-name {
-  color: var(--color-text, #eee);
+  color: var(--text);
   cursor: pointer;
   font-size: 0.9em;
 }
@@ -653,7 +723,7 @@ textarea { resize: vertical; font-family: inherit; }
 }
 
 .saved-scene-date {
-  color: var(--color-text-secondary, #888);
+  color: var(--text-dim);
   font-size: 0.8em;
 }
 
@@ -664,17 +734,17 @@ textarea { resize: vertical; font-family: inherit; }
 }
 
 .batch-result-card {
-  border: 1px solid var(--color-border, #444);
+  border: 1px solid var(--border);
   border-radius: 8px;
   overflow: hidden;
-  background: var(--color-bg-mute, #252535);
+  background: var(--surface-2);
 }
 
 .batch-result-image {
   width: 100%;
   display: block;
   object-fit: cover;
-  background: var(--color-bg, #333);
+  background: var(--bg);
 }
 
 .batch-result-meta {

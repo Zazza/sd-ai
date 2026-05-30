@@ -18,7 +18,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "architecture, modern, building, glass",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.7},{\"name\":\"Nature SDXL\",\"weight\":0.3}]"
     },
@@ -38,7 +37,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "architecture, golden-hour, exterior, warm",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.6},{\"name\":\"Nature SDXL\",\"weight\":0.4}]"
     },
@@ -58,7 +56,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "architecture, interior, design, room",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.6},{\"name\":\"Nature SDXL\",\"weight\":0.3}]"
     },
@@ -78,7 +75,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "architecture, aerial, urban, cityscape",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.5},{\"name\":\"Nature SDXL\",\"weight\":0.3}]"
     },
@@ -98,7 +94,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "architecture, classical, neoclassical, historical",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.7},{\"name\":\"Nature SDXL\",\"weight\":0.3}]"
     },
@@ -118,7 +113,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "architecture, brutalist, concrete, geometric",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.5}]"
     },
@@ -138,7 +132,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "architecture, japanese, temple, zen, traditional",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.5}]"
     },
@@ -158,7 +151,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "architecture, gothic, cathedral, dramatic",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.6}]"
     },
@@ -178,7 +170,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "architecture, interior, cozy, warm, hygge",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.5}]"
     },
@@ -198,7 +189,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "architecture, futuristic, parametric, glass",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.5}]"
     },
@@ -218,7 +208,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "architecture, bridge, sunset, engineering, water",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.5}]"
     },
@@ -238,7 +227,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "architecture, green, sustainable, eco, plants",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.5}]"
     }

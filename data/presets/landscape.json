@@ -18,7 +18,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "landscape, mountain, sunrise, nature",
       "loras": "[{\"name\":\"Nature SDXL\",\"weight\":0.7},{\"name\":\"Beautiful outdoor-Countryside\",\"weight\":0.5}]"
     },
@@ -38,7 +37,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "landscape, ocean, sunset, coastal",
       "loras": "[{\"name\":\"Nature SDXL\",\"weight\":0.6},{\"name\":\"Beautiful outdoor-Countryside\",\"weight\":0.5}]"
     },
@@ -58,7 +56,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "landscape, forest, enchanted, magical",
       "loras": "[{\"name\":\"Beautiful outdoor-Countryside\",\"weight\":0.6},{\"name\":\"SDXL_Fog_Sa_May_V2\",\"weight\":0.5}]"
     },
@@ -78,7 +75,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "landscape, mountain, mist, atmospheric",
       "loras": "[{\"name\":\"SDXL_Fog_Sa_May_V2\",\"weight\":0.7},{\"name\":\"Nature SDXL\",\"weight\":0.5}]"
     },
@@ -98,7 +94,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "landscape, valley, dreamy, idyllic",
       "loras": "[{\"name\":\"Beautiful outdoor-Countryside\",\"weight\":0.7},{\"name\":\"Nature SDXL\",\"weight\":0.5}]"
     },
@@ -118,7 +113,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "landscape, autumn, forest, warm",
       "loras": "[{\"name\":\"Nature SDXL\",\"weight\":0.5},{\"name\":\"Beautiful outdoor-Countryside\",\"weight\":0.5}]"
     },
@@ -138,7 +132,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "landscape, desert, dunes, sand",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.5}]"
     },
@@ -158,7 +151,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "landscape, arctic, tundra, snow, aurora",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.5}]"
     },
@@ -178,7 +170,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "landscape, tropical, beach, paradise",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.4}]"
     },
@@ -198,7 +189,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "landscape, city, skyline, urban, sunset",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.5}]"
     },
@@ -218,7 +208,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "landscape, volcanic, eruption, lava, dramatic",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.5}]"
     },
@@ -238,7 +227,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "landscape, waterfall, canyon, moss, green",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.5}]"
     }

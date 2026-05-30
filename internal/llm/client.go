@@ -11,6 +11,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"go-sd/internal/promptutil"
 )
 
 type Client struct {
@@ -55,14 +57,19 @@ type ChatOptions struct {
 	NumGPU int `json:"num_gpu,omitempty"`
 }
 
+type ResponseFormat struct {
+	Type string `json:"type"`
+}
+
 type ChatRequest struct {
-	Model       string       `json:"model"`
-	Messages    []Message    `json:"messages"`
-	Temperature float64      `json:"temperature"`
-	MaxTokens   int          `json:"max_tokens"`
-	Stream      bool         `json:"stream"`
-	KeepAlive   string       `json:"keep_alive,omitempty"`
-	Options     *ChatOptions `json:"options,omitempty"`
+	Model         string         `json:"model"`
+	Messages      []Message      `json:"messages"`
+	Temperature   float64        `json:"temperature"`
+	MaxTokens     int            `json:"max_tokens"`
+	Stream        bool           `json:"stream"`
+	KeepAlive     string         `json:"keep_alive,omitempty"`
+	Options       *ChatOptions   `json:"options,omitempty"`
+	ResponseFormat *ResponseFormat `json:"response_format,omitempty"`
 }
 
 type ChatResponse struct {
@@ -94,52 +101,36 @@ func (c *Client) Chat(model, systemPrompt, userMessage string, temperature float
 		reqBody.Options = &opts
 	}
 
-	body, err := json.Marshal(reqBody)
-	if err != nil {
-		return "", fmt.Errorf("marshal request: %w", err)
+	url := c.baseURL + "/v1/chat/completions"
+	logPrefix := fmt.Sprintf("[LLM] POST %s model=%s max_tokens=%d temperature=%.1f prompt_len=%d", url, model, maxTokens, temperature, len(userMessage))
+	return c.doChatRequest(reqBody, logPrefix)
+}
+
+func (c *Client) ChatJSON(model, systemPrompt, userMessage string, temperature float64, maxTokens int) (string, error) {
+	reqBody := ChatRequest{
+		Model: model,
+		Messages: []Message{
+			{Role: "system", Content: systemPrompt},
+			{Role: "user", Content: userMessage},
+		},
+		Temperature:    temperature,
+		MaxTokens:      maxTokens,
+		Stream:         false,
+		ResponseFormat: &ResponseFormat{Type: "json_object"},
+	}
+
+	if c.backend == BackendOllama {
+		reqBody.KeepAlive = c.backendCfg.KeepAlive
+		opts := ChatOptions{
+			NumCtx: c.backendCfg.NumCtx,
+			NumGPU: c.backendCfg.NumGPU,
+		}
+		reqBody.Options = &opts
 	}
 
 	url := c.baseURL + "/v1/chat/completions"
-	log.Printf("[LLM] POST %s model=%s max_tokens=%d temperature=%.1f prompt_len=%d", url, model, maxTokens, temperature, len(userMessage))
-
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, url, bytes.NewReader(body))
-	if err != nil {
-		return "", fmt.Errorf("create request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		log.Printf("[LLM] request error: %v", err)
-		return "", fmt.Errorf("request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		log.Printf("[LLM] read error: %v", err)
-		return "", fmt.Errorf("read response: %w", err)
-	}
-
-	log.Printf("[LLM] response status=%d body_len=%d body=%s", resp.StatusCode, len(respBody), string(respBody))
-
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("API error %d: %s", resp.StatusCode, string(respBody))
-	}
-
-	var chatResp ChatResponse
-	if err := json.Unmarshal(respBody, &chatResp); err != nil {
-		log.Printf("[LLM] decode error: %v", err)
-		return "", fmt.Errorf("decode response: %w", err)
-	}
-
-	if len(chatResp.Choices) == 0 {
-		return "", fmt.Errorf("empty response from LLM (body: %s)", string(respBody))
-	}
-
-	content := chatResp.Choices[0].Message.Content
-	content = strings.TrimSpace(stripThinkTags(content))
-	return content, nil
+	logPrefix := fmt.Sprintf("[LLM] POST %s model=%s max_tokens=%d temperature=%.1f json=true prompt_len=%d", url, model, maxTokens, temperature, len(userMessage))
+	return c.doChatRequest(reqBody, logPrefix)
 }
 
 func (c *Client) ChatVision(model, systemPrompt, userText, imageBase64 string, temperature float64, maxTokens int) (string, error) {
@@ -166,45 +157,9 @@ func (c *Client) ChatVision(model, systemPrompt, userText, imageBase64 string, t
 		reqBody.Options = &opts
 	}
 
-	body, err := json.Marshal(reqBody)
-	if err != nil {
-		return "", fmt.Errorf("marshal request: %w", err)
-	}
-
 	url := c.baseURL + "/v1/chat/completions"
-	log.Printf("[LLM Vision] POST %s model=%s", url, model)
-
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, url, bytes.NewReader(body))
-	if err != nil {
-		return "", fmt.Errorf("create request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("read response: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("API error %d: %s", resp.StatusCode, string(respBody))
-	}
-
-	var chatResp ChatResponse
-	if err := json.Unmarshal(respBody, &chatResp); err != nil {
-		return "", fmt.Errorf("decode response: %w", err)
-	}
-
-	if len(chatResp.Choices) == 0 {
-		return "", fmt.Errorf("empty response from vision model")
-	}
-
-	return strings.TrimSpace(stripThinkTags(chatResp.Choices[0].Message.Content)), nil
+	logPrefix := fmt.Sprintf("[LLM Vision] POST %s model=%s", url, model)
+	return c.doChatRequest(reqBody, logPrefix)
 }
 
 func (c *Client) AnalyzeImage(model, systemPrompt, imageBase64 string, maxTokens int) (string, error) {
@@ -214,7 +169,7 @@ func (c *Client) AnalyzeImage(model, systemPrompt, imageBase64 string, maxTokens
 		return "", err
 	}
 	result = strings.TrimSpace(extractTags(result))
-	result = truncateRepetitive(result, 1000)
+	result = promptutil.TruncateRepetitive(result, 1000)
 	return result, nil
 }
 
@@ -295,48 +250,6 @@ func (c *Client) GenerateSDPrompt(systemPrompt, description, presetType, model s
 	return result, nil
 }
 
-func truncateRepetitive(s string, maxLen int) string {
-	if s == "" {
-		return s
-	}
-
-	parts := strings.Split(s, ", ")
-	result := make([]string, 0, len(parts))
-	prevPrefix := ""
-	repeatCount := 0
-
-	for _, part := range parts {
-		prefix := part
-		if idx := strings.Index(part, ":"); idx > 0 {
-			prefix = part[:idx]
-		}
-		prefix = strings.ToLower(strings.TrimSpace(prefix))
-
-		if prefix == prevPrefix && prefix != "" {
-			repeatCount++
-			if repeatCount >= 3 {
-				break
-			}
-		} else {
-			prevPrefix = prefix
-			repeatCount = 0
-		}
-		result = append(result, part)
-	}
-
-	s = strings.Join(result, ", ")
-
-	if len(s) > maxLen {
-		if idx := strings.LastIndex(s[:maxLen], ","); idx > 0 {
-			s = s[:idx]
-		} else {
-			s = s[:maxLen]
-		}
-	}
-
-	return strings.TrimRight(s, " ,.")
-}
-
 func (c *Client) ChatWithMessages(model string, messages []Message, temperature float64, maxTokens int) (string, error) {
 	reqBody := ChatRequest{
 		Model:       model,
@@ -355,15 +268,20 @@ func (c *Client) ChatWithMessages(model string, messages []Message, temperature 
 		reqBody.Options = &opts
 	}
 
+	url := c.baseURL + "/v1/chat/completions"
+	logPrefix := fmt.Sprintf("[LLM] POST %s model=%s msgs=%d", url, model, len(messages))
+	return c.doChatRequest(reqBody, logPrefix)
+}
+
+func (c *Client) doChatRequest(reqBody ChatRequest, logMsg string) (string, error) {
 	body, err := json.Marshal(reqBody)
 	if err != nil {
 		return "", fmt.Errorf("marshal request: %w", err)
 	}
 
-	url := c.baseURL + "/v1/chat/completions"
-	log.Printf("[LLM] POST %s model=%s msgs=%d", url, model, len(messages))
+	log.Printf("%s", logMsg)
 
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, url, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, c.baseURL+"/v1/chat/completions", bytes.NewReader(body))
 	if err != nil {
 		return "", fmt.Errorf("create request: %w", err)
 	}
@@ -371,14 +289,18 @@ func (c *Client) ChatWithMessages(model string, messages []Message, temperature 
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
+		log.Printf("[LLM] request error: %v", err)
 		return "", fmt.Errorf("request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
+		log.Printf("[LLM] read error: %v", err)
 		return "", fmt.Errorf("read response: %w", err)
 	}
+
+	log.Printf("[LLM] response status=%d body_len=%d body=%s", resp.StatusCode, len(respBody), string(respBody))
 
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("API error %d: %s", resp.StatusCode, string(respBody))
@@ -386,11 +308,12 @@ func (c *Client) ChatWithMessages(model string, messages []Message, temperature 
 
 	var chatResp ChatResponse
 	if err := json.Unmarshal(respBody, &chatResp); err != nil {
+		log.Printf("[LLM] decode error: %v", err)
 		return "", fmt.Errorf("decode response: %w", err)
 	}
 
 	if len(chatResp.Choices) == 0 {
-		return "", fmt.Errorf("empty response from LLM")
+		return "", fmt.Errorf("empty response from LLM (body: %s)", string(respBody))
 	}
 
 	return strings.TrimSpace(stripThinkTags(chatResp.Choices[0].Message.Content)), nil
@@ -398,7 +321,7 @@ func (c *Client) ChatWithMessages(model string, messages []Message, temperature 
 
 func CleanTags(s string) string {
 	s = strings.TrimSpace(extractTags(s))
-	s = truncateRepetitive(s, 1000)
+	s = promptutil.TruncateRepetitive(s, 1000)
 	return s
 }
 

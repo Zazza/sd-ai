@@ -36,9 +36,6 @@ func TestPreset_CreateAndGet(t *testing.T) {
 	cs := 2
 	bs := 1
 	bc := 4
-	hf := true
-	hu := 2.0
-	hds := 0.5
 	tid := int64(10)
 
 	p := &Preset{
@@ -56,10 +53,6 @@ func TestPreset_CreateAndGet(t *testing.T) {
 		ClipSkip:               &cs,
 		BatchSize:              &bs,
 		BatchCount:             &bc,
-		HiresFix:               &hf,
-		HiresUpscale:           &hu,
-		HiresDenoisingStrength: &hds,
-		HiresUpscaler:          "R-ESRGAN 4x+",
 		VAE:                    "vae-ft-mse",
 		TypeID:                 &tid,
 		Tags:                   "landscape, nature",
@@ -89,9 +82,6 @@ func TestPreset_CreateAndGet(t *testing.T) {
 	assert.Equal(t, 0.75, *got.DenoisingStrength)
 	require.NotNil(t, got.ClipSkip)
 	assert.Equal(t, 2, *got.ClipSkip)
-	require.NotNil(t, got.HiresFix)
-	assert.True(t, *got.HiresFix)
-	assert.Equal(t, "R-ESRGAN 4x+", got.HiresUpscaler)
 	assert.Equal(t, "vae-ft-mse", got.VAE)
 	require.NotNil(t, got.TypeID)
 	assert.Equal(t, int64(10), *got.TypeID)
@@ -114,7 +104,6 @@ func TestPreset_CreateMinimal(t *testing.T) {
 	assert.Nil(t, got.Seed)
 	assert.Nil(t, got.DenoisingStrength)
 	assert.Nil(t, got.ClipSkip)
-	assert.Nil(t, got.HiresFix)
 	assert.Nil(t, got.TypeID)
 }
 

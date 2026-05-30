@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"image"
 	"image/jpeg"
@@ -11,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -25,8 +27,10 @@ import (
 	"go-sd/internal/llm"
 	"go-sd/internal/logger"
 	"go-sd/internal/preset"
+	"go-sd/internal/queue"
 	"go-sd/internal/rembg"
 	"go-sd/internal/sd"
+	"go-sd/internal/serverclient"
 	"go-sd/internal/session"
 	"go-sd/internal/settings"
 )
@@ -50,42 +54,114 @@ type App struct {
 	log         *logger.Logger
 	config      *config.Config
 	dataDir     string
+	serverClient *serverclient.Client
 
 	kidsMgr     *kids.Manager
 	sessions    *session.Service
 	settingsSvc *settings.Service
 	ieSvc       *importexport.Service
 	gen         *generation.Service
+	queueSvc    *queue.Service
 	emitter     appEmitter
 }
 
-func NewApp(presets *preset.DB, llmClient llm.Service, sdClient sd.Service, cfg *config.Config) *App {
+func (a *App) saveWithDialog(defaultFilename string, data []byte) (string, error) {
+	dir, err := runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{
+		Title: "Select folder to save",
+	})
+	if err != nil || dir == "" {
+		return "", err
+	}
+	path := filepath.Join(dir, defaultFilename)
+	return path, os.WriteFile(path, data, 0o644)
+}
+
+func NewApp(presets *preset.DB, llmClient llm.Service, sdClient sd.Service, rembgClient *rembg.Client, srvClient *serverclient.Client, cfg *config.Config) *App {
 	a := &App{
-		presets:     presets,
-		llm:         llmClient,
-		sd:          sdClient,
-		rembgClient: rembg.New(""),
-		log:         logger.New(nil),
-		config:      cfg,
-		dataDir:     filepath.Dir(cfg.DBPath),
-		kidsMgr:     kids.NewManager(presets),
+		presets:      presets,
+		llm:          llmClient,
+		sd:           sdClient,
+		rembgClient:  rembgClient,
+		log:          logger.New(nil),
+		config:       cfg,
+		dataDir:      filepath.Dir(cfg.DBPath),
+		kidsMgr:      kids.NewManager(presets),
+		serverClient: srvClient,
 	}
 	a.emitter = appEmitter{ctx: &a.ctx}
 	a.sessions = session.New(presets, a.dataDir, &a.emitter)
-	a.settingsSvc = settings.New(presets, llmClient, sdClient, cfg, a.rembgClient, a.log)
+	a.settingsSvc = settings.New(presets, llmClient, sdClient, cfg, a.rembgClient, a.log, srvClient)
 	a.ieSvc = importexport.New(presets, sdClient, a.log)
 	a.gen = generation.New(
 		presets, llmClient, sdClient, cfg,
 		a.rembgClient, a.dataDir,
 		&a.emitter, a.kidsMgr, a.sessions, a.settingsSvc, a.log,
 	)
+	queueStore := queue.NewStore(presets.DB())
+	queueProc := queue.NewProcessor(a.gen, queueStore, a.dataDir, &a.emitter)
+	a.queueSvc = queue.NewService(queueStore, queueProc, &a.emitter)
+	a.queueSvc.SetInterruptFn(func() { _ = a.gen.InterruptGeneration() })
 	return a
 }
 
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 	a.log.SetContext(ctx)
+	a.log.InstallBridge()
 	a.gen.SetContext(ctx)
+	a.queueSvc.Start(ctx)
+	a.restoreWindowLayout()
+}
+
+func (a *App) restoreWindowLayout() {
+	if v, err := a.presets.GetSetting("window_maximised"); err == nil && v == "true" {
+		runtime.WindowMaximise(a.ctx)
+		return
+	}
+	if w, err := a.presets.GetSetting("window_width"); err == nil && w != "" {
+		if h, err2 := a.presets.GetSetting("window_height"); err2 == nil && h != "" {
+			wi, _ := strconv.Atoi(w)
+			hi, _ := strconv.Atoi(h)
+			if wi > 0 && hi > 0 {
+				runtime.WindowSetSize(a.ctx, wi, hi)
+			}
+		}
+	}
+	if x, err := a.presets.GetSetting("window_x"); err == nil && x != "" {
+		if y, err2 := a.presets.GetSetting("window_y"); err2 == nil && y != "" {
+			xi, _ := strconv.Atoi(x)
+			yi, _ := strconv.Atoi(y)
+			runtime.WindowSetPosition(a.ctx, xi, yi)
+		}
+	}
+}
+
+func (a *App) SaveWindowLayout(footerHeight int) error {
+	maximised := runtime.WindowIsMaximised(a.ctx)
+	if maximised {
+		a.presets.SetSetting("window_maximised", "true")
+	} else {
+		a.presets.SetSetting("window_maximised", "false")
+		w, h := runtime.WindowGetSize(a.ctx)
+		a.presets.SetSetting("window_width", fmt.Sprintf("%d", w))
+		a.presets.SetSetting("window_height", fmt.Sprintf("%d", h))
+		x, y := runtime.WindowGetPosition(a.ctx)
+		a.presets.SetSetting("window_x", fmt.Sprintf("%d", x))
+		a.presets.SetSetting("window_y", fmt.Sprintf("%d", y))
+	}
+	if footerHeight > 0 {
+		a.presets.SetSetting("footer_height", fmt.Sprintf("%d", footerHeight))
+	}
+	return nil
+}
+
+func (a *App) GetFooterHeight() int {
+	if v, err := a.presets.GetSetting("footer_height"); err == nil && v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			return n
+		}
+	}
+	return 40
 }
 
 func (a *App) Version() string {
@@ -225,14 +301,11 @@ type GenerateImageResult = generation.GenerateImageResult
 type RecommendPresetResult = generation.RecommendPresetResult
 type AnalyzePrompts = generation.AnalyzePrompts
 type UpscaleImageParams = generation.UpscaleImageParams
-type BatchGenerateParams = generation.BatchGenerateParams
-type BatchProgress = generation.BatchProgress
 type TestGenerateParams = generation.TestGenerateParams
 type TestGenerateResultItem = generation.TestGenerateResultItem
 type UpscalePreviewParams = generation.UpscalePreviewParams
 type GenerateCompoundImageParams = generation.GenerateCompoundImageParams
 type GenerateFromImageParams = generation.GenerateFromImageParams
-type BatchCompoundGenerateParams = generation.BatchCompoundGenerateParams
 type TestCompoundGenerateParams = generation.TestCompoundGenerateParams
 type DecomposeSceneParams = generation.DecomposeSceneParams
 
@@ -260,16 +333,8 @@ func (a *App) GenerateImage(params GenerateImageParams) (*GenerateImageResult, e
 	return a.gen.GenerateImage(params)
 }
 
-func (a *App) BatchGenerate(params BatchGenerateParams) error {
-	return a.gen.BatchGenerate(params)
-}
-
 func (a *App) TestGenerate(params TestGenerateParams) ([]TestGenerateResultItem, error) {
 	return a.gen.TestGenerate(params)
-}
-
-func (a *App) GetPresetForBatch(presetID int64, description string) (*GenerateSDPromptResult, error) {
-	return a.gen.GetPresetForBatch(presetID, description)
 }
 
 func (a *App) UpscaleImage(params UpscaleImageParams) (*GenerateImageResult, error) {
@@ -298,10 +363,6 @@ func (a *App) GenerateCompoundImage(params GenerateCompoundImageParams) (*Genera
 
 func (a *App) GenerateFromImage(params GenerateFromImageParams) (*GenerateImageResult, error) {
 	return a.gen.GenerateFromImage(params)
-}
-
-func (a *App) BatchCompoundGenerate(params BatchCompoundGenerateParams) error {
-	return a.gen.BatchCompoundGenerate(params)
 }
 
 func (a *App) TestCompoundGenerate(params TestCompoundGenerateParams) ([]TestGenerateResultItem, error) {
@@ -366,16 +427,6 @@ func (a *App) ReadClipboardImage() (string, error) {
 	}
 
 	return base64.StdEncoding.EncodeToString(data), nil
-}
-
-func (a *App) SelectFolder() (string, error) {
-	path, err := runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{
-		Title: "Select Output Folder",
-	})
-	if err != nil {
-		return "", err
-	}
-	return path, nil
 }
 
 func (a *App) SaveImage(base64Data, defaultName string) (string, error) {
@@ -615,6 +666,18 @@ func (a *App) ExportPresets(ids []int64) (string, error) {
 	return path, os.WriteFile(path, jsonBytes, 0o644)
 }
 
+func (a *App) PreparePresetsExport(ids []int64) (string, error) {
+	presets, err := a.ieSvc.PrepareExportData(ids)
+	if err != nil {
+		return "", err
+	}
+	jsonBytes, err := a.ieSvc.BuildExportFile(presets)
+	if err != nil {
+		return "", err
+	}
+	return a.saveWithDialog("sd-studio-presets.json", jsonBytes)
+}
+
 func (a *App) OpenImportFile() (*ImportPreview, error) {
 	paths, err := runtime.OpenMultipleFilesDialog(a.ctx, runtime.OpenDialogOptions{
 		Filters: []runtime.FileFilter{
@@ -670,6 +733,18 @@ func (a *App) ExportCompoundPresets(ids []int64) (string, error) {
 		return "", err
 	}
 	return path, os.WriteFile(path, jsonBytes, 0o644)
+}
+
+func (a *App) PrepareCompoundPresetsExport(ids []int64) (string, error) {
+	pipelines, err := a.ieSvc.PrepareCompoundExportData(ids)
+	if err != nil {
+		return "", err
+	}
+	jsonBytes, err := a.ieSvc.BuildCompoundExportFile(pipelines)
+	if err != nil {
+		return "", err
+	}
+	return a.saveWithDialog("sd-studio-pipelines.json", jsonBytes)
 }
 
 func (a *App) OpenImportCompoundFile() (*CompoundImportPreview, error) {
@@ -782,24 +857,14 @@ func (a *App) ExportImage(params ExportImageParams) (string, error) {
 		params.Filename += ext
 	}
 
-	filterName := "PNG Image"
-	filterPattern := "*.png"
-	switch params.Format {
-	case "jpeg":
-		filterName = "JPEG Image"
-		filterPattern = "*.jpg"
-	}
-
-	path, err := runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{
-		DefaultFilename: params.Filename,
-		Filters: []runtime.FileFilter{
-			{DisplayName: filterName, Pattern: filterPattern},
-		},
+	dir, err := runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{
+		Title: "Select folder to save image",
 	})
-	if err != nil || path == "" {
+	if err != nil || dir == "" {
 		return "", err
 	}
 
+	path := filepath.Join(dir, params.Filename)
 	return path, importexport.WriteImageToPath(processed, path)
 }
 
@@ -960,6 +1025,143 @@ func (a *App) ConfirmClose(action string) {
 	}
 }
 
+// --- Server Mode ---
+
+type DiscoveredServer = serverclient.DiscoveredServer
+type ServerStatus = serverclient.ServerStatus
+type ServerModelInfo = serverclient.ModelInfo
+type ServerLLMModelInfo = serverclient.LLMModelInfo
+type ServerBackendInfo = serverclient.BackendInfo
+type ModelCatalog = serverclient.Catalog
+
+func (a *App) DiscoverServers() ([]DiscoveredServer, error) {
+	return a.settingsSvc.DiscoverServers(a.ctx)
+}
+
+func (a *App) GetServerStatus() (*ServerStatus, error) {
+	return a.settingsSvc.GetServerStatus()
+}
+
+func (a *App) StartServerProcess(name string) error {
+	return a.settingsSvc.StartServerProcess(name)
+}
+
+func (a *App) StopServerProcess(name string) error {
+	return a.settingsSvc.StopServerProcess(name)
+}
+
+func (a *App) RestartServerProcess(name string) error {
+	return a.settingsSvc.RestartServerProcess(name)
+}
+
+func (a *App) GetServerModels(modelType string) ([]ServerModelInfo, error) {
+	return a.settingsSvc.GetServerModels(modelType)
+}
+
+func (a *App) GetServerLLMModels() ([]ServerLLMModelInfo, error) {
+	return a.settingsSvc.GetServerLLMModels()
+}
+
+func (a *App) DownloadServerModel(modelType, url, filename string) error {
+	return a.settingsSvc.DownloadServerModel(modelType, url, filename)
+}
+
+func (a *App) DeleteServerModel(modelType, filename string) error {
+	return a.settingsSvc.DeleteServerModel(modelType, filename)
+}
+
+func (a *App) PullServerLLMModel(name string) error {
+	return a.settingsSvc.PullServerLLMModel(name)
+}
+
+func (a *App) DeleteServerLLMModel(name string) error {
+	return a.settingsSvc.DeleteServerLLMModel(name)
+}
+
+func (a *App) GetServerBackends() ([]ServerBackendInfo, error) {
+	return a.settingsSvc.GetServerBackends()
+}
+
+func (a *App) SwitchServerBackend(backend string) error {
+	return a.settingsSvc.SwitchServerBackend(backend)
+}
+
+func (a *App) GetModelCatalog() (*ModelCatalog, error) {
+	return a.settingsSvc.GetModelCatalog()
+}
+
+func (a *App) GetPresetsInstallStatus() ([]preset.PresetInstallStatus, error) {
+	sdModels, _ := a.settingsSvc.GetServerModels("sd")
+	loraModels, _ := a.settingsSvc.GetServerModels("lora")
+
+	sdNames := make([]string, len(sdModels))
+	for i, m := range sdModels {
+		sdNames[i] = m.Name
+	}
+	loraNames := make([]string, len(loraModels))
+	for i, m := range loraModels {
+		loraNames[i] = m.Name
+	}
+
+	return a.presets.GetBundledInstallStatus(sdNames, loraNames)
+}
+
+func (a *App) InstallPresetDeps(presetID int64) error {
+	p, err := a.presets.Get(presetID)
+	if err != nil {
+		return fmt.Errorf("preset not found: %w", err)
+	}
+
+	catalog, err := serverclient.LoadCatalog()
+	if err != nil {
+		return fmt.Errorf("load catalog: %w", err)
+	}
+
+	sdModels, _ := a.settingsSvc.GetServerModels("sd")
+	loraModels, _ := a.settingsSvc.GetServerModels("lora")
+
+	sdSet := make(map[string]bool)
+	for _, m := range sdModels {
+		sdSet[m.Name] = true
+	}
+	loraSet := make(map[string]bool)
+	for _, m := range loraModels {
+		loraSet[m.Name] = true
+	}
+
+	if p.ModelName != "" && !sdSet[p.ModelName+".safetensors"] {
+		for _, cm := range catalog.SDModels {
+			if cm.Name == p.ModelName && cm.URL != "" {
+				if err := a.settingsSvc.DownloadServerModel("sd", cm.URL, p.ModelName+".safetensors"); err != nil {
+					return fmt.Errorf("download SD model %s: %w", p.ModelName, err)
+				}
+				break
+			}
+		}
+	}
+
+	if p.Loras != "" && p.Loras != "[]" {
+		var loras []preset.LoRAEntry
+		if json.Unmarshal([]byte(p.Loras), &loras) == nil {
+			for _, l := range loras {
+				if loraSet[l.Name+".safetensors"] {
+					continue
+				}
+				for _, cl := range catalog.LoRA {
+					if cl.Name == l.Name && cl.URL != "" {
+						if err := a.settingsSvc.DownloadServerModel("lora", cl.URL, l.Name+".safetensors"); err != nil {
+							return fmt.Errorf("download LoRA %s: %w", l.Name, err)
+						}
+						break
+					}
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
 // --- Resolutions ---
 
 func (a *App) ListResolutions() ([]preset.Resolution, error) {
@@ -1064,4 +1266,67 @@ func (a *App) UpdateHiresProfile(h preset.HiresProfile) (*preset.HiresProfile, e
 
 func (a *App) DeleteHiresProfile(id int64) error {
 	return a.presets.DeleteHiresProfile(id)
+}
+
+// --- Queue ---
+
+type QueueJob = queue.Job
+
+func (a *App) EnqueueTxt2Img(params GenerateImageParams) (int64, error) {
+	return a.queueSvc.Enqueue(queue.JobTxt2Img, params, "generate")
+}
+
+func (a *App) EnqueueFromImage(params GenerateFromImageParams) (int64, error) {
+	return a.queueSvc.Enqueue(queue.JobFromImage, params, "from-image")
+}
+
+func (a *App) EnqueueCompound(params GenerateCompoundImageParams) (int64, error) {
+	return a.queueSvc.Enqueue(queue.JobCompound, params, "compound")
+}
+
+func (a *App) EnqueueCompareItem(params TestGenerateParams, modelIndex int) (int64, error) {
+	return a.queueSvc.Enqueue(queue.JobCompareItem, params, "test")
+}
+
+func (a *App) GetQueue() ([]*QueueJob, error) {
+	jobs, err := a.queueSvc.GetQueue()
+	if err != nil {
+		return nil, err
+	}
+	if jobs == nil {
+		jobs = []*QueueJob{}
+	}
+	return jobs, nil
+}
+
+func (a *App) RemoveQueueJob(id int64) error {
+	return a.queueSvc.RemoveJob(id)
+}
+
+func (a *App) CancelQueueJob(id int64) error {
+	return a.queueSvc.CancelJob(id)
+}
+
+func (a *App) PauseQueue() {
+	a.queueSvc.PauseQueue()
+}
+
+func (a *App) ResumeQueue() {
+	a.queueSvc.ResumeQueue()
+}
+
+func (a *App) CancelQueue() error {
+	return a.queueSvc.CancelQueue()
+}
+
+func (a *App) IsQueuePaused() bool {
+	return a.queueSvc.IsPaused()
+}
+
+func (a *App) ClearCompletedQueueJobs() error {
+	return a.queueSvc.ClearCompleted()
+}
+
+func (a *App) ResumePausedQueueJobs() (int, error) {
+	return a.queueSvc.ResumePausedJobs()
 }

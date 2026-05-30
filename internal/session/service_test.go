@@ -332,7 +332,7 @@ func TestAddToSession_Success(t *testing.T) {
 
 	sessions, _ := svc.ListSessions()
 	sessionDir := filepath.Join(dataDir, "sessions", fmt.Sprintf("%d", sessions[0].ID))
-	fileName := fmt.Sprintf("%d.jpg", itemID)
+	fileName := fmt.Sprintf("%d.png", itemID)
 	_, err := os.Stat(filepath.Join(sessionDir, fileName))
 	assert.NoError(t, err)
 }

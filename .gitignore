@@ -2,9 +2,12 @@
 *.db
 
 # Build output
-build/bin/
+build/
 web_dist/
 frontend/dist/
+
+# Local config
+server-config.yaml
 
 # Dependencies
 frontend/node_modules/
@@ -21,3 +24,4 @@ Thumbs.db
 .claude/
 CLAUDE.md
 .mcp.json
+.aider*

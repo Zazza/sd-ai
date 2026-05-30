@@ -4,7 +4,7 @@
   "presets": [
     {
       "name": "Art Nouveau Portrait (dreamshaper_8)",
-      "preset_type": "style",
+      "preset_type": "art-nouveau",
       "type_name": "art-nouveau",
       "prompt": "masterpiece, best quality, art nouveau portrait, alphonse mucha style, decorative border, floral ornaments, flowing hair, organic lines, stained glass colors, elegant woman, vintage poster art, botanical frame",
       "negative_prompt": "(worst quality, low quality:1.4), photorealistic, 3d render, modern, contemporary, digital art, anime, manga, cartoon, simple, plain, boring",
@@ -18,13 +18,12 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "art-nouveau, portrait, mucha, decorative",
       "loras": "[{\"name\":\"ClassipeintXL2.1\",\"weight\":0.6},{\"name\":\"watercolor_v1_sdxl\",\"weight\":0.5}]"
     },
     {
       "name": "Stained Glass Panel (juggernautXL)",
-      "preset_type": "style",
+      "preset_type": "art-nouveau",
       "type_name": "art-nouveau",
       "prompt": "masterpiece, best quality, stained glass art nouveau panel, ornate floral design, vibrant translucent colors, leaded glass, decorative frame, mucha inspired, backlit, cathedral window style, intricate patterns",
       "negative_prompt": "(worst quality, low quality:1.4), photorealistic, 3d render, modern, contemporary, digital art, anime, manga, cartoon, simple, plain, boring",
@@ -38,13 +37,12 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "art-nouveau, stained-glass, ornate, decorative",
       "loras": "[{\"name\":\"watercolor_v1_sdxl\",\"weight\":0.6},{\"name\":\"ClassipeintXL2.1\",\"weight\":0.5}]"
     },
     {
       "name": "Art Deco Poster (juggernautXL)",
-      "preset_type": "style",
+      "preset_type": "art-nouveau",
       "type_name": "art-nouveau",
       "prompt": "masterpiece, best quality, art deco poster, 1920s style, geometric patterns, gold and black, vintage advertisement, gatsby era, elegant figure, symmetrical design, jazz age, luxurious",
       "negative_prompt": "(worst quality, low quality:1.4), photorealistic, 3d render, modern, contemporary, digital art, anime, manga, cartoon, simple, plain, boring",
@@ -58,13 +56,12 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "art-nouveau, deco, poster, vintage",
       "loras": "[{\"name\":\"ClassipeintXL2.1\",\"weight\":0.7},{\"name\":\"watercolor_v1_sdxl\",\"weight\":0.4}]"
     },
     {
       "name": "Botanical Illustration (dreamshaper_8)",
-      "preset_type": "style",
+      "preset_type": "art-nouveau",
       "type_name": "art-nouveau",
       "prompt": "masterpiece, best quality, art nouveau botanical illustration, flowing organic lines, detailed flowers and vines, decorative border, soft pastel colors, william morris style, wallpaper design, nature motifs",
       "negative_prompt": "(worst quality, low quality:1.4), photorealistic, 3d render, modern, contemporary, digital art, anime, manga, cartoon, simple, plain, boring",
@@ -78,13 +75,12 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "art-nouveau, botanical, illustration, morris",
       "loras": "[{\"name\":\"watercolor_v1_sdxl\",\"weight\":0.6},{\"name\":\"ClassipeintXL2.1\",\"weight\":0.5}]"
     },
     {
       "name": "Ukiyo-e Style (dreamshaper_8)",
-      "preset_type": "style",
+      "preset_type": "art-nouveau",
       "type_name": "art-nouveau",
       "prompt": "masterpiece, best quality, ukiyo-e woodblock print, japanese art, hokusai style, wave patterns, flat colors, bold outlines, traditional japanese, great wave, mount fuji, edo period art",
       "negative_prompt": "(worst quality, low quality:1.4), photorealistic, 3d render, modern, contemporary, digital art, anime, manga, cartoon, simple, plain, boring",
@@ -98,7 +94,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "art-nouveau, ukiyo-e, japanese, woodblock",
       "loras": "[{\"name\":\"ClassipeintXL2.1\",\"weight\":0.5},{\"name\":\"watercolor_v1_sdxl\",\"weight\":0.5}]"
     },
@@ -118,7 +113,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "art-nouveau, landscape, flowing, organic",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.5}]"
     },
@@ -138,7 +132,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "art-nouveau, mucha, poster, ornamental",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.5}]"
     },
@@ -158,7 +151,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "art-nouveau, pre-raphaelite, romantic, medieval",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.5}]"
     },
@@ -178,7 +170,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "art-nouveau, vienna secession, klimt, gold",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.5}]"
     },
@@ -198,7 +189,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "art-nouveau, tiffany, stained glass, colorful",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.5}]"
     },
@@ -218,7 +208,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "art-nouveau, architecture, gaudi, mosaic",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.5}]"
     },
@@ -238,7 +227,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "art-nouveau, jewelry, lalique, enamel",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.5}]"
     }

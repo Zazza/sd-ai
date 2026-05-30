@@ -18,7 +18,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.7},{\"name\":\"closeupface-v1\",\"weight\":0.6}]"
     },
@@ -38,7 +37,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.7},{\"name\":\"Super_Eye_Detailer_By_Stable_Yogi_SDPD0\",\"weight\":0.5}]"
     },
@@ -58,7 +56,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.6},{\"name\":\"closeupface-v1\",\"weight\":0.5}]"
     },
@@ -78,7 +75,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "",
       "loras": "[{\"name\":\"closeupface-v1\",\"weight\":0.7},{\"name\":\"Super_Eye_Detailer_By_Stable_Yogi_SDPD0\",\"weight\":0.5}]"
     },
@@ -98,7 +94,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "",
       "loras": "[{\"name\":\"Super_Eye_Detailer_By_Stable_Yogi_SDPD0\",\"weight\":0.6},{\"name\":\"closeupface-v1\",\"weight\":0.5}]"
     },
@@ -118,7 +113,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.7},{\"name\":\"Super_Eye_Detailer_By_Stable_Yogi_SDPD0\",\"weight\":0.5}]"
     },
@@ -138,7 +132,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "realistic, street, urban, documentary",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.6}]"
     },
@@ -158,7 +151,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "realistic, sports, action, dynamic",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.5}]"
     },
@@ -178,7 +170,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "realistic, macro, detail, close-up",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.7}]"
     },
@@ -198,7 +189,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "realistic, documentary, raw, emotional",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.4}]"
     },
@@ -218,7 +208,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "realistic, urbex, abandoned, industrial",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.6}]"
     },
@@ -238,7 +227,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "realistic, golden hour, warm, natural",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.5}]"
     }

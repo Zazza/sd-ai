@@ -4,7 +4,7 @@
   "presets": [
     {
       "name": "Graphite Portrait (dreamshaper_8)",
-      "preset_type": "positive",
+      "preset_type": "sketch",
       "type_name": "sketch",
       "prompt": "masterpiece, best quality, graphite pencil sketch, detailed portrait drawing, cross-hatching, shading, realistic pencil strokes, white paper background, fine art drawing, charcoal pencil marks",
       "negative_prompt": "(worst quality, low quality:1.4), photorealistic, 3d render, colored, painting, digital art, smooth, blurry, noisy, watercolor, oil",
@@ -18,13 +18,12 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "sketch, graphite, portrait, pencil",
       "loras": "[{\"name\":\"Pencil_Sketch_Style\",\"weight\":0.8}]"
     },
     {
       "name": "Charcoal Drawing (juggernautXL)",
-      "preset_type": "positive",
+      "preset_type": "sketch",
       "type_name": "sketch",
       "prompt": "masterpiece, best quality, charcoal drawing, expressive strokes, dark tones, smudged shadows, rough texture, dramatic contrast, life drawing, figure study, art studio atmosphere",
       "negative_prompt": "(worst quality, low quality:1.4), photorealistic, 3d render, colored, painting, digital art, smooth, blurry, noisy, watercolor, oil",
@@ -38,13 +37,12 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "sketch, charcoal, drawing, expressive",
       "loras": "[{\"name\":\"Charcoal3.0\",\"weight\":0.8}]"
     },
     {
       "name": "Architectural Sketch (dreamshaper_8)",
-      "preset_type": "positive",
+      "preset_type": "sketch",
       "type_name": "sketch",
       "prompt": "masterpiece, best quality, architectural sketch, building design, technical drawing, perspective lines, detailed elevation, pencil on tracing paper, architectural concept, clean lines",
       "negative_prompt": "(worst quality, low quality:1.4), photorealistic, 3d render, colored, painting, digital art, smooth, blurry, noisy, watercolor, oil",
@@ -58,13 +56,12 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "sketch, architecture, building, blueprint",
       "loras": "[{\"name\":\"Pencil_Sketch_Style\",\"weight\":0.7}]"
     },
     {
       "name": "Rough Charcoal Study (juggernautXL)",
-      "preset_type": "positive",
+      "preset_type": "sketch",
       "type_name": "sketch",
       "prompt": "masterpiece, best quality, rough charcoal study, gestural drawing, bold strokes, dark smudges, conte crayon marks, textured paper, art school sketch, figure drawing, dramatic shadows",
       "negative_prompt": "(worst quality, low quality:1.4), photorealistic, 3d render, colored, painting, digital art, smooth, blurry, noisy, watercolor, oil",
@@ -78,7 +75,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "sketch, charcoal, study, gestural",
       "loras": "[{\"name\":\"Charcoal3.0\",\"weight\":0.7},{\"name\":\"Pencil_Sketch_Style\",\"weight\":0.5}]"
     },
@@ -98,7 +94,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "sketch, ink, pen, crosshatch",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.5}]"
     },
@@ -118,7 +113,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "sketch, figure, anatomy, gesture",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.4}]"
     },
@@ -138,7 +132,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "sketch, fashion, croquis, elegant",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.4}]"
     },
@@ -158,7 +151,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "sketch, blueprint, technical, engineering",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.5}]"
     },
@@ -178,7 +170,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "sketch, pencil, landscape, graphite",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.4}]"
     },
@@ -198,7 +189,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "sketch, ink wash, sumi-e, monochrome",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.4}]"
     },
@@ -218,7 +208,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "sketch, cross-hatch, portrait, chiaroscuro",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.5}]"
     },
@@ -238,7 +227,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "sketch, calligraphy, lettering, ink",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.3}]"
     }

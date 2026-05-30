@@ -18,7 +18,6 @@
       "clip_skip": 2,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "cartoon, character, bright, cheerful",
       "loras": "[{\"name\":\"celshading\",\"weight\":0.7},{\"name\":\"coloricher\",\"weight\":0.5}]"
     },
@@ -38,7 +37,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "cartoon, fantasy, whimsical, magical",
       "loras": "[{\"name\":\"coloricher\",\"weight\":0.5},{\"name\":\"celshading\",\"weight\":0.4}]"
     },
@@ -58,7 +56,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "cartoon, artistic, painterly, expressive",
       "loras": "[{\"name\":\"coloricher\",\"weight\":0.6},{\"name\":\"comicStrips\",\"weight\":0.4}]"
     },
@@ -78,7 +75,6 @@
       "clip_skip": 2,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "cartoon, anime, chibi, kawaii, cute",
       "loras": "[{\"name\":\"celshading\",\"weight\":0.6},{\"name\":\"coloricher\",\"weight\":0.5}]"
     },
@@ -98,7 +94,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "cartoon, playful, quirky, comedy",
       "loras": "[{\"name\":\"celshading\",\"weight\":0.6},{\"name\":\"comicStrips\",\"weight\":0.5}]"
     },
@@ -118,7 +113,6 @@
       "clip_skip": 2,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "cartoon, flat color, vector, minimal",
       "loras": "[{\"name\":\"celshading\",\"weight\":0.8},{\"name\":\"coloricher\",\"weight\":0.6}]"
     },
@@ -138,7 +132,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "cartoon, nature, fantasy, enchanting",
       "loras": "[{\"name\":\"coloricher\",\"weight\":0.6},{\"name\":\"comicStrips\",\"weight\":0.3}]"
     },
@@ -158,7 +151,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "cartoon, retro, vintage, rubber-hose, 1930s",
       "loras": "[{\"name\":\"celshading\",\"weight\":0.6},{\"name\":\"comicStrips\",\"weight\":0.5}]"
     },
@@ -178,7 +170,6 @@
       "clip_skip": 2,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "cartoon, kawaii, chibi, pastel, cute",
       "loras": "[{\"name\":\"celshading\",\"weight\":0.6},{\"name\":\"coloricher\",\"weight\":0.5}]"
     },
@@ -198,7 +189,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "cartoon, animal, anthropomorphic, fun, expressive",
       "loras": "[{\"name\":\"coloricher\",\"weight\":0.5},{\"name\":\"celshading\",\"weight\":0.5}]"
     },
@@ -218,7 +208,6 @@
       "clip_skip": 2,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "cartoon, toon, cel-shaded, bold, flat",
       "loras": "[{\"name\":\"celshading\",\"weight\":0.7},{\"name\":\"coloricher\",\"weight\":0.5}]"
     },
@@ -238,7 +227,6 @@
       "clip_skip": 2,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "cartoon, monster, creature, cute, spooky",
       "loras": "[{\"name\":\"celshading\",\"weight\":0.6},{\"name\":\"coloricher\",\"weight\":0.5}]"
     }

@@ -48,6 +48,7 @@ const generatingImage = ref(false)
 const { llmStatus, sdProgress, preview, interrupt: interruptGeneration, reset: resetProgress } = useGenerationProgress()
 const generationStage = ref('')
 const error = ref('')
+const enqueuedJobIds = ref(new Set())
 
 const analyzeMode = ref('quick')
 const chainStep = ref(0)
@@ -86,6 +87,12 @@ const fsHistory = ref([])
 const filteredPresets = computed(() => {
   if (!selectedTypeId.value) return presets.value
   return presets.value.filter(p => p.type_id === selectedTypeId.value)
+})
+
+const imageSrc = computed(() => {
+  if (!generatedImage.value) return ''
+  if (generatedImage.value.startsWith('/api/')) return generatedImage.value
+  return 'data:image/png;base64,' + generatedImage.value
 })
 
 const formattedGenInfo = computed(() => {
@@ -478,11 +485,11 @@ async function generate() {
     return
   }
   if (genMode.value === 'preset' && !selectedPresetId.value && mode.value !== 'remove') {
-    error.value = t('fi.error_select_preset')
+    error.value = t('fi.error_select_style')
     return
   }
   if (genMode.value === 'compound' && !selectedCompoundPresetId.value && mode.value !== 'remove') {
-    error.value = t('fi.error_select_pipeline')
+    error.value = t('fi.error_select_workflow')
     return
   }
   if ((mode.value === 'inpaint' || mode.value === 'remove') && !hasMask.value) {
@@ -491,16 +498,16 @@ async function generate() {
   }
 
   generatingImage.value = true
-  generationStage.value = 'analyzing'
+  generationStage.value = 'generating'
   generatedImage.value = ''
   genInfo.value = null
   effectivePrompt.value = ''
   effectiveNegative.value = ''
   error.value = ''
   resetProgress()
+  enqueuedJobIds.value = new Set()
 
   try {
-    generationStage.value = 'generating'
     const params = {
       image_base64: uploadedImage.value,
       mode: mode.value === 'remove' ? 'inpaint' : mode.value,
@@ -518,18 +525,11 @@ async function generate() {
       params.inpaint_fill = inpaintFill.value
       params.inpaint_full_res = inpaintFullRes.value
     }
-    const result = await api.generateFromImage(params)
-    if (!result || !result.image) {
-      error.value = t('fi.error_no_image')
-    } else {
-      generatedImage.value = result.image
-      genInfo.value = result.info
-      effectivePrompt.value = result.effective_prompt || ''
-      effectiveNegative.value = result.effective_negative_prompt || ''
-    }
+    const jobId = await api.enqueueFromImage(params)
+    if (jobId) enqueuedJobIds.value.add(jobId)
+    error.value = ''
   } catch (e) {
     error.value = String(e)
-  } finally {
     generatingImage.value = false
     generationStage.value = ''
     removeStage.value = ''
@@ -540,7 +540,18 @@ async function downloadImage() {
   if (!generatedImage.value) return
   try {
     const defaultName = 'sd-studio-from-image-' + Date.now() + '.png'
-    await api.saveImage(generatedImage.value, defaultName)
+    if (generatedImage.value.startsWith('/api/')) {
+      const resp = await fetch(generatedImage.value)
+      const blob = await resp.blob()
+      const reader = new FileReader()
+      reader.onload = async () => {
+        const b64 = reader.result.split(',')[1]
+        await api.saveImage(b64, defaultName)
+      }
+      reader.readAsDataURL(blob)
+    } else {
+      await api.saveImage(generatedImage.value, defaultName)
+    }
   } catch (e) {
     error.value = t('fi.error_save', { error: String(e) })
   }
@@ -565,6 +576,59 @@ function applyRecommendation() {
   }
 }
 
+async function onQueueCompleted(data) {
+  if (!data) return
+
+  if (data.job_id && enqueuedJobIds.value.has(data.job_id)) {
+    enqueuedJobIds.value.delete(data.job_id)
+  }
+
+  if (data.result) {
+    try {
+      const r = typeof data.result === 'string' ? JSON.parse(data.result) : data.result
+      if (r.image_base64) {
+        generatedImage.value = r.image_base64
+        let info = null
+        if (r.info) {
+          try { info = typeof r.info === 'string' ? JSON.parse(r.info) : r.info } catch { info = r.info }
+        }
+        genInfo.value = info
+      }
+    } catch {}
+  }
+  if (!generatedImage.value) {
+    try {
+      const item = await api.getActiveSessionItem()
+      if (item) {
+        generatedImage.value = api.sessionImageUrl(item.id)
+        genInfo.value = item.info || null
+      }
+    } catch {}
+  }
+
+  if (enqueuedJobIds.value.size === 0) {
+    generatingImage.value = false
+    generationStage.value = ''
+    removeStage.value = ''
+  }
+}
+
+function onQueueFailed(data) {
+  if (!data) return
+
+  if (data.job_id && enqueuedJobIds.value.has(data.job_id)) {
+    enqueuedJobIds.value.delete(data.job_id)
+  }
+
+  if (data.error) error.value = data.error
+
+  if (enqueuedJobIds.value.size === 0) {
+    generatingImage.value = false
+    generationStage.value = ''
+    removeStage.value = ''
+  }
+}
+
 onMounted(async () => {
   loadPresets()
   loadKidsMode()
@@ -580,6 +644,8 @@ onMounted(async () => {
   EventsOn("session:added", () => {
     // Don't auto-load — user picks when to load via Last Generated
   })
+  EventsOn('queue:completed', onQueueCompleted)
+  EventsOn('queue:failed', onQueueFailed)
   try {
     const s = await api.getSettings()
     if (s.fi_mode) mode.value = s.fi_mode
@@ -600,6 +666,16 @@ onMounted(async () => {
   if (!props.droppedImage && !uploadedImage.value) {
     await useLastImage()
   }
+
+  try {
+    const queue = await api.getQueue()
+    const activeJobs = (queue || []).filter(j => j.type === 'from_image' && (j.status === 'pending' || j.status === 'running'))
+    if (activeJobs.length > 0) {
+      generatingImage.value = true
+      generationStage.value = 'generating'
+      enqueuedJobIds.value = new Set(activeJobs.map(j => j.id))
+    }
+  } catch {}
 })
 
 onUnmounted(() => {
@@ -608,6 +684,8 @@ onUnmounted(() => {
   EventsOff("analyze:step")
   EventsOff("remove:stage")
   EventsOff("session:added")
+  EventsOff('queue:completed')
+  EventsOff('queue:failed')
   saveFIState()
   if (shared) {
     shared.selectedPresetId = selectedPresetId.value
@@ -799,14 +877,14 @@ function onKeydown(e) {
           </div>
 
           <div style="display: flex; gap: 8px; margin-top: 16px; margin-bottom: 12px; flex-wrap: wrap;">
-            <button class="btn btn-sm" :class="mode === 'img2img' ? 'btn-primary' : 'btn-secondary'" @click="mode = 'img2img'" :disabled="generatingImage">{{ t('fi.mode_img2img') }}</button>
-            <button class="btn btn-sm" :class="mode === 'inpaint' ? 'btn-primary' : 'btn-secondary'" @click="mode = 'inpaint'" :disabled="generatingImage">{{ t('fi.mode_inpaint') }}</button>
-            <button class="btn btn-sm" :class="mode === 'remove' ? 'btn-primary' : 'btn-secondary'" @click="mode = 'remove'" :disabled="generatingImage">{{ t('fi.mode_remove') }}</button>
+            <button class="btn btn-sm" :class="mode === 'img2img' ? 'btn-primary' : 'btn-secondary'" @click="mode = 'img2img'">{{ t('fi.mode_img2img') }}</button>
+            <button class="btn btn-sm" :class="mode === 'inpaint' ? 'btn-primary' : 'btn-secondary'" @click="mode = 'inpaint'">{{ t('fi.mode_inpaint') }}</button>
+            <button class="btn btn-sm" :class="mode === 'remove' ? 'btn-primary' : 'btn-secondary'" @click="mode = 'remove'">{{ t('fi.mode_remove') }}</button>
           </div>
 
           <div v-if="mode === 'img2img' || mode === 'inpaint'" class="form-group">
             <label class="form-label">{{ t('fi.label_denoising', { value: denoisingStrength.toFixed(2) }) }}</label>
-            <input type="range" class="form-range" v-model.number="denoisingStrength" min="0.05" max="1.0" step="0.05" :disabled="generatingImage" />
+            <input type="range" class="form-range" v-model.number="denoisingStrength" min="0.05" max="1.0" step="0.05" />
             <div style="display: flex; justify-content: space-between; font-size: 11px; color: var(--text-dim);">
               <span>{{ t('fi.keep_original') }}</span>
               <span>{{ t('fi.full_redraw') }}</span>
@@ -872,31 +950,31 @@ function onKeydown(e) {
           </div>
 
           <div v-if="mode !== 'remove'" style="display: flex; gap: 8px; margin-bottom: 12px;">
-            <button class="btn btn-sm" :class="genMode === 'preset' ? 'btn-primary' : 'btn-secondary'" @click="genMode = 'preset'">{{ t('fi.btn_preset') }}</button>
-            <button class="btn btn-sm" :class="genMode === 'compound' ? 'btn-primary' : 'btn-secondary'" @click="genMode = 'compound'">{{ t('fi.btn_pipeline') }}</button>
+            <button class="btn btn-sm" :class="genMode === 'preset' ? 'btn-primary' : 'btn-secondary'" @click="genMode = 'preset'">{{ t('fi.btn_style') }}</button>
+            <button class="btn btn-sm" :class="genMode === 'compound' ? 'btn-primary' : 'btn-secondary'" @click="genMode = 'compound'">{{ t('fi.btn_workflow') }}</button>
           </div>
 
           <div v-if="mode !== 'remove' && genMode === 'preset'" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
             <div class="form-group">
               <label class="form-label">{{ t('fi.label_type') }}</label>
-              <select class="form-select" v-model="selectedTypeId" :disabled="generatingImage">
+              <select class="form-select" v-model="selectedTypeId">
                 <option :value="null">{{ t('fi.all_types') }}</option>
                 <option v-for="t in presetTypes" :key="t.id" :value="t.id">{{ t.name }}</option>
               </select>
             </div>
             <div class="form-group">
-              <label class="form-label">{{ t('fi.label_preset') }}</label>
-              <select class="form-select" v-model="selectedPresetId" :disabled="generatingImage">
-                <option :value="null" disabled>{{ t('fi.select_preset') }}</option>
+              <label class="form-label">{{ t('fi.label_style') }}</label>
+              <select class="form-select" v-model="selectedPresetId">
+                <option :value="null" disabled>{{ t('fi.select_style') }}</option>
                 <option v-for="p in filteredPresets" :key="p.id" :value="p.id">{{ p.name }}</option>
               </select>
             </div>
           </div>
 
           <div v-if="mode !== 'remove' && genMode === 'compound'" class="form-group">
-            <label class="form-label">{{ t('fi.label_pipeline') }}</label>
-            <select class="form-select" v-model="selectedCompoundPresetId" :disabled="generatingImage">
-              <option :value="null" disabled>{{ t('fi.select_pipeline') }}</option>
+            <label class="form-label">{{ t('fi.label_workflow') }}</label>
+            <select class="form-select" v-model="selectedCompoundPresetId">
+              <option :value="null" disabled>{{ t('fi.select_workflow') }}</option>
               <option v-for="c in compoundPresets" :key="c.id" :value="c.id">{{ c.name }} ({{ c.steps.length }} steps)</option>
             </select>
           </div>
@@ -917,11 +995,11 @@ function onKeydown(e) {
                 </template>
                 <span v-else>{{ t('fi.btn_analyze') }}</span>
               </button>
-              <button v-if="!kidsModeActive" class="btn btn-sm btn-secondary" @click="tags = ''" :disabled="!tags || generatingImage" title="Clear tags">&#10005;</button>
-              <button v-if="tags" class="btn btn-sm btn-secondary" @click="transferToGenerate" :disabled="generatingImage" title="Transfer tags to Generate tab">&#8594; Generate</button>
+              <button v-if="!kidsModeActive" class="btn btn-sm btn-secondary" @click="tags = ''" :disabled="!tags" title="Clear tags">&#10005;</button>
+              <button v-if="tags" class="btn btn-sm btn-secondary" @click="transferToGenerate" title="Transfer tags to Generate tab">&#8594; Generate</button>
             </div>
-            <textarea class="form-textarea" v-model="tags" rows="4" :placeholder="t('fi.placeholder_tags')" :disabled="generatingImage || kidsModeActive"></textarea>
-            <div v-if="kidsModeActive" style="margin-top: 4px; padding: 6px; background: var(--bg-secondary); border-radius: 4px; text-align: center; font-size: 11px; color: var(--text-dim);">
+            <textarea class="form-textarea" v-model="tags" rows="4" :placeholder="t('fi.placeholder_tags')" :disabled="kidsModeActive"></textarea>
+            <div v-if="kidsModeActive" style="margin-top: 4px; padding: 6px; background: var(--surface-2); border-radius: 4px; text-align: center; font-size: 11px; color: var(--text-dim);">
               {{ t('fi.kids_tags_restricted') }}
             </div>
           </div>
@@ -942,15 +1020,15 @@ function onKeydown(e) {
 
           <div v-if="mode !== 'remove' && recommending" style="margin-top: 8px; display: flex; align-items: center; gap: 8px; color: var(--text-dim); font-size: 13px;">
             <span class="spinner" style="width: 14px; height: 14px; border-width: 2px;"></span>
-            {{ t('fi.recommending_preset') }}
+            {{ t('fi.recommending_style') }}
           </div>
 
           <div v-if="!kidsModeActive" class="form-group">
-            <label class="form-label">{{ t('fi.label_extra_negative') }}</label>
-            <textarea class="form-textarea" v-model="extraNegativePrompt" rows="2" :placeholder="t('fi.placeholder_extra_negative')" :disabled="generatingImage"></textarea>
+            <label class="form-label">{{ t('fi.label_extra_exclude') }}</label>
+            <textarea class="form-textarea" v-model="extraNegativePrompt" rows="2" :placeholder="t('fi.placeholder_extra_exclude')"></textarea>
           </div>
 
-          <button class="btn btn-primary" :class="{ 'btn-generating': generatingImage }" style="width: 100%; justify-content: center; padding: 12px;" @click="generate" :disabled="generatingImage || !uploadedImage || ((mode === 'inpaint' || mode === 'remove') && !hasMask) || (mode !== 'remove' && (genMode === 'preset' ? !selectedPresetId : !selectedCompoundPresetId))">
+          <button class="btn btn-primary" :class="{ 'btn-generating': generatingImage }" style="width: 100%; justify-content: center; padding: 12px;" @click="generate" :disabled="!uploadedImage || ((mode === 'inpaint' || mode === 'remove') && !hasMask) || (mode !== 'remove' && (genMode === 'preset' ? !selectedPresetId : !selectedCompoundPresetId))">
             <span v-if="generatingImage" style="display: inline-flex; align-items: center; gap: 6px;">
               <span class="spinner" style="width: 14px; height: 14px; border-width: 2px;"></span>
               {{ removeStage === 'analyzing' ? t('fi.analyzing_context') : generationStage === 'analyzing' ? t('fi.analyzing_image') : t('generate.generating_image') }}
@@ -980,7 +1058,7 @@ function onKeydown(e) {
             </div>
           </div>
           <div v-else-if="generatedImage" style="width: 100%; padding: 12px;">
-            <img :src="'data:image/png;base64,' + generatedImage" alt="Generated" class="img-fade-in" style="border-radius: var(--radius-sm); cursor: zoom-in;" @click="showViewer = true" />
+            <img :src="imageSrc" alt="Generated" class="img-fade-in" style="border-radius: var(--radius-sm); cursor: zoom-in;" @click="showViewer = true" />
             <div style="display: flex; gap: 8px; margin-top: 12px; justify-content: center;">
               <button class="btn btn-secondary btn-sm" @click="downloadImage">{{ t('fi.btn_download') }}</button>
               <button class="btn btn-secondary btn-sm" @click="copyPrompt">{{ t('fi.btn_copy') }}</button>
@@ -994,12 +1072,12 @@ function onKeydown(e) {
         </div>
 
         <details v-if="genInfo" class="gen-info card">
-          <summary>{{ t('fi.generation_info') }}</summary>
+          <summary>{{ t('fi.technical_details') }}</summary>
           <pre style="white-space: pre-wrap; word-break: break-word; overflow-wrap: break-word;">{{ formattedGenInfo }}</pre>
         </details>
 
         <details v-if="effectivePrompt" class="gen-info card">
-          <summary>{{ t('fi.effective_prompt') }}</summary>
+          <summary>{{ t('fi.final_prompt') }}</summary>
           <div style="margin-bottom: 8px;">
             <div style="color: var(--text-dim); font-size: 11px; margin-bottom: 4px;">{{ t('generate.positive') }}</div>
             <div style="font-size: 12px; line-height: 1.5; word-break: break-word;">{{ effectivePrompt }}</div>

@@ -102,10 +102,14 @@ export namespace compositor {
 	export class Scene {
 	    background_prompt: string;
 	    negative_prompt: string;
+	    refine_prompt?: string;
+	    refine_denoise?: number;
 	    characters: CharacterSlot[];
 	    width: number;
 	    height: number;
 	    preset_id: number;
+	    resolution_id?: number;
+	    hires_profile_id?: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new Scene(source);
@@ -115,10 +119,14 @@ export namespace compositor {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.background_prompt = source["background_prompt"];
 	        this.negative_prompt = source["negative_prompt"];
+	        this.refine_prompt = source["refine_prompt"];
+	        this.refine_denoise = source["refine_denoise"];
 	        this.characters = this.convertValues(source["characters"], CharacterSlot);
 	        this.width = source["width"];
 	        this.height = source["height"];
 	        this.preset_id = source["preset_id"];
+	        this.resolution_id = source["resolution_id"];
+	        this.hires_profile_id = source["hires_profile_id"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -183,54 +191,6 @@ export namespace generation {
 	        this.system_prompt = source["system_prompt"];
 	        this.single_prompt = source["single_prompt"];
 	        this.chain_prompts = source["chain_prompts"];
-	    }
-	}
-	export class BatchCompoundGenerateParams {
-	    compound_preset_id: number;
-	    extra_prompt: string;
-	    extra_negative_prompt: string;
-	    count: number;
-	    output_folder: string;
-	    resolution_id?: number;
-	    hires_profile_id?: number;
-	
-	    static createFrom(source: any = {}) {
-	        return new BatchCompoundGenerateParams(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.compound_preset_id = source["compound_preset_id"];
-	        this.extra_prompt = source["extra_prompt"];
-	        this.extra_negative_prompt = source["extra_negative_prompt"];
-	        this.count = source["count"];
-	        this.output_folder = source["output_folder"];
-	        this.resolution_id = source["resolution_id"];
-	        this.hires_profile_id = source["hires_profile_id"];
-	    }
-	}
-	export class BatchGenerateParams {
-	    preset_id: number;
-	    prompt: string;
-	    negative_prompt: string;
-	    count: number;
-	    output_folder: string;
-	    resolution_id?: number;
-	    hires_profile_id?: number;
-	
-	    static createFrom(source: any = {}) {
-	        return new BatchGenerateParams(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.preset_id = source["preset_id"];
-	        this.prompt = source["prompt"];
-	        this.negative_prompt = source["negative_prompt"];
-	        this.count = source["count"];
-	        this.output_folder = source["output_folder"];
-	        this.resolution_id = source["resolution_id"];
-	        this.hires_profile_id = source["hires_profile_id"];
 	    }
 	}
 	export class DecomposeSceneParams {
@@ -544,10 +504,6 @@ export namespace importexport {
 	    clip_skip?: number;
 	    batch_size?: number;
 	    batch_count?: number;
-	    hires_fix?: boolean;
-	    hires_upscale?: number;
-	    hires_denoising_strength?: number;
-	    hires_upscaler: string;
 	    vae: string;
 	    tags: string;
 	    loras: string;
@@ -574,10 +530,6 @@ export namespace importexport {
 	        this.clip_skip = source["clip_skip"];
 	        this.batch_size = source["batch_size"];
 	        this.batch_count = source["batch_count"];
-	        this.hires_fix = source["hires_fix"];
-	        this.hires_upscale = source["hires_upscale"];
-	        this.hires_denoising_strength = source["hires_denoising_strength"];
-	        this.hires_upscaler = source["hires_upscaler"];
 	        this.vae = source["vae"];
 	        this.tags = source["tags"];
 	        this.loras = source["loras"];
@@ -821,14 +773,11 @@ export namespace preset {
 	    clip_skip?: number;
 	    batch_size?: number;
 	    batch_count?: number;
-	    hires_fix?: boolean;
-	    hires_upscale?: number;
-	    hires_denoising_strength?: number;
-	    hires_upscaler: string;
 	    vae: string;
 	    type_id?: number;
 	    tags: string;
 	    loras: string;
+	    is_bundled: boolean;
 	    created_at: string;
 	    updated_at: string;
 	
@@ -853,14 +802,11 @@ export namespace preset {
 	        this.clip_skip = source["clip_skip"];
 	        this.batch_size = source["batch_size"];
 	        this.batch_count = source["batch_count"];
-	        this.hires_fix = source["hires_fix"];
-	        this.hires_upscale = source["hires_upscale"];
-	        this.hires_denoising_strength = source["hires_denoising_strength"];
-	        this.hires_upscaler = source["hires_upscaler"];
 	        this.vae = source["vae"];
 	        this.type_id = source["type_id"];
 	        this.tags = source["tags"];
 	        this.loras = source["loras"];
+	        this.is_bundled = source["is_bundled"];
 	        this.created_at = source["created_at"];
 	        this.updated_at = source["updated_at"];
 	    }
@@ -1003,6 +949,26 @@ export namespace preset {
 	    }
 	}
 	
+	export class PresetInstallStatus {
+	    id: number;
+	    name: string;
+	    installed: boolean;
+	    missing_sd: string[];
+	    missing_lora: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new PresetInstallStatus(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.installed = source["installed"];
+	        this.missing_sd = source["missing_sd"];
+	        this.missing_lora = source["missing_lora"];
+	    }
+	}
 	export class PresetType {
 	    id: number;
 	    name: string;
@@ -1170,6 +1136,51 @@ export namespace preset {
 
 }
 
+export namespace queue {
+	
+	export class Job {
+	    id: number;
+	    type: string;
+	    status: string;
+	    params: string;
+	    progress: number;
+	    progress_detail: string;
+	    result: string;
+	    error: string;
+	    source: string;
+	    created_at: string;
+	    started_at?: string;
+	    completed_at?: string;
+	    retry_count: number;
+	    max_retries: number;
+	    next_retry?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Job(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.type = source["type"];
+	        this.status = source["status"];
+	        this.params = source["params"];
+	        this.progress = source["progress"];
+	        this.progress_detail = source["progress_detail"];
+	        this.result = source["result"];
+	        this.error = source["error"];
+	        this.source = source["source"];
+	        this.created_at = source["created_at"];
+	        this.started_at = source["started_at"];
+	        this.completed_at = source["completed_at"];
+	        this.retry_count = source["retry_count"];
+	        this.max_retries = source["max_retries"];
+	        this.next_retry = source["next_retry"];
+	    }
+	}
+
+}
+
 export namespace sd {
 	
 	export class LoRA {
@@ -1259,6 +1270,312 @@ export namespace sd {
 	        this.model_name = source["model_name"];
 	        this.path = source["path"];
 	    }
+	}
+
+}
+
+export namespace serverclient {
+	
+	export class BackendInfo {
+	    key: string;
+	    name: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new BackendInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.key = source["key"];
+	        this.name = source["name"];
+	    }
+	}
+	export class CatalogLoRA {
+	    name: string;
+	    base: string;
+	    category: string;
+	    default_weight: number;
+	    description: string;
+	    url?: string;
+	    size_mb: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new CatalogLoRA(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.base = source["base"];
+	        this.category = source["category"];
+	        this.default_weight = source["default_weight"];
+	        this.description = source["description"];
+	        this.url = source["url"];
+	        this.size_mb = source["size_mb"];
+	    }
+	}
+	export class CatalogSDModel {
+	    name: string;
+	    base: string;
+	    category: string;
+	    description: string;
+	    url?: string;
+	    size_gb: number;
+	    recommended?: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new CatalogSDModel(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.base = source["base"];
+	        this.category = source["category"];
+	        this.description = source["description"];
+	        this.url = source["url"];
+	        this.size_gb = source["size_gb"];
+	        this.recommended = source["recommended"];
+	    }
+	}
+	export class CatalogModel {
+	    name: string;
+	    description: string;
+	    size_gb: number;
+	    recommended?: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new CatalogModel(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.description = source["description"];
+	        this.size_gb = source["size_gb"];
+	        this.recommended = source["recommended"];
+	    }
+	}
+	export class Catalog {
+	    llm_generate: CatalogModel[];
+	    llm_vision: CatalogModel[];
+	    sd_models: CatalogSDModel[];
+	    lora: CatalogLoRA[];
+	
+	    static createFrom(source: any = {}) {
+	        return new Catalog(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.llm_generate = this.convertValues(source["llm_generate"], CatalogModel);
+	        this.llm_vision = this.convertValues(source["llm_vision"], CatalogModel);
+	        this.sd_models = this.convertValues(source["sd_models"], CatalogSDModel);
+	        this.lora = this.convertValues(source["lora"], CatalogLoRA);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
+	
+	
+	export class DiscoveredServer {
+	    name: string;
+	    host: string;
+	    port: number;
+	    ip_address: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new DiscoveredServer(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.host = source["host"];
+	        this.port = source["port"];
+	        this.ip_address = source["ip_address"];
+	    }
+	}
+	export class GPUInfo {
+	    name?: string;
+	    memory_total_mb?: number;
+	    memory_used_mb?: number;
+	    memory_free_mb?: number;
+	    utilization_percent?: number;
+	    available: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new GPUInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.memory_total_mb = source["memory_total_mb"];
+	        this.memory_used_mb = source["memory_used_mb"];
+	        this.memory_free_mb = source["memory_free_mb"];
+	        this.utilization_percent = source["utilization_percent"];
+	        this.available = source["available"];
+	    }
+	}
+	export class HealthResult {
+	    healthy: boolean;
+	    latency_ms: number;
+	    error?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new HealthResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.healthy = source["healthy"];
+	        this.latency_ms = source["latency_ms"];
+	        this.error = source["error"];
+	    }
+	}
+	export class InstallStatus {
+	    key: string;
+	    installed: boolean;
+	    installing: boolean;
+	    progress: string;
+	    error?: string;
+	    version?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new InstallStatus(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.key = source["key"];
+	        this.installed = source["installed"];
+	        this.installing = source["installing"];
+	        this.progress = source["progress"];
+	        this.error = source["error"];
+	        this.version = source["version"];
+	    }
+	}
+	export class LLMModelInfo {
+	    name: string;
+	    size?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new LLMModelInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.size = source["size"];
+	    }
+	}
+	export class ModelInfo {
+	    name: string;
+	    size: number;
+	    extension?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ModelInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.size = source["size"];
+	        this.extension = source["extension"];
+	    }
+	}
+	export class ProcessStatus {
+	    name: string;
+	    status: string;
+	    pid?: number;
+	    uptime?: string;
+	    restarts: number;
+	    category?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ProcessStatus(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.status = source["status"];
+	        this.pid = source["pid"];
+	        this.uptime = source["uptime"];
+	        this.restarts = source["restarts"];
+	        this.category = source["category"];
+	    }
+	}
+	export class ServerModels {
+	    sd_checkpoint?: string;
+	    llm_running?: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new ServerModels(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.sd_checkpoint = source["sd_checkpoint"];
+	        this.llm_running = source["llm_running"];
+	    }
+	}
+	export class ServerStatus {
+	    processes: Record<string, ProcessStatus>;
+	    health: Record<string, HealthResult>;
+	    gpu: GPUInfo;
+	    installs: Record<string, InstallStatus>;
+	    models: ServerModels;
+	
+	    static createFrom(source: any = {}) {
+	        return new ServerStatus(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.processes = this.convertValues(source["processes"], ProcessStatus, true);
+	        this.health = this.convertValues(source["health"], HealthResult, true);
+	        this.gpu = this.convertValues(source["gpu"], GPUInfo);
+	        this.installs = this.convertValues(source["installs"], InstallStatus, true);
+	        this.models = this.convertValues(source["models"], ServerModels);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 
 }

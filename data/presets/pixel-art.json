@@ -4,7 +4,7 @@
   "presets": [
     {
       "name": "16-Bit RPG Sprite (neoMoeDream XL)",
-      "preset_type": "positive",
+      "preset_type": "pixel-art",
       "type_name": "pixel-art",
       "prompt": "masterpiece, best quality, 16-bit pixel art, RPG game sprite, detailed pixel character, clean pixel edges, retro game aesthetic, SNES style, vibrant pixel colors, game asset, transparent background",
       "negative_prompt": "(worst quality, low quality:1.4), smooth, anti-aliased, photorealistic, 3d render, blurry, noisy, modern, realistic, high resolution, detailed skin",
@@ -18,13 +18,12 @@
       "clip_skip": 2,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "pixel-art, 16bit, rpg, game, sprite",
       "loras": "[{\"name\":\"pixel-art-xl-v1.1\",\"weight\":0.8}]"
     },
     {
       "name": "Pixel Landscape (neoMoeDream XL)",
-      "preset_type": "positive",
+      "preset_type": "pixel-art",
       "type_name": "pixel-art",
       "prompt": "masterpiece, best quality, pixel art landscape, game background, parallax scrolling, detailed pixel environment, mountains, trees, clouds, sunset, retro game world, 16-bit era",
       "negative_prompt": "(worst quality, low quality:1.4), smooth, anti-aliased, photorealistic, 3d render, blurry, noisy, modern, realistic, high resolution, detailed skin",
@@ -38,13 +37,12 @@
       "clip_skip": 2,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "pixel-art, landscape, game, parallax",
       "loras": "[{\"name\":\"pixel-art-xl-v1.1\",\"weight\":0.8}]"
     },
     {
       "name": "Flat Color Scene (dreamshaper_8)",
-      "preset_type": "positive",
+      "preset_type": "pixel-art",
       "type_name": "pixel-art",
       "prompt": "masterpiece, best quality, pixel art scene, flat colors, clean pixel outlines, retro game aesthetic, limited palette, sprite style, game UI element, nostalgic, chunky pixels, dithering",
       "negative_prompt": "(worst quality, low quality:1.4), smooth, anti-aliased, photorealistic, 3d render, blurry, noisy, modern, realistic, high resolution, detailed skin",
@@ -58,7 +56,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "pixel-art, flat-color, retro, sprite",
       "loras": "[{\"name\":\"pixel-art-xl-v1.1\",\"weight\":0.7}]"
     },
@@ -78,7 +75,6 @@
       "clip_skip": 2,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "pixel-art, rpg, battle, snes, turn-based",
       "loras": "[{\"name\":\"pixel-art-xl-v1.1\",\"weight\":0.8}]"
     },
@@ -98,7 +94,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "pixel-art, platformer, side-scroll, retro, tiles",
       "loras": "[{\"name\":\"pixel-art-xl-v1.1\",\"weight\":0.7}]"
     },
@@ -118,7 +113,6 @@
       "clip_skip": 2,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "pixel-art, fighting-game, sprite, arcade, character",
       "loras": "[{\"name\":\"pixel-art-xl-v1.1\",\"weight\":0.8}]"
     },
@@ -138,7 +132,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "pixel-art, isometric, strategy, city, buildings",
       "loras": "[{\"name\":\"pixel-art-xl-v1.1\",\"weight\":0.7}]"
     },
@@ -158,7 +151,6 @@
       "clip_skip": 2,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "pixel-art, portrait, face, avatar, retro",
       "loras": "[{\"name\":\"pixel-art-xl-v1.1\",\"weight\":0.8}]"
     },
@@ -178,7 +170,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "pixel-art, sci-fi, cyberpunk, space, futuristic",
       "loras": "[{\"name\":\"pixel-art-xl-v1.1\",\"weight\":0.7}]"
     },
@@ -198,7 +189,6 @@
       "clip_skip": 2,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "pixel-art, dungeon, rpg, dark, fantasy",
       "loras": "[{\"name\":\"pixel-art-xl-v1.1\",\"weight\":0.8}]"
     },
@@ -218,7 +208,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "pixel-art, item, icon, weapon, loot",
       "loras": "[{\"name\":\"pixel-art-xl-v1.1\",\"weight\":0.7}]"
     },
@@ -238,7 +227,6 @@
       "clip_skip": 2,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "pixel-art, racing, top-down, arcade, cars",
       "loras": "[{\"name\":\"pixel-art-xl-v1.1\",\"weight\":0.8}]"
     }

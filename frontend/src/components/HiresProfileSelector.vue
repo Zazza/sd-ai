@@ -121,7 +121,7 @@ onMounted(load)
     <select v-model="selectedId" @change="emitChange" class="form-select">
       <option :value="null">No hires</option>
       <option v-for="h in sorted" :key="h.id" :value="h.id">
-        {{ h.name }} ({{ h.upscaler }}x, denoise {{ h.denoising_strength }})
+        {{ h.name }} ({{ h.upscale }}x, denoise {{ h.denoising_strength }})
       </option>
     </select>
     <div v-if="showAdd" class="selector-inline">

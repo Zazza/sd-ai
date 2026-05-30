@@ -4,6 +4,29 @@ All notable changes to SD Studio are documented here.
 
 ## [Unreleased]
 
+## [0.7.0] — 2026-05-30
+
+### Added
+- Queue system with retry, pause, persistent storage
+- Multi-scene compositor with background removal
+- Compare page (side-by-side generation)
+- Smart Remove (LLM vision + inpaint)
+- Server mode integration (serverclient, discovery)
+- Kids mode filtering
+- Session management enhancements
+- Resolution and hires profiles
+- Pipeline export/import
+- Model catalog
+
+### Changed
+- User-scene-first prompt generation — LLM generates only user scene tags with SD weights, preset style added after BREAK separator for better CLIP attention
+- User prompt placed first in final SD prompt (gets full first-chunk attention), preset quality/style after BREAK
+- System prompt labels changed to STYLE REFERENCE / USER SCENE to prevent LLM from duplicating preset tags
+- Server component extracted to separate repository: [sd-ai-server](https://github.com/thread-of-the-world/sd-ai-server)
+
+### Fixed
+- Various bug fixes and UI improvements
+
 ## [0.6.2] — 2026-05-20
 
 ### Added

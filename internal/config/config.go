@@ -23,7 +23,10 @@ type Config struct {
 	DefaultHeight      int
 }
 
-const DefaultSDPromptInstruction = `You are an expert Stable Diffusion prompt engineer. Your task is to merge a BASE PROMPT (from a preset) with a user DESCRIPTION into a single optimized SD prompt.
+const DefaultSDPromptInstruction = `You are an expert Stable Diffusion prompt engineer. Your task is to convert a user's SCENE DESCRIPTION into SD tags with weights.
+
+You receive a STYLE REFERENCE (read-only) to understand the art direction — do NOT copy it into your output.
+The style/quality tags will be added separately by the system.
 
 CRITICAL — SD IS A LIMITED IMAGE MODEL, NOT A LANGUAGE MODEL:
 SD does NOT understand sentences, metaphors, abstract concepts, or poetic language.
@@ -42,19 +45,21 @@ Think of SD as someone who only understands short simple picture descriptions.
 - Lighting = simple: "sunlight, warm lighting, shadows" not "ethereal luminescence"
 
 RULES:
-1. The BASE PROMPT contains quality tags, subject definition, and style — treat it as the FOUNDATION
-2. You MUST include EVERY visual element from USER DESCRIPTION — objects, colors, materials, positions, compositions, backgrounds. Missing even one element is a failure
+1. Output ONLY tags derived from the USER SCENE — the user's visual content converted to SD tags
+2. You MUST include EVERY visual element from USER SCENE — objects, colors, materials, positions, compositions, backgrounds. Missing even one element is a failure
 3. Translate any non-English text to English FIRST, then use the translated meaning as simple tags
-4. MERGE intelligently: integrate user elements INTO the base prompt structure, not append at the end
-5. Token order matters: quality tags first, then main subject, then details, then background/atmosphere
-6. Use SD weighting syntax: (keyword:1.2) for emphasis, (keyword:0.8) for de-emphasis
-7. Use BREAK to separate major concept sections if needed
+4. Use SD weighting: main subject (tag:1.3)-(tag:1.4), important details (tag:1.2), secondary (tag:1.1), no weight = default
+5. Do NOT include quality tags (masterpiece, best quality, etc.) — they come from preset
+6. Do NOT include style tags from the STYLE REFERENCE — they will be added separately
+7. Do NOT invent details not present in the user description
 8. Keep total prompt under 75 tokens per chunk (SD processes in 75-token blocks)
-9. For negative prompt: merge base negative with user-specified negatives, remove duplicates
-10. Do NOT invent details not present in the base prompt or user description
+9. For negative prompt: only user-specified negatives, do NOT copy STYLE NEGATIVE REFERENCE
+
+EXAMPLE — user writes "красная машина на горной дороге на закате":
+{"prompt": "(red car:1.4), (mountain road:1.3), (sunset:1.3), driving, winding road, golden hour", "negative_prompt": "user negative tags here"}
 
 OUTPUT FORMAT — valid JSON only, no markdown:
-{"prompt": "merged positive prompt here", "negative_prompt": "merged negative prompt here"}`
+{"prompt": "user scene tags with weights here", "negative_prompt": "user negative tags here"}`
 
 const KidsModePrompt = `
 
@@ -89,6 +94,8 @@ CRITICAL RULES:
 8. Scale is character size relative to canvas width (0.2-0.6 typical range)
 9. If the user provides a preset positive prompt (STYLE), ALL output prompts (characters AND background) MUST follow that artistic style — same lighting, atmosphere, color palette, mood
 10. If the user provides a preset negative prompt, MERGE it into the scene negative_prompt
+11. Include a "refine_prompt" — a complete scene description for the final refinement pass that describes the full composed scene: background + all characters with their positions and actions. This helps the model blend characters naturally into the environment
+12. Include a "refine_denoise" — suggested denoising strength for the refinement pass (0.3-0.7). Higher values = more blending but risk changing characters. Use 0.45 for balanced results, higher for complex interactions between characters
 
 BAD character prompt: "a warrior standing with a sword"
 GOOD character prompt: "warrior, heavy plate armor, helmet, broadsword, shield, standing pose, facing viewer, battle stance"
@@ -97,10 +104,12 @@ OUTPUT — valid JSON only, no markdown, no explanation:
 {
   "background_prompt": "environment and background SD tags here",
   "negative_prompt": "blurry, low quality, watermark, text",
+  "refine_prompt": "complete scene description: background + all characters with positions and interactions",
+  "refine_denoise": 0.45,
   "characters": [
     {
       "name": "character name/label",
-      "prompt": "detailed SD tags for this character only",
+      "prompt": "detailed SD-tags for this character only",
       "position": {"x": 0.25, "y": 0.55},
       "scale": 0.4
     }

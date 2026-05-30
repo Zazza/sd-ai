@@ -22,6 +22,7 @@ import (
 	"go-sd/internal/llm"
 	"go-sd/internal/logger"
 	"go-sd/internal/preset"
+	"go-sd/internal/promptutil"
 	"go-sd/internal/sd"
 )
 
@@ -42,6 +43,10 @@ func (m *mockLLM) Chat(model, systemPrompt, userMessage string, temperature floa
 		return fn(model, systemPrompt, userMessage, temperature, maxTokens)
 	}
 	return "", fmt.Errorf("not implemented")
+}
+
+func (m *mockLLM) ChatJSON(model, systemPrompt, userMessage string, temperature float64, maxTokens int) (string, error) {
+	return m.Chat(model, systemPrompt, userMessage, temperature, maxTokens)
 }
 
 func (m *mockLLM) ChatVision(model, systemPrompt, userText, imageBase64 string, temperature float64, maxTokens int) (string, error) {
@@ -483,7 +488,7 @@ func TestRecommendPreset_Success(t *testing.T) {
 	})
 
 	llmSvc := &mockLLM{
-		genSDPromptFn: func(systemPrompt, userMessage, presetType, model string, maxTokens int) (string, error) {
+		chatFn: func(model, systemPrompt, userMessage string, temperature float64, maxTokens int) (string, error) {
 			return `{"preset_id": 1, "preset_name": "Anime Girl", "extra_prompt": "cat ears", "reasoning": "best match"}`, nil
 		},
 	}
@@ -504,7 +509,7 @@ func TestRecommendPreset_LLMError(t *testing.T) {
 	makeTestPreset(t, db, nil)
 
 	llmSvc := &mockLLM{
-		genSDPromptFn: func(systemPrompt, userMessage, presetType, model string, maxTokens int) (string, error) {
+		chatFn: func(model, systemPrompt, userMessage string, temperature float64, maxTokens int) (string, error) {
 			return "", fmt.Errorf("timeout")
 		},
 	}
@@ -521,7 +526,7 @@ func TestRecommendPreset_InvalidJSONResponse(t *testing.T) {
 	makeTestPreset(t, db, nil)
 
 	llmSvc := &mockLLM{
-		genSDPromptFn: func(systemPrompt, userMessage, presetType, model string, maxTokens int) (string, error) {
+		chatFn: func(model, systemPrompt, userMessage string, temperature float64, maxTokens int) (string, error) {
 			return "not json", nil
 		},
 	}
@@ -575,7 +580,7 @@ func TestGenerateImage_WithExtraPrompt(t *testing.T) {
 
 	sdSvc := &mockSD{
 		txt2img: func(req sd.Txt2ImgRequest) (*sd.Txt2ImgResponse, error) {
-			assert.Equal(t, "custom prompt", req.Prompt)
+			assert.Equal(t, "custom prompt, BREAK, masterpiece, best quality, 1girl", req.Prompt)
 			return &sd.Txt2ImgResponse{Images: []string{"img"}}, nil
 		},
 	}
@@ -1127,165 +1132,6 @@ func TestGetDefaultAnalyzePrompts(t *testing.T) {
 	assert.Len(t, prompts.ChainPrompts, 4)
 }
 
-func TestBatchGenerate_InvalidCount(t *testing.T) {
-	t.Parallel()
-	db := openTestDB(t)
-	svc := newTestService(t, db, &mockLLM{}, &mockSD{})
-	svc.ctx = context.Background()
-
-	tests := []struct {
-		name  string
-		count int
-	}{
-		{"zero", 0},
-		{"negative", -1},
-		{"too large", 101},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := svc.BatchGenerate(BatchGenerateParams{
-				Prompt:       "test",
-				Count:        tt.count,
-				OutputFolder: t.TempDir(),
-			})
-			assert.Error(t, err)
-			assert.Contains(t, err.Error(), "count must be between 1 and 100")
-		})
-	}
-}
-
-func TestBatchGenerate_NoOutputFolder(t *testing.T) {
-	t.Parallel()
-	db := openTestDB(t)
-	svc := newTestService(t, db, &mockLLM{}, &mockSD{})
-	svc.ctx = context.Background()
-
-	err := svc.BatchGenerate(BatchGenerateParams{
-		Prompt: "test",
-		Count:  1,
-	})
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "output folder is required")
-}
-
-func TestBatchGenerate_NoPrompt(t *testing.T) {
-	t.Parallel()
-	db := openTestDB(t)
-	svc := newTestService(t, db, &mockLLM{}, &mockSD{})
-	svc.ctx = context.Background()
-
-	err := svc.BatchGenerate(BatchGenerateParams{
-		Count:        1,
-		OutputFolder: t.TempDir(),
-	})
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "prompt is required")
-}
-
-func TestBatchGenerate_Success(t *testing.T) {
-	db := openTestDB(t)
-	makeTestPreset(t, db, nil)
-
-	sdSvc := &mockSD{
-		txt2img: func(req sd.Txt2ImgRequest) (*sd.Txt2ImgResponse, error) {
-			return &sd.Txt2ImgResponse{
-				Images: []string{makePNGBase64(t, 8, 8)},
-			}, nil
-		},
-	}
-
-	svc := newTestService(t, db, &mockLLM{}, sdSvc)
-	svc.ctx = context.Background()
-
-	outputDir := t.TempDir()
-	err := svc.BatchGenerate(BatchGenerateParams{
-		PresetID:     1,
-		Prompt:       "1girl",
-		Count:        2,
-		OutputFolder: outputDir,
-	})
-	require.NoError(t, err)
-
-	files, err := os.ReadDir(outputDir)
-	require.NoError(t, err)
-	assert.Len(t, files, 2)
-}
-
-func TestBatchGenerate_SDError(t *testing.T) {
-	db := openTestDB(t)
-	makeTestPreset(t, db, nil)
-
-	sdSvc := &mockSD{
-		txt2img: func(req sd.Txt2ImgRequest) (*sd.Txt2ImgResponse, error) {
-			return nil, fmt.Errorf("SD error")
-		},
-	}
-
-	svc := newTestService(t, db, &mockLLM{}, sdSvc)
-	svc.ctx = context.Background()
-
-	err := svc.BatchGenerate(BatchGenerateParams{
-		PresetID:     1,
-		Prompt:       "1girl",
-		Count:        1,
-		OutputFolder: t.TempDir(),
-	})
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "image 1/1 failed")
-}
-
-func TestBatchGenerate_AlreadyRunning(t *testing.T) {
-	db := openTestDB(t)
-	makeTestPreset(t, db, nil)
-
-	blockCh := make(chan struct{})
-	doneCh := make(chan struct{})
-	sdSvc := &mockSD{
-		txt2img: func(req sd.Txt2ImgRequest) (*sd.Txt2ImgResponse, error) {
-			<-blockCh
-			return &sd.Txt2ImgResponse{Images: []string{makePNGBase64(t, 8, 8)}}, nil
-		},
-	}
-
-	outputDir := t.TempDir()
-
-	svc := newTestService(t, db, &mockLLM{}, sdSvc)
-	svc.ctx = context.Background()
-
-	go func() {
-		_ = svc.BatchGenerate(BatchGenerateParams{
-			PresetID:     1,
-			Prompt:       "1girl",
-			Count:        1,
-			OutputFolder: outputDir,
-		})
-		close(doneCh)
-	}()
-
-	var locked bool
-	for i := 0; i < 1000; i++ {
-		svc.batchMu.Lock()
-		locked = svc.batchRunning
-		svc.batchMu.Unlock()
-		if locked {
-			break
-		}
-	}
-
-	if locked {
-		err := svc.BatchGenerate(BatchGenerateParams{
-			Prompt:       "1girl",
-			Count:        1,
-			OutputFolder: outputDir,
-		})
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "already running")
-	}
-
-	close(blockCh)
-	<-doneCh
-}
-
 func TestTestGenerate_InvalidMode(t *testing.T) {
 	t.Parallel()
 	db := openTestDB(t)
@@ -1396,46 +1242,6 @@ func TestTestGenerate_PresetNotFound(t *testing.T) {
 	assert.Contains(t, results[0].Error, "preset not found")
 }
 
-func TestGetPresetForBatch_NoPreset(t *testing.T) {
-	t.Parallel()
-	db := openTestDB(t)
-	svc := newTestService(t, db, &mockLLM{}, &mockSD{})
-
-	_, err := svc.GetPresetForBatch(0, "desc")
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "preset is required")
-}
-
-func TestGetPresetForBatch_NoDescription(t *testing.T) {
-	t.Parallel()
-	db := openTestDB(t)
-	makeTestPreset(t, db, nil)
-	svc := newTestService(t, db, &mockLLM{}, &mockSD{})
-
-	result, err := svc.GetPresetForBatch(1, "")
-	assert.NoError(t, err)
-	assert.Nil(t, result)
-}
-
-func TestGetPresetForBatch_WithDescription(t *testing.T) {
-	t.Parallel()
-	db := openTestDB(t)
-	makeTestPreset(t, db, nil)
-
-	llmSvc := &mockLLM{
-		genSDPromptFn: func(systemPrompt, userMessage, presetType, model string, maxTokens int) (string, error) {
-			return `{"prompt": "merged", "negative_prompt": "neg"}`, nil
-		},
-	}
-
-	svc := newTestService(t, db, llmSvc, &mockSD{})
-
-	result, err := svc.GetPresetForBatch(1, "cat girl")
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	assert.Equal(t, "merged", result.Prompt)
-}
-
 func TestBuildSamplerName(t *testing.T) {
 	t.Parallel()
 
@@ -1453,7 +1259,7 @@ func TestBuildSamplerName(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			result := buildSamplerName(tt.sampler, tt.scheduleType)
+			result := promptutil.BuildSamplerName(tt.sampler, tt.scheduleType)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -1774,94 +1580,6 @@ func TestGetAnalyzeChainPrompts(t *testing.T) {
 	})
 }
 
-func TestBatchCompoundGenerate_InvalidCount(t *testing.T) {
-	t.Parallel()
-	db := openTestDB(t)
-	svc := newTestService(t, db, &mockLLM{}, &mockSD{})
-	svc.ctx = context.Background()
-
-	tests := []struct {
-		name  string
-		count int
-	}{
-		{"zero", 0},
-		{"too large", 101},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := svc.BatchCompoundGenerate(BatchCompoundGenerateParams{
-				Count:        tt.count,
-				OutputFolder: t.TempDir(),
-			})
-			assert.Error(t, err)
-		})
-	}
-}
-
-func TestBatchCompoundGenerate_NoOutputFolder(t *testing.T) {
-	t.Parallel()
-	db := openTestDB(t)
-	svc := newTestService(t, db, &mockLLM{}, &mockSD{})
-	svc.ctx = context.Background()
-
-	err := svc.BatchCompoundGenerate(BatchCompoundGenerateParams{Count: 1})
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "output folder is required")
-}
-
-func TestBatchCompoundGenerate_CompoundNotFound(t *testing.T) {
-	t.Parallel()
-	db := openTestDB(t)
-	svc := newTestService(t, db, &mockLLM{}, &mockSD{})
-	svc.ctx = context.Background()
-
-	err := svc.BatchCompoundGenerate(BatchCompoundGenerateParams{
-		CompoundPresetID: 999,
-		Count:            1,
-		OutputFolder:     t.TempDir(),
-	})
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "compound preset not found")
-}
-
-func TestBatchCompoundGenerate_Success(t *testing.T) {
-	db := openTestDB(t)
-	p := makeTestPreset(t, db, nil)
-
-	cp := &preset.CompoundPreset{
-		Name:        "test-compound",
-		Description: "test",
-		Steps: []preset.CompoundPresetStep{
-			{PresetID: p.ID, DenoisingStrength: 0.5},
-		},
-	}
-	require.NoError(t, db.CreateCompoundPreset(cp))
-
-	sdSvc := &mockSD{
-		txt2img: func(req sd.Txt2ImgRequest) (*sd.Txt2ImgResponse, error) {
-			return &sd.Txt2ImgResponse{
-				Images: []string{makePNGBase64(t, 8, 8)},
-			}, nil
-		},
-	}
-
-	svc := newTestService(t, db, &mockLLM{}, sdSvc)
-	svc.ctx = context.Background()
-
-	outputDir := t.TempDir()
-	err := svc.BatchCompoundGenerate(BatchCompoundGenerateParams{
-		CompoundPresetID: cp.ID,
-		ExtraPrompt:      "test",
-		Count:            1,
-		OutputFolder:     outputDir,
-	})
-	require.NoError(t, err)
-
-	files, err := os.ReadDir(outputDir)
-	require.NoError(t, err)
-	assert.Len(t, files, 1)
-}
-
 func TestGenerateFromImage_Validation(t *testing.T) {
 	t.Parallel()
 
@@ -1960,7 +1678,13 @@ func TestGenerateCompoundImage_Success(t *testing.T) {
 		},
 	}
 
-	svc := newTestService(t, db, &mockLLM{}, sdSvc)
+	llmSvc := &mockLLM{
+		genSDPromptFn: func(systemPrompt, userMessage, presetType, model string, maxTokens int) (string, error) {
+			return `{"prompt":"llm-scene-tags","negative_prompt":"llm-neg"}`, nil
+		},
+	}
+
+	svc := newTestService(t, db, llmSvc, sdSvc)
 	svc.ctx = context.Background()
 
 	result, err := svc.GenerateCompoundImage(GenerateCompoundImageParams{
@@ -2034,7 +1758,11 @@ func TestTestCompoundGenerate_Success(t *testing.T) {
 		},
 	}
 
-	svc := newTestService(t, db, &mockLLM{}, sdSvc)
+	svc := newTestService(t, db, &mockLLM{
+		genSDPromptFn: func(systemPrompt, userMessage, presetType, model string, maxTokens int) (string, error) {
+			return `{"prompt":"1girl, solo, standing","negative_prompt":"lowres, bad"}`, nil
+		},
+	}, sdSvc)
 	svc.ctx = context.Background()
 
 	results, err := svc.TestCompoundGenerate(TestCompoundGenerateParams{
@@ -2053,20 +1781,18 @@ func floatPtr(v float64) *float64 { return &v }
 
 func TestGenerateImage_ForgeHiresFallback(t *testing.T) {
 	t.Parallel()
-	hf := true
 	db := openTestDB(t)
 	makeTestPreset(t, db, &preset.Preset{
-		Name:                    "forge-preset",
-		Prompt:                  "1girl, masterpiece",
-		NegativePrompt:          "lowres",
-		Sampler:                 "Euler a",
-		Steps:                   20,
-		CfgScale:                7.0,
-		HiresFix:               &hf,
-		HiresUpscale:           floatPtr(2.0),
-		HiresDenoisingStrength: floatPtr(0.5),
-		HiresUpscaler:          "Latent",
+		Name:           "forge-preset",
+		Prompt:         "1girl, masterpiece",
+		NegativePrompt: "lowres",
+		Sampler:        "Euler a",
+		Steps:          20,
+		CfgScale:       7.0,
 	})
+
+	hp := &preset.HiresProfile{Name: "test-hires", Upscale: 2.0, DenoisingStrength: 0.5, Upscaler: "Latent"}
+	require.NoError(t, db.CreateHiresProfile(hp))
 
 	callCount := 0
 	var firstCallReq, secondCallReq sd.Txt2ImgRequest
@@ -2091,7 +1817,7 @@ func TestGenerateImage_ForgeHiresFallback(t *testing.T) {
 	svc := newTestService(t, db, &mockLLM{}, sdSvc)
 	svc.ctx = context.Background()
 
-	result, err := svc.GenerateImage(GenerateImageParams{PresetID: 1})
+	result, err := svc.GenerateImage(GenerateImageParams{PresetID: 1, HiresProfileID: &hp.ID})
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	assert.Equal(t, "fallback-image-data", result.Image)
@@ -2114,20 +1840,18 @@ func TestGenerateImage_ForgeHiresFallback(t *testing.T) {
 
 func TestGenerateImage_ForgeHiresManualUpscale(t *testing.T) {
 	t.Parallel()
-	hf := true
 	db := openTestDB(t)
 	makeTestPreset(t, db, &preset.Preset{
-		Name:                    "forge-manual",
-		Prompt:                  "1girl, masterpiece",
-		NegativePrompt:          "lowres",
-		Sampler:                 "Euler a",
-		Steps:                   20,
-		CfgScale:                7.0,
-		HiresFix:               &hf,
-		HiresUpscale:           floatPtr(2.0),
-		HiresDenoisingStrength: floatPtr(0.5),
-		HiresUpscaler:          "Latent",
+		Name:           "forge-manual",
+		Prompt:         "1girl, masterpiece",
+		NegativePrompt: "lowres",
+		Sampler:        "Euler a",
+		Steps:          20,
+		CfgScale:       7.0,
 	})
+
+	hp := &preset.HiresProfile{Name: "manual-hires", Upscale: 2.0, DenoisingStrength: 0.5, Upscaler: "Latent"}
+	require.NoError(t, db.CreateHiresProfile(hp))
 
 	validB64 := tinyPNGBase64(t)
 
@@ -2160,7 +1884,7 @@ func TestGenerateImage_ForgeHiresManualUpscale(t *testing.T) {
 	svc := newTestService(t, db, &mockLLM{}, sdSvc)
 	svc.ctx = context.Background()
 
-	result, err := svc.GenerateImage(GenerateImageParams{PresetID: 1})
+	result, err := svc.GenerateImage(GenerateImageParams{PresetID: 1, HiresProfileID: &hp.ID})
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	assert.Equal(t, "upscaled-image-data", result.Image)
@@ -2201,7 +1925,6 @@ func TestGenerateImage_ForgeErrorNoHiresFix(t *testing.T) {
 
 func TestGenerateImage_HiresFallbackStillFails(t *testing.T) {
 	t.Parallel()
-	hf := true
 	db := openTestDB(t)
 	makeTestPreset(t, db, &preset.Preset{
 		Name:           "hires-fail-preset",
@@ -2210,8 +1933,10 @@ func TestGenerateImage_HiresFallbackStillFails(t *testing.T) {
 		Sampler:        "Euler a",
 		Steps:          20,
 		CfgScale:       7.0,
-		HiresFix:      &hf,
 	})
+
+	hp := &preset.HiresProfile{Name: "fail-hires", Upscale: 2.0, DenoisingStrength: 0.5, Upscaler: "Latent"}
+	require.NoError(t, db.CreateHiresProfile(hp))
 
 	callCount := 0
 	sdSvc := &mockSD{
@@ -2224,7 +1949,7 @@ func TestGenerateImage_HiresFallbackStillFails(t *testing.T) {
 	svc := newTestService(t, db, &mockLLM{}, sdSvc)
 	svc.ctx = context.Background()
 
-	_, err := svc.GenerateImage(GenerateImageParams{PresetID: 1})
+	_, err := svc.GenerateImage(GenerateImageParams{PresetID: 1, HiresProfileID: &hp.ID})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "SD server error")
 	assert.Equal(t, 2, callCount)

@@ -18,7 +18,6 @@
       "clip_skip": 2,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "anime, character, 2.5d, vibrant, colorful",
       "loras": "[{\"name\":\"celshading\",\"weight\":0.6},{\"name\":\"coloricher\",\"weight\":0.5}]"
     },
@@ -38,7 +37,6 @@
       "clip_skip": 2,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "anime, sdxl, illustration, detailed",
       "loras": "[{\"name\":\"celshading\",\"weight\":0.5},{\"name\":\"coloricher\",\"weight\":0.5}]"
     },
@@ -58,7 +56,6 @@
       "clip_skip": 2,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "anime, illustrious, illustration, elegant",
       "loras": "[{\"name\":\"coloricher\",\"weight\":0.5},{\"name\":\"celshading\",\"weight\":0.5}]"
     },
@@ -78,7 +75,6 @@
       "clip_skip": 2,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "anime, pony, illustration, detailed",
       "loras": "[{\"name\":\"celshading\",\"weight\":0.6},{\"name\":\"coloricher\",\"weight\":0.5}]"
     },
@@ -98,7 +94,6 @@
       "clip_skip": 2,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "anime, dramatic, cinematic, intense",
       "loras": "[{\"name\":\"coloricher\",\"weight\":0.6},{\"name\":\"celshading\",\"weight\":0.5}]"
     },
@@ -118,7 +113,6 @@
       "clip_skip": 2,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "anime, ethereal, fairy, magical, pastel",
       "loras": "[{\"name\":\"coloricher\",\"weight\":0.6},{\"name\":\"celshading\",\"weight\":0.4}]"
     },
@@ -138,7 +132,6 @@
       "clip_skip": 2,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "anime, chibi, cute, super-deformed, kawaii",
       "loras": "[{\"name\":\"celshading\",\"weight\":0.6},{\"name\":\"coloricher\",\"weight\":0.5}]"
     },
@@ -158,7 +151,6 @@
       "clip_skip": 2,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "anime, dark, gothic, moody, shadows",
       "loras": "[{\"name\":\"coloricher\",\"weight\":0.5},{\"name\":\"celshading\",\"weight\":0.5}]"
     },
@@ -178,7 +170,6 @@
       "clip_skip": 2,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "anime, retro, 90s, vintage, nostalgic",
       "loras": "[{\"name\":\"coloricher\",\"weight\":0.5},{\"name\":\"celshading\",\"weight\":0.4}]"
     },
@@ -198,7 +189,6 @@
       "clip_skip": 2,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "anime, landscape, scenery, background, sky",
       "loras": "[{\"name\":\"coloricher\",\"weight\":0.5},{\"name\":\"celshading\",\"weight\":0.4}]"
     },
@@ -218,7 +208,6 @@
       "clip_skip": 2,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "anime, pastel, soft, dreamy, light, cute",
       "loras": "[{\"name\":\"coloricher\",\"weight\":0.6},{\"name\":\"celshading\",\"weight\":0.4}]"
     },
@@ -238,7 +227,6 @@
       "clip_skip": 2,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "anime, mecha, armor, sci-fi, mechanical",
       "loras": "[{\"name\":\"celshading\",\"weight\":0.5},{\"name\":\"coloricher\",\"weight\":0.5}]"
     }

@@ -18,7 +18,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "portrait, headshot, studio, professional",
       "loras": "[{\"name\":\"closeupface-v1\",\"weight\":0.7},{\"name\":\"Super_Eye_Detailer_By_Stable_Yogi_SDPD0\",\"weight\":0.5}]"
     },
@@ -38,7 +37,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "portrait, dramatic, chiaroscuro, moody",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.6},{\"name\":\"closeupface-v1\",\"weight\":0.6}]"
     },
@@ -58,7 +56,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "portrait, pony, realistic, detailed",
       "loras": "[{\"name\":\"Super_Eye_Detailer_By_Stable_Yogi_SDPD0\",\"weight\":0.7},{\"name\":\"closeupface-v1\",\"weight\":0.5}]"
     },
@@ -78,7 +75,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "portrait, natural, outdoor, soft",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.6},{\"name\":\"Super_Eye_Detailer_By_Stable_Yogi_SDPD0\",\"weight\":0.5}]"
     },
@@ -98,7 +94,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "portrait, cinematic, editorial, fashion",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.5},{\"name\":\"Super_Eye_Detailer_By_Stable_Yogi_SDPD0\",\"weight\":0.6}]"
     },
@@ -118,7 +113,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "portrait, pony, detailed, realistic",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.6},{\"name\":\"Super_Eye_Detailer_By_Stable_Yogi_SDPD0\",\"weight\":0.6}]"
     },
@@ -138,7 +132,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "portrait, vintage, film, nostalgic",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.5},{\"name\":\"closeupface-v1\",\"weight\":0.6}]"
     },
@@ -158,7 +151,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "portrait, street, urban, candid",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.5},{\"name\":\"closeupface-v1\",\"weight\":0.5}]"
     },
@@ -178,7 +170,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "portrait, black and white, dramatic, monochrome",
       "loras": "[{\"name\":\"closeupface-v1\",\"weight\":0.7},{\"name\":\"Super_Eye_Detailer_By_Stable_Yogi_SDPD0\",\"weight\":0.5}]"
     },
@@ -198,7 +189,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "portrait, double exposure, artistic, surreal",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.5},{\"name\":\"closeupface-v1\",\"weight\":0.5}]"
     },
@@ -218,7 +208,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "portrait, fantasy, magical, ethereal",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.5},{\"name\":\"Super_Eye_Detailer_By_Stable_Yogi_SDPD0\",\"weight\":0.5}]"
     },
@@ -238,7 +227,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "portrait, high key, bright, fashion",
       "loras": "[{\"name\":\"closeupface-v1\",\"weight\":0.6},{\"name\":\"add-detail-xl\",\"weight\":0.4}]"
     }

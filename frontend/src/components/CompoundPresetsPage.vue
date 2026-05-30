@@ -101,7 +101,7 @@ async function saveCompound() {
     return
   }
   if (formSteps.value.some(s => !s.preset_id)) {
-    error.value = t('compound.error_step_preset')
+    error.value = t('compound.error_step_style')
     return
   }
 
@@ -154,10 +154,16 @@ async function deleteCompound(id) {
 }
 
 async function handleExport() {
+  if (selectedIds.value.size === 0) return
+  const ids = [...selectedIds.value]
   try {
-    await api.exportCompoundPresets([...selectedIds.value])
+    const path = await api.prepareCompoundPresetsExport(ids)
+    if (path) {
+      selectedIds.value = new Set()
+      alert('Saved: ' + path)
+    }
   } catch (e) {
-    if (String(e)) alert('Export failed: ' + e)
+    alert('Export failed: ' + e)
   }
 }
 
@@ -227,15 +233,15 @@ onMounted(loadData)
             <div style="display: flex; gap: 4px;">
               <button class="btn btn-sm btn-secondary" style="padding: 2px 8px;" @click="moveStepUp(idx)" :disabled="idx === 0">&#9650;</button>
               <button class="btn btn-sm btn-secondary" style="padding: 2px 8px;" @click="moveStepDown(idx)" :disabled="idx === formSteps.length - 1">&#9660;</button>
-              <button class="btn btn-sm btn-secondary" style="padding: 2px 8px; color: var(--error, #e55);" @click="removeStep(idx)" :disabled="formSteps.length <= 1">&times;</button>
+              <button class="btn btn-sm btn-secondary" style="padding: 2px 8px; color: var(--danger);" @click="removeStep(idx)" :disabled="formSteps.length <= 1">&times;</button>
             </div>
           </div>
 
           <div style="display: grid; grid-template-columns: 1fr; gap: 8px;">
             <div class="form-group" style="margin: 0;">
-              <label class="form-label">{{ t('compound.label_preset') }}</label>
+              <label class="form-label">{{ t('compound.label_style') }}</label>
               <select class="form-select" v-model="step.preset_id">
-                <option :value="null" disabled>{{ t('compound.select_preset') }}</option>
+                <option :value="null" disabled>{{ t('compound.select_style') }}</option>
                 <option v-for="p in presets" :key="p.id" :value="p.id">{{ p.name }}</option>
               </select>
             </div>
@@ -279,7 +285,7 @@ onMounted(loadData)
           <div style="display: flex; gap: 6px;">
             <button class="btn btn-sm btn-secondary" @click="openEdit(cp)">{{ t('compound.btn_edit') }}</button>
             <button class="btn btn-sm btn-secondary" @click="handleDuplicate(cp)">{{ t('presets.btn_duplicate') }}</button>
-            <button class="btn btn-sm btn-secondary" style="color: var(--error, #e55);" @click="deleteCompound(cp.id)">{{ t('compound.btn_delete') }}</button>
+            <button class="btn btn-sm btn-secondary" style="color: var(--danger);" @click="deleteCompound(cp.id)">{{ t('compound.btn_delete') }}</button>
           </div>
         </div>
 

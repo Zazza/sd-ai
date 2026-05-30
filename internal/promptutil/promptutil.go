@@ -8,7 +8,7 @@ import (
 
 var reCyrillicCheck = regexp.MustCompile(`[а-яА-ЯёЁ]`)
 
-var reJunkLabels = regexp.MustCompile(`(?i)\b(BASE (POSITIVE|NEGATIVE) PROMPT|USER DESCRIPTION|USER NEGATIVE|MERGED PROMPT|NEGATIVE[_ ]PROMPT|Translation of non-English text|translates to|Merged Prompt)\s*:\s*`)
+var reJunkLabels = regexp.MustCompile(`(?i)\b(BASE (POSITIVE|NEGATIVE) PROMPT|STYLE (NEGATIVE )?REFERENCE|USER (SCENE|DESCRIPTION)|USER NEGATIVE|MERGED PROMPT|NEGATIVE[_ ]PROMPT|Translation of non-English text|translates to|Merged Prompt)\s*:\s*`)
 var reJSONFragments = regexp.MustCompile(`\{[^{}]*"(prompt|negative_prompt)"[^{}]*\}`)
 var reQuotedStrings = regexp.MustCompile(`"[^"]{0,500}"`)
 var reCyrillic = regexp.MustCompile(`[а-яА-ЯёЁ]+[^,(\[<]*,?`)
@@ -132,6 +132,14 @@ func SplitCompositeSampler(sampler, scheduleType string) (string, string) {
 		}
 	}
 	return sampler, ""
+}
+
+func BuildSamplerName(sampler, scheduleType string) string {
+	if scheduleType != "" {
+		st := strings.ToUpper(scheduleType[:1]) + scheduleType[1:]
+		return sampler + " " + st
+	}
+	return sampler
 }
 
 func Truncate(s string, n int) string {

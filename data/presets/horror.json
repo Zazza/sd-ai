@@ -18,7 +18,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "horror, haunted, mansion, ghost",
       "loras": "[{\"name\":\"Dramatic Lighting Slider\",\"weight\":0.7},{\"name\":\"Black__White\",\"weight\":0.5}]"
     },
@@ -38,7 +37,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "horror, forest, dark, nightmare",
       "loras": "[{\"name\":\"Dramatic Lighting Slider\",\"weight\":0.6},{\"name\":\"Black__White\",\"weight\":0.5}]"
     },
@@ -58,7 +56,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "horror, gothic, cathedral, dark",
       "loras": "[{\"name\":\"Dramatic Lighting Slider\",\"weight\":0.8},{\"name\":\"Black__White\",\"weight\":0.4}]"
     },
@@ -78,7 +75,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "horror, abandoned, asylum, gritty",
       "loras": "[{\"name\":\"Black__White\",\"weight\":0.6},{\"name\":\"Dramatic Lighting Slider\",\"weight\":0.5}]"
     },
@@ -98,7 +94,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "horror, zombie, apocalypse, survival",
       "loras": "[{\"name\":\"Dramatic Lighting Slider\",\"weight\":0.7},{\"name\":\"Black__White\",\"weight\":0.4}]"
     },
@@ -118,7 +113,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "horror, eldritch, cosmic, lovecraft",
       "loras": "[{\"name\":\"Dramatic Lighting Slider\",\"weight\":0.7},{\"name\":\"Black__White\",\"weight\":0.5}]"
     },
@@ -138,7 +132,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "horror, body horror, transformation, organic",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.5}]"
     },
@@ -158,7 +151,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "horror, vampire, gothic, castle",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.5}]"
     },
@@ -178,7 +170,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "horror, doll, creepy, porcelain",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.5}]"
     },
@@ -198,7 +189,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "horror, swamp, monster, bayou",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.5}]"
     },
@@ -218,7 +208,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "horror, psychological, paranoia, eerie",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.5}]"
     },
@@ -238,7 +227,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "horror, lovecraftian, cosmic, tentacles",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.6}]"
     }

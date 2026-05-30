@@ -109,7 +109,7 @@ func (c *Client) SetURL(baseURL string)
 ### Retry
 - `Txt2Img` и `Img2Img` используют `doPost()` с retry
 - Retry: 500/502/503/504 + network errors
-- Max 3 attempts, exponential backoff 2s → 4s
+- Max 3 attempts, exponential backoff 2s -> 4s
 - При исчерпании попыток: ошибка включает тело ответа SD
 
 ### Запросы
@@ -259,12 +259,129 @@ func New(baseURL string) *Client
 func (c *Client) Remove(imageBase64 string) (string, error)
 ```
 
+## internal/generation
+
+Сервис генерации, обрабатывающий все режимы генерации изображений. Извлечён из `app.go` для изоляции логики генерации от Wails bindings.
+
+```go
+type Service struct { ... }
+
+func New(presetDB *preset.DB, llmClient llm.Service, sdClient sd.Service, cfg *config.Config, ...) *Service
+func (s *Service) SetContext(ctx context.Context)
+func (s *Service) GenerateImage(params GenerateImageParams) (*GenerateImageResult, error)
+func (s *Service) GenerateFromImage(params GenerateFromImageParams) (*GenerateImageResult, error)
+func (s *Service) GenerateSDPrompt(description, presetType string) (string, error)
+func (s *Service) RecommendPreset(description string) (*RecommendPresetResult, error)
+func (s *Service) GenerateCompoundImage(params CompoundParams) (*GenerateImageResult, error)
+func (s *Service) GenerateScene(scene SavedScene) (*MultiPassResult, error)
+func (s *Service) UpscaleImage(image, mode string, scale float64) (*GenerateImageResult, error)
+func (s *Service) StartSDPolling()
+func (s *Service) StopSDPolling()
+```
+
+Методы:
+- `GenerateImage` — генерация txt2img с разрешением пресета, генерацией промпта через LLM и опциональным батчем
+- `GenerateFromImage` — генерация img2img с анализом исходного изображения и инпейнтингом
+- `GenerateSDPrompt` — преобразование текстового описания в SD промпт через LLM
+- `RecommendPreset` — подбор лучшего пресета для заданного описания
+- `GenerateCompoundImage` — многошаговая генерация с использованием составных пресетов
+- `GenerateScene` — multi-pass генерация сцен с компоновкой персонажей
+- `UpscaleImage` — апскейлинг изображений через extras API SD WebUI
+- `StartSDPolling` / `StopSDPolling` — периодический опрос состояния SD WebUI
+
+## internal/queue
+
+Очередь задач с логикой повторных попыток и состоянием паузы.
+
+```go
+type Service struct { ... }
+
+func NewService(store *Store, processor Processor, emit EventEmitter) *Service
+func (s *Service) Start(ctx context.Context)
+func (s *Service) Enqueue(jobType JobType, params any, source string) (int64, error)
+func (s *Service) GetJobs() ([]*Job, error)
+func (s *Service) RemoveJob(id int64) error
+func (s *Service) CancelJob(id int64) error
+func (s *Service) PauseQueue()
+func (s *Service) ResumeQueue()
+func (s *Service) ResumePausedJobs() (int, error)
+```
+
+Основные возможности:
+- Состояния задач: pending -> running -> completed/failed/paused
+- Повторные попытки с экспоненциальной задержкой (5с -> 10с -> 20с -> ... -> 60с макс)
+- Состояние paused при исчерпании лимита попыток (3)
+- `IsRetryableError()` проверяет транзиентные ошибки (connection refused, timeout, EOF и т.д.)
+- Воркер опрашивает БД каждые 5с для запланированных повторных попыток
+- Миграция БД v24 добавляет колонки retry_count, max_retries, next_retry_at
+- События фронтенда: `queue:updated`, `queue:job-progress`
+
+### Store
+
+```go
+type Store struct { ... }
+
+func NewStore(db *preset.DB) *Store
+func (s *Store) CreateJob(job *Job) error
+func (s *Store) UpdateJob(job *Job) error
+func (s *Store) GetPendingJobs() ([]*Job, error)
+func (s *Store) GetScheduledJobs() ([]*Job, error)
+func (s *Store) GetJobByID(id int64) (*Job, error)
+func (s *Store) DeleteJob(id int64) error
+```
+
+### Модель Job
+
+```go
+type Job struct {
+    ID          int64
+    Type        JobType
+    Status      JobStatus
+    Params      string    // JSON-закодированные параметры
+    Source      string
+    Result      string    // JSON-закодированный результат
+    Error       string
+    RetryCount  int
+    MaxRetries  int
+    NextRetryAt *time.Time
+    CreatedAt   time.Time
+    UpdatedAt   time.Time
+}
+```
+
+## internal/logger
+
+Логгер событий с LogBridge для перехвата всех log-сообщений.
+
+```go
+type Logger struct { ... }
+
+func New(ctx context.Context) *Logger
+func (l *Logger) SetContext(ctx context.Context)
+func (l *Logger) InstallBridge()
+func (l *Logger) Error(format string, args ...interface{})
+func (l *Logger) Warn(format string, args ...interface{})
+func (l *Logger) Info(format string, args ...interface{})
+func (l *Logger) Debug(format string, args ...interface{})
+```
+
+`InstallBridge()` перехватывает `log.SetOutput` для захвата всех стандартных log-сообщений (из пакетов LLM, SD, queue) и повторной отправки как событий `log:entry`, отображаемых в панели логов подвала фронтенда.
+
+## Сохранение Layout окна
+
+Привязки `SaveWindowLayout(footerHeight)` и `GetFooterHeight()` сохраняют состояние окна:
+- Размер окна (ширина, высота), позиция (x, y), состояние максимизации
+- Высота панели подвала (footer)
+- Хранятся в таблице `settings` SQLite
+- Восстанавливаются при запуске через `restoreWindowLayout()`
+- Сохраняются при событии `beforeunload` и после перетаскивания/изменения размера footer
+
 ## Вспомогательные функции app.go
 
 ### Preset Resolution
 Общий паттерн для всех режимов генерации:
 ```go
-// Загрузить пресет → извлечь параметры → установить модель/VAE
+// Загрузить пресет -> извлечь параметры -> установить модель/VAE
 p, _ := a.presets.Get(presetID)
 samplerName, steps, cfgScale, width, height = ...
 a.sd.SetModel(p.ModelName)
@@ -287,6 +404,9 @@ runtime.EventsEmit(a.ctx, "event:name", data)
 - `multipass:progress` — progress multi-pass
 - `batch:progress` / `batch:done` / `batch:error`
 - `session:added` — новое изображение в сессии
+- `queue:updated` — изменение состояния очереди
+- `queue:job-progress` — прогресс выполнения задачи
+- `log:entry` — запись лога от LogBridge
 
 ### Kids Mode
 - `isKidsMode()` — проверка включён

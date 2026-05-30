@@ -19,25 +19,44 @@
 ```
 sd-ai/
 ├── main.go                    # Entrypoint, Wails config
-├── app.go                     # Facade: все Wails bindings
+├── app.go                     # Facade: all Wails bindings
 ├── internal/
-│   ├── config/                # Конфигурация (env, defaults)
-│   ├── llm/                   # LLM HTTP-клиент (OpenAI-compatible)
-│   ├── sd/                    # Stable Diffusion WebUI HTTP-клиент
+│   ├── config/                # Configuration (env, defaults)
+│   ├── llm/                   # LLM HTTP client (OpenAI-compatible)
+│   ├── sd/                    # Stable Diffusion WebUI HTTP client
 │   ├── preset/                # SQLite CRUD (presets, settings, sessions)
-│   ├── compositor/            # Multi-pass генерация (background + characters)
-│   ├── rembg/                 # Удаление фона (rembg API)
-│   ├── kids/                  # Kids mode (фильтрация контента)
-│   └── logger/                # Логирование через Wails runtime
+│   ├── generation/            # Image generation service
+│   ├── queue/                 # Job queue with retry and paused state
+│   ├── compositor/            # Multi-pass generation (background + characters)
+│   ├── session/               # Session management
+│   ├── importexport/          # Preset import/export
+│   ├── settings/              # Settings service
+│   ├── promptutil/            # Prompt utilities (ExtractJSON, StripJunk)
+│   ├── filebrowser/           # File browser backend
+│   ├── serverclient/          # Server API client
+│   ├── rembg/                 # Background removal (rembg API)
+│   ├── kids/                  # Kids mode (content filtering)
+│   └── logger/                # Event logger with LogBridge
+├── server/                    # Standalone service orchestrator
+│   ├── main.go                # Server entrypoint (TUI / headless)
+│   ├── config/                # Server configuration (YAML)
+│   ├── gpu/                   # GPU monitoring (nvidia-smi)
+│   ├── gpuproxy/              # GPU proxy with priority queue
+│   ├── health/                # Service health monitoring
+│   ├── installer/             # Component installer
+│   ├── models/                # Model management
+│   ├── process/               # Process lifecycle management
+│   ├── tui/                   # Terminal UI (bubbletea)
+│   └── api/                   # HTTP API handlers
 ├── frontend/
 │   └── src/
-│       ├── components/        # Vue компоненты
-│       ├── api.js             # API-слой (маппинг Wails bindings)
-│       ├── i18n/              # Интернационализация (en.js + index.js)
-│       ├── assets/            # CSS
+│       ├── components/        # Vue components
+│       ├── composables/       # Vue composables (useQueue, etc.)
+│       ├── api.js             # API layer (Wails bindings mapping)
+│       ├── i18n/              # Internationalization
 │       └── wailsjs/           # Auto-generated Wails bindings
-├── data/                      # SQLite DB
-└── docs/                      # Документация
+├── data/                      # Runtime data (SQLite, presets)
+└── docs/                      # Documentation
 ```
 
 ## Testing
@@ -72,21 +91,48 @@ Backend → Frontend communication via `runtime.EventsEmit(ctx, eventName, data)
 ## Module Diagram
 
 ```
-┌─────────────────────────────────────────┐
-│              frontend (Vue 3)            │
-│  components ← i18n/t() ← api.js ← wailsjs/bindings │
-└──────────────────┬──────────────────────┘
-                   │ Wails RPC
-┌──────────────────▼──────────────────────┐
-│                app.go (Facade)           │
-│  Wails bindings + business logic        │
-├────────┬──────────┬──────────┤
-│ llm    │   sd     │ preset   │
-│ Client │  Client  │   DB     │
-├────────┴──────────┴──────────┤
-│  Ollama/LM Studio │ SD WebUI │ SQLite   │
-└───────────────────┴──────────┴──────────┘
+┌─────────────────────────────────────────────────┐
+│                  frontend (Vue 3)                │
+│  components ← composables ← api.js ← wailsjs    │
+└──────────────────────┬──────────────────────────┘
+                       │ Wails RPC
+┌──────────────────────▼──────────────────────────┐
+│                  app.go (Facade)                  │
+├──────┬────────┬──────────┬──────────┬────────────┤
+│ llm  │   sd   │ preset   │ queue    │ generation │
+│Client│ Client │   DB     │ Service  │  Service   │
+├──────┴────────┴──────────┴──────────┴────────────┤
+│  Ollama/LM Studio  │  SD WebUI  │  SQLite        │
+└────────────────────┴────────────┴────────────────┘
 ```
+
+## Server Component
+
+The `server/` package is a standalone Go service for managing AI infrastructure:
+
+```
+┌─────────────────────────────────────────┐
+│           SD Studio Server               │
+├────────┬──────────┬──────────┬──────────┤
+│Process │  GPU     │  Health  │   TUI    │
+│Manager │ Monitor  │ Monitor  │Dashboard │
+├────────┴──────────┴──────────┴──────────┤
+│  GPU Proxy (priority queue, VRAM guard)  │
+├─────────────────────────────────────────┤
+│  HTTP API + mDNS discovery              │
+└─────────────────────────────────────────┘
+```
+
+### Key Features
+- **Process Management** — lifecycle of SD WebUI, Ollama, Rembg (start/stop/restart)
+- **GPU Monitoring** — nvidia-smi polling, VRAM tracking, auto-optimization
+- **GPU Proxy** — priority queue with VRAM cooldown (prevents OOM on low-VRAM GPUs)
+- **Health Monitoring** — periodic HTTP checks for all services
+- **TUI** — terminal dashboard via bubbletea with service status and controls
+- **mDNS** — automatic service discovery via `_sd-studio._tcp`
+- **Model Management** — download/delete SD checkpoints and LLM models
+- **Backend Switching** — switch between A1111 and Forge at runtime
+- **Installer** — automatic installation of Python, SD WebUI, Ollama
 
 ## Database Diagram
 

@@ -518,26 +518,6 @@ func TestImportItems_InvalidOptionalFields_Table(t *testing.T) {
 			func(p *PresetData) { v := 16; p.BatchCount = &v },
 			"invalid batch_count",
 		},
-		{
-			"hires_upscale_below_one",
-			func(p *PresetData) { v := 0.5; p.HiresUpscale = &v },
-			"invalid hires_upscale",
-		},
-		{
-			"hires_upscale_too_high",
-			func(p *PresetData) { v := 5.0; p.HiresUpscale = &v },
-			"invalid hires_upscale",
-		},
-		{
-			"hires_denoising_negative",
-			func(p *PresetData) { v := -0.1; p.HiresDenoisingStrength = &v },
-			"invalid hires_denoising_strength",
-		},
-		{
-			"hires_denoising_over_one",
-			func(p *PresetData) { v := 1.5; p.HiresDenoisingStrength = &v },
-			"invalid hires_denoising_strength",
-		},
 	}
 
 	for _, tt := range tests {
@@ -560,9 +540,6 @@ func TestImportItems_ValidOptionalFields(t *testing.T) {
 	cs := 2
 	bs := 4
 	bc := 2
-	hf := true
-	hu := 2.0
-	hds := 0.5
 	items := []PresetData{{
 		Name:                   "full-optional",
 		Steps:                  30,
@@ -571,9 +548,6 @@ func TestImportItems_ValidOptionalFields(t *testing.T) {
 		ClipSkip:               &cs,
 		BatchSize:              &bs,
 		BatchCount:             &bc,
-		HiresFix:               &hf,
-		HiresUpscale:           &hu,
-		HiresDenoisingStrength: &hds,
 	}}
 	result, err := svc.ImportItems(items)
 	require.NoError(t, err)

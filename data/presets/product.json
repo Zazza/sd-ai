@@ -18,7 +18,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "product, white, ecommerce, catalog",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.6},{\"name\":\"HDR_Photography\",\"weight\":0.5}]"
     },
@@ -38,7 +37,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "product, lifestyle, scene, ambient",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.5},{\"name\":\"HDR_Photography\",\"weight\":0.5}]"
     },
@@ -58,7 +56,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "product, cosmetic, beauty, luxury",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.6},{\"name\":\"HDR_Photography\",\"weight\":0.5}]"
     },
@@ -78,7 +75,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "product, tech, gadget, electronics",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.7},{\"name\":\"HDR_Photography\",\"weight\":0.4}]"
     },
@@ -98,7 +94,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "product, jewelry, luxury, macro, diamond",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.6}]"
     },
@@ -118,7 +113,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "product, sneaker, footwear, athletic",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.5}]"
     },
@@ -138,7 +132,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "product, perfume, glass, luxury, elegant",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.5}]"
     },
@@ -158,7 +151,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "product, packaging, food, branding, mockup",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.5}]"
     },
@@ -178,7 +170,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "product, furniture, interior, modern, minimal",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.5}]"
     },
@@ -198,7 +189,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "product, electronics, smartphone, tech",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.5}]"
     },
@@ -218,7 +208,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "product, watch, luxury, macro, timepiece",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.6}]"
     },
@@ -238,7 +227,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "product, car, automotive, studio, sleek",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.5}]"
     }

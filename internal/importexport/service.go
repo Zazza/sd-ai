@@ -29,29 +29,25 @@ type ExportFile struct {
 }
 
 type PresetData struct {
-	Name                   string   `json:"name"`
-	PresetType             string   `json:"preset_type"`
-	TypeName               string   `json:"type_name"`
-	Prompt                 string   `json:"prompt"`
-	NegativePrompt         string   `json:"negative_prompt"`
-	Sampler                string   `json:"sampler"`
-	ScheduleType           string   `json:"schedule_type"`
-	Steps                  int      `json:"steps"`
-	CfgScale               float64  `json:"cfg_scale"`
-	ModelName              string   `json:"model_name"`
-	Seed                   *int64   `json:"seed"`
-	DenoisingStrength      *float64 `json:"denoising_strength"`
-	ClipSkip               *int     `json:"clip_skip"`
-	BatchSize              *int     `json:"batch_size"`
-	BatchCount             *int     `json:"batch_count"`
-	HiresFix               *bool    `json:"hires_fix"`
-	HiresUpscale           *float64 `json:"hires_upscale"`
-	HiresDenoisingStrength *float64 `json:"hires_denoising_strength"`
-	HiresUpscaler          string   `json:"hires_upscaler"`
-	VAE                    string   `json:"vae"`
-	Tags                   string   `json:"tags"`
-	Loras                  string   `json:"loras"`
-	SourceFile             string   `json:"source_file,omitempty"`
+	Name              string   `json:"name"`
+	PresetType        string   `json:"preset_type"`
+	TypeName          string   `json:"type_name"`
+	Prompt            string   `json:"prompt"`
+	NegativePrompt    string   `json:"negative_prompt"`
+	Sampler           string   `json:"sampler"`
+	ScheduleType      string   `json:"schedule_type"`
+	Steps             int      `json:"steps"`
+	CfgScale          float64  `json:"cfg_scale"`
+	ModelName         string   `json:"model_name"`
+	Seed              *int64   `json:"seed"`
+	DenoisingStrength *float64 `json:"denoising_strength"`
+	ClipSkip          *int     `json:"clip_skip"`
+	BatchSize         *int     `json:"batch_size"`
+	BatchCount        *int     `json:"batch_count"`
+	VAE               string   `json:"vae"`
+	Tags              string   `json:"tags"`
+	Loras             string   `json:"loras"`
+	SourceFile        string   `json:"source_file,omitempty"`
 }
 
 type ImportPreview struct {
@@ -158,10 +154,6 @@ func (s *Service) PrepareExportData(ids []int64) ([]PresetData, error) {
 			ClipSkip:               p.ClipSkip,
 			BatchSize:              p.BatchSize,
 			BatchCount:             p.BatchCount,
-			HiresFix:               p.HiresFix,
-			HiresUpscale:           p.HiresUpscale,
-			HiresDenoisingStrength: p.HiresDenoisingStrength,
-			HiresUpscaler:          p.HiresUpscaler,
 			VAE:                    p.VAE,
 			Tags:                   p.Tags,
 			Loras:                  p.Loras,
@@ -285,12 +277,6 @@ func (s *Service) ImportItems(items []PresetData) ([]preset.Preset, error) {
 		if item.BatchCount != nil && (*item.BatchCount < 1 || *item.BatchCount > 8) {
 			return nil, fmt.Errorf("invalid batch_count for %q: must be 1-8", item.Name)
 		}
-		if item.HiresUpscale != nil && (*item.HiresUpscale < 1 || *item.HiresUpscale > 4) {
-			return nil, fmt.Errorf("invalid hires_upscale for %q: must be 1-4", item.Name)
-		}
-		if item.HiresDenoisingStrength != nil && (*item.HiresDenoisingStrength < 0 || *item.HiresDenoisingStrength > 1) {
-			return nil, fmt.Errorf("invalid hires_denoising_strength for %q: must be 0-1", item.Name)
-		}
 	}
 
 	typeCache := make(map[string]*int64)
@@ -340,10 +326,6 @@ func (s *Service) ImportItems(items []PresetData) ([]preset.Preset, error) {
 			ClipSkip:               item.ClipSkip,
 			BatchSize:              item.BatchSize,
 			BatchCount:             item.BatchCount,
-			HiresFix:               item.HiresFix,
-			HiresUpscale:           item.HiresUpscale,
-			HiresDenoisingStrength: item.HiresDenoisingStrength,
-			HiresUpscaler:          item.HiresUpscaler,
 			VAE:                    item.VAE,
 			Tags:                   item.Tags,
 			Loras:                  item.Loras,
@@ -564,10 +546,6 @@ func (s *Service) PrepareCompoundExportData(ids []int64) ([]CompoundExportData, 
 					ClipSkip:               p.ClipSkip,
 					BatchSize:              p.BatchSize,
 					BatchCount:             p.BatchCount,
-					HiresFix:               p.HiresFix,
-					HiresUpscale:           p.HiresUpscale,
-					HiresDenoisingStrength: p.HiresDenoisingStrength,
-					HiresUpscaler:          p.HiresUpscaler,
 					VAE:                    p.VAE,
 					Tags:                   p.Tags,
 					Loras:                  p.Loras,
@@ -695,10 +673,6 @@ func (s *Service) ImportCompoundItems(items []CompoundExportData) ([]preset.Comp
 				ClipSkip:               pd.ClipSkip,
 				BatchSize:              pd.BatchSize,
 				BatchCount:             pd.BatchCount,
-				HiresFix:               pd.HiresFix,
-				HiresUpscale:           pd.HiresUpscale,
-				HiresDenoisingStrength: pd.HiresDenoisingStrength,
-				HiresUpscaler:          pd.HiresUpscaler,
 				VAE:                    pd.VAE,
 				Tags:                   pd.Tags,
 				Loras:                  pd.Loras,

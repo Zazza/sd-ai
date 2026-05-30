@@ -259,6 +259,123 @@ func New(baseURL string) *Client
 func (c *Client) Remove(imageBase64 string) (string, error)
 ```
 
+## internal/generation
+
+Generation service that handles all image generation modes. Extracted from `app.go` to isolate generation logic from Wails bindings.
+
+```go
+type Service struct { ... }
+
+func New(presetDB *preset.DB, llmClient llm.Service, sdClient sd.Service, cfg *config.Config, ...) *Service
+func (s *Service) SetContext(ctx context.Context)
+func (s *Service) GenerateImage(params GenerateImageParams) (*GenerateImageResult, error)
+func (s *Service) GenerateFromImage(params GenerateFromImageParams) (*GenerateImageResult, error)
+func (s *Service) GenerateSDPrompt(description, presetType string) (string, error)
+func (s *Service) RecommendPreset(description string) (*RecommendPresetResult, error)
+func (s *Service) GenerateCompoundImage(params CompoundParams) (*GenerateImageResult, error)
+func (s *Service) GenerateScene(scene SavedScene) (*MultiPassResult, error)
+func (s *Service) UpscaleImage(image, mode string, scale float64) (*GenerateImageResult, error)
+func (s *Service) StartSDPolling()
+func (s *Service) StopSDPolling()
+```
+
+Methods:
+- `GenerateImage` — txt2img generation with preset resolution, LLM prompt generation, and optional batch
+- `GenerateFromImage` — img2img generation with init image analysis and inpainting
+- `GenerateSDPrompt` — converts text description to SD prompt via LLM
+- `RecommendPreset` — suggests best preset for a given description
+- `GenerateCompoundImage` — multi-step generation using compound presets
+- `GenerateScene` — multi-pass scene generation with character compositing
+- `UpscaleImage` — image upscaling via SD WebUI extras API
+- `StartSDPolling` / `StopSDPolling` — periodic SD WebUI health/status polling
+
+## internal/queue
+
+Job queue with retry logic and paused state.
+
+```go
+type Service struct { ... }
+
+func NewService(store *Store, processor Processor, emit EventEmitter) *Service
+func (s *Service) Start(ctx context.Context)
+func (s *Service) Enqueue(jobType JobType, params any, source string) (int64, error)
+func (s *Service) GetJobs() ([]*Job, error)
+func (s *Service) RemoveJob(id int64) error
+func (s *Service) CancelJob(id int64) error
+func (s *Service) PauseQueue()
+func (s *Service) ResumeQueue()
+func (s *Service) ResumePausedJobs() (int, error)
+```
+
+Key features:
+- Job states: pending -> running -> completed/failed/paused
+- Retry with exponential backoff (5s -> 10s -> 20s -> ... -> 60s max)
+- Paused state when max retries (3) exhausted
+- `IsRetryableError()` checks for transient errors (connection refused, timeout, EOF, etc.)
+- Worker polls every 5s for scheduled retries
+- DB migration v24 adds retry_count, max_retries, next_retry_at columns
+- Frontend events: `queue:updated`, `queue:job-progress`
+
+### Store
+
+```go
+type Store struct { ... }
+
+func NewStore(db *preset.DB) *Store
+func (s *Store) CreateJob(job *Job) error
+func (s *Store) UpdateJob(job *Job) error
+func (s *Store) GetPendingJobs() ([]*Job, error)
+func (s *Store) GetScheduledJobs() ([]*Job, error)
+func (s *Store) GetJobByID(id int64) (*Job, error)
+func (s *Store) DeleteJob(id int64) error
+```
+
+### Job Model
+
+```go
+type Job struct {
+    ID          int64
+    Type        JobType
+    Status      JobStatus
+    Params      string    // JSON-encoded params
+    Source      string
+    Result      string    // JSON-encoded result
+    Error       string
+    RetryCount  int
+    MaxRetries  int
+    NextRetryAt *time.Time
+    CreatedAt   time.Time
+    UpdatedAt   time.Time
+}
+```
+
+## internal/logger
+
+Event logger with LogBridge for capturing all log output.
+
+```go
+type Logger struct { ... }
+
+func New(ctx context.Context) *Logger
+func (l *Logger) SetContext(ctx context.Context)
+func (l *Logger) InstallBridge()
+func (l *Logger) Error(format string, args ...interface{})
+func (l *Logger) Warn(format string, args ...interface{})
+func (l *Logger) Info(format string, args ...interface{})
+func (l *Logger) Debug(format string, args ...interface{})
+```
+
+`InstallBridge()` hooks `log.SetOutput` to capture all standard log output (from LLM, SD, queue packages) and re-emit as `log:entry` events visible in the frontend footer log panel.
+
+## Window Layout Persistence
+
+`SaveWindowLayout(footerHeight)` and `GetFooterHeight()` bindings persist window state:
+- Window size (width, height), position (x, y), maximised state
+- Footer panel height
+- Stored in SQLite `settings` table
+- Restored on startup via `restoreWindowLayout()`
+- Saved on `beforeunload` event and after footer drag-resize
+
 ## app.go Helper Functions
 
 ### Preset Resolution
@@ -287,6 +404,9 @@ runtime.EventsEmit(a.ctx, "event:name", data)
 - `multipass:progress` — multi-pass progress
 - `batch:progress` / `batch:done` / `batch:error`
 - `session:added` — new image added to session
+- `queue:updated` — queue state changed
+- `queue:job-progress` — job execution progress
+- `log:entry` — log entry from LogBridge
 
 ### Kids Mode
 - `isKidsMode()` — checks if enabled

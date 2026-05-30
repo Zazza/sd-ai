@@ -1,23 +1,19 @@
 <script setup>
-import { ref, reactive, computed, watch, onMounted, onUnmounted, provide } from 'vue'
-import { EventsOn, EventsOff } from '../wailsjs/runtime/runtime'
+import { ref, reactive, watch, onMounted, onUnmounted, provide } from 'vue'
 import { api } from '../api.js'
+import { t } from '../i18n/index.js'
 import GeneratePage from './GeneratePage.vue'
 import GenerateFromImagePage from './GenerateFromImagePage.vue'
-import BatchPage from './BatchPage.vue'
-import TestPage from './TestPage.vue'
 
 const props = defineProps({
   initialTab: { type: String, default: '' },
+  resetting: { type: Boolean, default: false },
 })
 
 const emit = defineEmits([])
 
 const activeTab = ref(props.initialTab || 'generate')
-const batchProps = ref({})
 const droppedImage = ref(null)
-
-const batchKey = computed(() => JSON.stringify(batchProps.value))
 
 const shared = reactive({
   description: '',
@@ -28,21 +24,6 @@ const shared = reactive({
 })
 
 provide('sharedGenState', shared)
-
-function onNavigateToBatch(data) {
-  batchProps.value = {
-    prefillDescription: data?.prefillDescription || '',
-    prefillNegative: data?.prefillNegative || '',
-    prefillPresetId: data?.prefillPresetId || null,
-    prefillCompoundPresetId: data?.prefillCompoundPresetId || null,
-  }
-  if (data?.prefillPresetId) shared.selectedPresetId = data.prefillPresetId
-  if (data?.prefillCompoundPresetId) {
-    shared.selectedCompoundPresetId = data.prefillCompoundPresetId
-    shared.genMode = 'compound'
-  }
-  activeTab.value = 'batch'
-}
 
 const isDragOver = ref(false)
 
@@ -79,7 +60,6 @@ function onDrop(e) {
 }
 
 onMounted(async () => {
-  EventsOn('navigate:batch', onNavigateToBatch)
   try {
     const s = await api.getSettings()
     if (s.gen_preset_id) shared.selectedPresetId = Number(s.gen_preset_id)
@@ -91,7 +71,7 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
-  EventsOff('navigate:batch')
+  if (props.resetting) return
   api.updateSettings({
     gen_preset_id: String(shared.selectedPresetId || ''),
     gen_compound_preset_id: String(shared.selectedCompoundPresetId || ''),
@@ -107,17 +87,9 @@ onUnmounted(() => {
     <div v-if="isDragOver" class="drop-zone-overlay">
       Drop image for img2img mode
     </div>
-    <div class="tabs">
-      <button class="tab" :class="{ active: activeTab === 'generate' }" @click="activeTab = 'generate'">Generate</button>
-      <button class="tab" :class="{ active: activeTab === 'from-image' }" @click="activeTab = 'from-image'">From Image</button>
-      <button class="tab" :class="{ active: activeTab === 'batch' }" @click="activeTab = 'batch'">Batch</button>
-      <button class="tab" :class="{ active: activeTab === 'test' }" @click="activeTab = 'test'">Compare</button>
-    </div>
     <div class="unified-tab-content">
-      <GeneratePage v-if="activeTab === 'generate'" />
-      <GenerateFromImagePage v-else-if="activeTab === 'from-image'" :dropped-image="droppedImage" @clear-dropped="droppedImage = null" @transfer-tags="activeTab = 'generate'" />
-      <BatchPage v-else-if="activeTab === 'batch'" v-bind="batchProps" :key="batchKey" />
-      <TestPage v-else-if="activeTab === 'test'" />
+      <GenerateFromImagePage v-if="activeTab === 'from-image'" :dropped-image="droppedImage" @clear-dropped="droppedImage = null" @transfer-tags="activeTab = 'generate'" />
+      <GeneratePage v-else :resetting="resetting" />
     </div>
   </div>
 </template>

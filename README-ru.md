@@ -122,11 +122,9 @@ Frontend hot-reload на `http://localhost:34115`.
 make build   # production-бинарник → build/bin/sd-studio
 ```
 
-### Docker
+## Сервер
 
-```bash
-docker compose up --build
-```
+Серверный компонент выделен в отдельный репозиторий: [sd-ai-server](https://github.com/thread-of-the-world/sd-ai-server).
 
 ## Стек
 
@@ -171,14 +169,24 @@ docker compose up --build
 │   ├── llm/             # LLM клиент
 │   ├── preset/          # SQLite CRUD
 │   ├── sd/              # Stable Diffusion клиент
+│   ├── generation/      # Сервис генерации изображений
+│   ├── queue/           # Очередь задач с повторами и паузой
+│   ├── session/         # Управление сессиями
+│   ├── importexport/    # Импорт/экспорт пресетов
+│   ├── settings/        # Сервис настроек
+│   ├── promptutil/      # Утилиты промптов
+│   ├── filebrowser/     # Файловый браузер
+│   ├── serverclient/    # Клиент API сервера
 │   ├── compositor/      # Мульти-сцены
 │   ├── kids/            # Детский режим
 │   ├── rembg/           # Удаление фона
 │   ├── logger/          # Логирование
 │   └── api/             # HTTP API
+├── serverclient/    # Клиент API сервера (подключение к sd-ai-server)
 ├── frontend/
 │   └── src/
 │       ├── components/  # Vue компоненты
+│       ├── composables/ # Vue composables (useQueue и др.)
 │       └── wailsjs/     # Автогенерированные Wails bindings
 └── data/                # Runtime-данные (SQLite, пресеты)
 ```

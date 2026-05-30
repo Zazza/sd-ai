@@ -18,7 +18,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "scifi, cyberpunk, city, neon",
       "loras": "[{\"name\":\"CyberPunkAI\",\"weight\":0.8},{\"name\":\"Dramatic Lighting Slider\",\"weight\":0.6}]"
     },
@@ -38,7 +37,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "scifi, space, nebula, spacecraft",
       "loras": "[{\"name\":\"Dramatic Lighting Slider\",\"weight\":0.6}]"
     },
@@ -58,7 +56,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "scifi, noir, dark, cyber-noir",
       "loras": "[{\"name\":\"CyberPunkAI\",\"weight\":0.6},{\"name\":\"Dramatic Lighting Slider\",\"weight\":0.5}]"
     },
@@ -78,7 +75,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "scifi, cinematic, epic, movie",
       "loras": "[{\"name\":\"CyberPunkAI\",\"weight\":0.6},{\"name\":\"Dramatic Lighting Slider\",\"weight\":0.6}]"
     },
@@ -98,7 +94,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "scifi, chrome, sleek, futuristic, clean",
       "loras": "[{\"name\":\"Dramatic Lighting Slider\",\"weight\":0.5}]"
     },
@@ -118,7 +113,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "scifi, dystopia, gritty, post-apocalyptic",
       "loras": "[{\"name\":\"CyberPunkAI\",\"weight\":0.7},{\"name\":\"Dramatic Lighting Slider\",\"weight\":0.5}]"
     },
@@ -138,7 +132,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "scifi, alien, planet, bioluminescent, extraterrestrial",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.5}]"
     },
@@ -158,7 +151,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "scifi, spaceship, interior, futuristic, cockpit",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.6}]"
     },
@@ -178,7 +170,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "scifi, robot, android, synthetic, futuristic",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.5}]"
     },
@@ -198,7 +189,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "scifi, hologram, interface, UI, futuristic",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.5}]"
     },
@@ -218,7 +208,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "scifi, post-apocalyptic, ruins, desolate, survival",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.6}]"
     },
@@ -238,7 +227,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "scifi, space station, orbit, engineering, solar",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.5}]"
     }

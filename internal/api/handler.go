@@ -213,33 +213,20 @@ func (h *Handler) generateImage(w http.ResponseWriter, r *http.Request) {
 		clipSkip = *p.ClipSkip
 	}
 
-	denoisingStrength := p.DenoisingStrength
-	if denoisingStrength == nil && p.HiresFix != nil && *p.HiresFix {
-		ds := 0.5
-		if p.HiresDenoisingStrength != nil {
-			ds = *p.HiresDenoisingStrength
-		}
-		denoisingStrength = &ds
-	}
-
 	result, err := h.sd.Txt2Img(sd.Txt2ImgRequest{
-		Prompt:                 prompt,
-		NegativePrompt:         negativePrompt,
-		SamplerName:            samplerName,
-		Scheduler:              p.ScheduleType,
-		Steps:                  p.Steps,
-		CfgScale:               p.CfgScale,
-		Width:                  512,
-		Height:                 512,
-		Seed:                   p.Seed,
-		DenoisingStrength:      denoisingStrength,
-		ClipSkip:               &clipSkip,
-		BatchSize:              &batchSize,
-		BatchCount:             &batchCount,
-		HiresFix:               p.HiresFix,
-		HiresUpscale:           p.HiresUpscale,
-		HiresDenoisingStrength: p.HiresDenoisingStrength,
-		HiresUpscaler:          p.HiresUpscaler,
+		Prompt:            prompt,
+		NegativePrompt:    negativePrompt,
+		SamplerName:       samplerName,
+		Scheduler:         p.ScheduleType,
+		Steps:             p.Steps,
+		CfgScale:          p.CfgScale,
+		Width:             512,
+		Height:            512,
+		Seed:              p.Seed,
+		DenoisingStrength: p.DenoisingStrength,
+		ClipSkip:          &clipSkip,
+		BatchSize:         &batchSize,
+		BatchCount:        &batchCount,
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "SD error: "+err.Error())
@@ -432,8 +419,3 @@ func writeError(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, map[string]string{"error": msg})
 }
 
-func writeHTML(w http.ResponseWriter, html string) {
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.WriteHeader(http.StatusOK)
-	fmt.Fprint(w, html)
-}

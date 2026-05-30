@@ -7,14 +7,17 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 )
 
 const (
-	retryMaxAttempts  = 3
-	retryInitialDelay = 2 * time.Second
+	retryMaxAttempts   = 3
+	retryInitialDelay  = 2 * time.Second
+	generationTimeout  = 600 * time.Second
 )
 
 type Client struct {
@@ -28,10 +31,19 @@ type Client struct {
 var _ Service = (*Client)(nil)
 
 func New(baseURL string) *Client {
+	transport := &http.Transport{
+		DialContext: (&net.Dialer{
+			Timeout:   30 * time.Second,
+			KeepAlive: 30 * time.Second,
+		}).DialContext,
+		MaxIdleConns:        10,
+		MaxIdleConnsPerHost: 10,
+		IdleConnTimeout:     120 * time.Second,
+	}
 	return &Client{
 		baseURL: baseURL,
 		httpClient: &http.Client{
-			Timeout: 300 * time.Second,
+			Transport: transport,
 		},
 		retryMaxAttempts: retryMaxAttempts,
 		retryDelay:       retryInitialDelay,
@@ -137,8 +149,10 @@ type VAE struct {
 }
 
 func (c *Client) SetModel(modelName string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
 	body, _ := json.Marshal(map[string]string{"sd_model_checkpoint": modelName})
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, c.baseURL+"/sdapi/v1/options", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/sdapi/v1/options", bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("set model: %w", err)
 	}
@@ -148,6 +162,10 @@ func (c *Client) SetModel(modelName string) error {
 		return fmt.Errorf("set model: %w", err)
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		io.Copy(io.Discard, resp.Body)
+		return fmt.Errorf("set model %q: status %d", modelName, resp.StatusCode)
+	}
 	return nil
 }
 
@@ -156,6 +174,10 @@ func isRetryableError(err error, statusCode int) bool {
 		return true
 	}
 	if err == nil {
+		return false
+	}
+	errStr := err.Error()
+	if strings.Contains(errStr, "connection refused") || strings.Contains(errStr, "actively refused") {
 		return false
 	}
 	var urlErr *url.Error
@@ -201,8 +223,11 @@ func (c *Client) doWithRetry(fn func() (*http.Response, error)) (*http.Response,
 }
 
 func (c *Client) doPost(url string, body []byte) (*Txt2ImgResponse, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), generationTimeout)
+	defer cancel()
+
 	resp, err := c.doWithRetry(func() (*http.Response, error) {
-		req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, url, bytes.NewReader(body))
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 		if err != nil {
 			return nil, err
 		}
@@ -373,8 +398,10 @@ func (c *Client) Img2Img(req Img2ImgRequest) (*Txt2ImgResponse, error) {
 }
 
 func (c *Client) SetVAE(vaeName string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 	body, _ := json.Marshal(map[string]string{"sd_vae": vaeName})
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, c.baseURL+"/sdapi/v1/options", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/sdapi/v1/options", bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("set vae: %w", err)
 	}
@@ -384,6 +411,10 @@ func (c *Client) SetVAE(vaeName string) error {
 		return fmt.Errorf("set vae: %w", err)
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		io.Copy(io.Discard, resp.Body)
+		return fmt.Errorf("set vae %q: status %d", vaeName, resp.StatusCode)
+	}
 	return nil
 }
 

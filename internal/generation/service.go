@@ -13,6 +13,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -107,23 +108,6 @@ type UpscaleImageParams struct {
 	PresetID    int64  `json:"preset_id"`
 }
 
-type BatchGenerateParams struct {
-	PresetID        int64  `json:"preset_id"`
-	Prompt          string `json:"prompt"`
-	NegativePrompt  string `json:"negative_prompt"`
-	Count           int    `json:"count"`
-	OutputFolder    string `json:"output_folder"`
-	ResolutionID    *int64 `json:"resolution_id,omitempty"`
-	HiresProfileID  *int64 `json:"hires_profile_id,omitempty"`
-}
-
-type BatchProgress struct {
-	Current  int    `json:"current"`
-	Total    int    `json:"total"`
-	FilePath string `json:"file_path"`
-	Status   string `json:"status"`
-}
-
 type TestGenerateParams struct {
 	Mode           string   `json:"mode"`
 	SelectedIDs    []int64  `json:"selected_ids"`
@@ -187,16 +171,6 @@ type GenerateFromImageParams struct {
 	HiresProfileID      *int64  `json:"hires_profile_id,omitempty"`
 }
 
-type BatchCompoundGenerateParams struct {
-	CompoundPresetID    int64  `json:"compound_preset_id"`
-	ExtraPrompt         string `json:"extra_prompt"`
-	ExtraNegativePrompt string `json:"extra_negative_prompt"`
-	Count               int    `json:"count"`
-	OutputFolder        string `json:"output_folder"`
-	ResolutionID        *int64 `json:"resolution_id,omitempty"`
-	HiresProfileID      *int64 `json:"hires_profile_id,omitempty"`
-}
-
 type TestCompoundGenerateParams struct {
 	SelectedIDs    []int64 `json:"selected_ids"`
 	Prompt         string  `json:"prompt"`
@@ -230,13 +204,11 @@ type Service struct {
 	settings  SettingsApplier
 	log       *logger.Logger
 
-	ctx            context.Context
-	sdPollingMu    sync.Mutex
+	ctx             context.Context
+	sdPollingMu     sync.Mutex
 	sdPollingCancel context.CancelFunc
-	sdInterrupted  bool
-
-	batchMu      sync.Mutex
-	batchRunning bool
+	sdPollingDone   chan struct{}
+	sdInterrupted   bool
 }
 
 func New(
@@ -280,10 +252,19 @@ func (s *Service) StartSDPolling() {
 	if s.sdPollingCancel != nil {
 		return
 	}
+	done := s.sdPollingDone
+	if done != nil {
+		s.sdPollingMu.Unlock()
+		<-done
+		s.sdPollingMu.Lock()
+	}
 	ctx, cancel := context.WithCancel(s.ctx)
+	doneCh := make(chan struct{})
 	s.sdPollingCancel = cancel
+	s.sdPollingDone = doneCh
 	go func() {
-		ticker := time.NewTicker(500 * time.Millisecond)
+		defer close(doneCh)
+		ticker := time.NewTicker(1 * time.Second)
 		defer ticker.Stop()
 		for {
 			select {
@@ -315,6 +296,7 @@ func (s *Service) StopSDPolling() {
 	if s.sdPollingCancel != nil {
 		s.sdPollingCancel()
 		s.sdPollingCancel = nil
+		s.sdPollingDone = nil
 	}
 }
 
@@ -406,6 +388,11 @@ func (s *Service) getGenerateModel() string {
 	if v, err := s.db.GetSetting("llm_generate_model"); err == nil && v != "" {
 		generateModel = v
 	}
+	if generateModel == "" || generateModel == "default" {
+		if models, err := s.llm.GetModels(); err == nil && len(models) > 0 {
+			return models[0].ID
+		}
+	}
 	return generateModel
 }
 
@@ -422,10 +409,15 @@ func (s *Service) getAnalyzeModel() string {
 	if v, err := s.db.GetSetting("llm_analyze_model"); err == nil && v != "" {
 		model = v
 	}
-	if model == "" {
+	if model == "" || model == "default" {
 		model = s.cfg.SDPromptModel
 		if v, err := s.db.GetSetting("llm_generate_model"); err == nil && v != "" {
 			model = v
+		}
+	}
+	if model == "" || model == "default" {
+		if models, err := s.llm.GetModels(); err == nil && len(models) > 0 {
+			return models[0].ID
 		}
 	}
 	return model
@@ -501,14 +493,6 @@ func extractEmbeddedNegative(result *GenerateSDPromptResult) {
 	}
 }
 
-func buildSamplerName(sampler, scheduleType string) string {
-	if scheduleType != "" {
-		st := strings.ToUpper(scheduleType[:1]) + scheduleType[1:]
-		return sampler + " " + st
-	}
-	return sampler
-}
-
 func appendLorasToPrompt(prompt, lorasJSON string) string {
 	if lorasJSON == "" {
 		return prompt
@@ -520,6 +504,31 @@ func appendLorasToPrompt(prompt, lorasJSON string) string {
 		}
 	}
 	return prompt
+}
+
+type builtPrompts struct {
+	Prompt         string
+	NegativePrompt string
+}
+
+func (s *Service) buildPrompts(presetPrompt, presetNegative, loras, userPrompt, userNegative string) builtPrompts {
+	prompt := presetPrompt
+	if userPrompt != "" && prompt != "" {
+		prompt = userPrompt + ", BREAK, " + prompt
+	} else if userPrompt != "" {
+		prompt = userPrompt
+	}
+	prompt = appendLorasToPrompt(prompt, loras)
+
+	neg := presetNegative
+	if userNegative != "" && neg != "" {
+		neg = neg + ", " + userNegative
+	} else if userNegative != "" {
+		neg = userNegative
+	}
+	neg = s.kids.ApplyNegative(neg)
+
+	return builtPrompts{Prompt: prompt, NegativePrompt: neg}
 }
 
 func (s *Service) getPreviewDimensions(presetW, presetH int) (int, int, bool) {
@@ -572,22 +581,14 @@ func (s *Service) resolveResolution(p *preset.Preset, resolutionID *int64) (widt
 	return r.Width, r.Height
 }
 
-func (s *Service) resolveHires(p *preset.Preset, hiresProfileID *int64) (enabled bool, upscale *float64, denoising *float64, upscaler string) {
+func (s *Service) resolveHires(_ *preset.Preset, hiresProfileID *int64) (enabled bool, upscale *float64, denoising *float64, upscaler string) {
 	if hiresProfileID == nil || *hiresProfileID <= 0 {
-		hf := false
-		if p.HiresFix != nil {
-			hf = *p.HiresFix
-		}
-		return hf, p.HiresUpscale, p.HiresDenoisingStrength, p.HiresUpscaler
+		return false, nil, nil, ""
 	}
 	h, err := s.db.GetHiresProfile(*hiresProfileID)
 	if err != nil {
 		s.log.Warn("resolveHires: failed to load hires profile %d: %s", *hiresProfileID, err)
-		hf := false
-		if p.HiresFix != nil {
-			hf = *p.HiresFix
-		}
-		return hf, p.HiresUpscale, p.HiresDenoisingStrength, p.HiresUpscaler
+		return false, nil, nil, ""
 	}
 	upscaler = h.Upscaler
 	if upscaler == "" {
@@ -641,10 +642,10 @@ func (s *Service) GenerateSDPrompt(params GenerateSDPromptParams) (*GenerateSDPr
 RESPONSE LENGTH: your response is limited to ~%d tokens. You MUST fit within this limit.`, maxTokens)
 
 	var userParts []string
-	userParts = append(userParts, "BASE POSITIVE PROMPT: "+p.Prompt)
-	userParts = append(userParts, "BASE NEGATIVE PROMPT: "+p.NegativePrompt)
+	userParts = append(userParts, "STYLE REFERENCE (do NOT include in output): "+p.Prompt)
+	userParts = append(userParts, "STYLE NEGATIVE REFERENCE (do NOT include in output): "+p.NegativePrompt)
 	if description != "" {
-		userParts = append(userParts, "USER DESCRIPTION: "+description)
+		userParts = append(userParts, "USER SCENE (convert this to SD tags with weights): "+description)
 	}
 	if negative != "" {
 		userParts = append(userParts, "USER NEGATIVE: "+negative)
@@ -725,17 +726,18 @@ func (s *Service) RecommendPreset(description string) (*RecommendPresetResult, e
 		presetList = append(presetList, entry)
 	}
 
-	systemPrompt := `You are a Stable Diffusion preset recommender. Given a user's description of what they want to generate, you must select the BEST matching preset from the available list and suggest any additional prompt enhancements.
+	systemPrompt := `You are a JSON API. Respond with ONLY a JSON object. No markdown, no explanation, no text before or after.
+
+Select the best preset matching the user description and suggest prompt enhancements.
 
 RULES:
-1. Select EXACTLY ONE preset that best matches the user's description
-2. Consider: subject matter, style, quality, and technical aspects
-3. In extra_prompt, suggest additional SD tags that would improve the result based on the user's description
-4. Keep extra_prompt as comma-separated SD tags only
-5. Translate non-English to English
+1. Select EXACTLY ONE preset from the list by ID
+2. extra_prompt: comma-separated Stable Diffusion tags, English only
+3. reasoning: brief, English only
+4. NEVER respond in any language other than English
 
-OUTPUT — valid JSON only, no markdown:
-{"preset_id": 123, "preset_name": "exact name", "extra_prompt": "additional tags", "reasoning": "why this preset"}`
+OUTPUT FORMAT (copy exactly):
+{"preset_id": 123, "preset_name": "exact name", "extra_prompt": "additional tags", "reasoning": "why"}`
 
 	userMessage := "AVAILABLE PRESETS:\n" + strings.Join(presetList, "\n") + "\n\nUSER DESCRIPTION: " + strings.TrimSpace(description)
 
@@ -750,25 +752,56 @@ OUTPUT — valid JSON only, no markdown:
 	}
 
 	s.emitter.Emit("llm:status", map[string]string{"status": "thinking"})
-	raw, err := s.llm.GenerateSDPrompt(systemPrompt, userMessage, "", generateModel, maxTokens)
+	raw, err := s.llm.ChatJSON(generateModel, systemPrompt, userMessage, 0.3, maxTokens)
 	if err != nil {
 		s.emitter.Emit("llm:status", map[string]string{"status": "done"})
 		return nil, err
 	}
 	s.emitter.Emit("llm:status", map[string]string{"status": "done"})
 
+	extracted := promptutil.ExtractJSON(raw)
+	s.log.Debug("SuggestStyle raw response: %s", raw)
 	var result RecommendPresetResult
-	if err := json.Unmarshal([]byte(promptutil.ExtractJSON(raw)), &result); err != nil {
-		return nil, fmt.Errorf("failed to parse LLM response: %w", err)
+	if err := json.Unmarshal([]byte(extracted), &result); err != nil {
+		s.log.Warn("SuggestStyle: LLM returned non-JSON, attempting fallback parse")
+		if fallback := s.recommendPresetFallback(raw, allPresets); fallback != nil {
+			return fallback, nil
+		}
+		return nil, fmt.Errorf("failed to parse LLM response: %w (raw: %.200s)", err, raw)
 	}
 
 	return &result, nil
+}
+
+func (s *Service) recommendPresetFallback(raw string, allPresets []preset.Preset) *RecommendPresetResult {
+	re := regexp.MustCompile(`(?i)ID[:\s]*(\d+)`)
+	matches := re.FindStringSubmatch(raw)
+	if len(matches) < 2 {
+		return nil
+	}
+	id, err := strconv.ParseInt(matches[1], 10, 64)
+	if err != nil {
+		return nil
+	}
+	for _, p := range allPresets {
+		if p.ID == id {
+			return &RecommendPresetResult{
+				PresetID:   p.ID,
+				PresetName: p.Name,
+				Reasoning:  "auto-selected from text response",
+			}
+		}
+	}
+	return nil
 }
 
 // --- GenerateImage ---
 
 func (s *Service) GenerateImage(params GenerateImageParams) (*GenerateImageResult, error) {
 	s.log.UserAction("Generate image (preset_id=%d)", params.PresetID)
+	if err := s.sd.HealthCheck(); err != nil {
+		return nil, fmt.Errorf("SD is not available: %w", err)
+	}
 	s.StartSDPolling()
 	defer s.StopSDPolling()
 	p, err := s.db.Get(params.PresetID)
@@ -777,30 +810,27 @@ func (s *Service) GenerateImage(params GenerateImageParams) (*GenerateImageResul
 		return nil, err
 	}
 
-	prompt := p.Prompt
-	if params.ExtraPrompt != "" {
-		prompt = params.ExtraPrompt
-	}
-	prompt = appendLorasToPrompt(prompt, p.Loras)
-
-	negativePrompt := p.NegativePrompt
-	if params.ExtraNegativePrompt != "" {
-		negativePrompt = params.ExtraNegativePrompt
-	}
-
-	negativePrompt = s.kids.ApplyNegative(negativePrompt)
+	bp := s.buildPrompts(p.Prompt, p.NegativePrompt, p.Loras, params.ExtraPrompt, params.ExtraNegativePrompt)
+	prompt := bp.Prompt
+	negativePrompt := bp.NegativePrompt
 
 	if p.ModelName != "" {
-		_ = s.sd.SetModel(p.ModelName)
+		if err := s.sd.SetModel(p.ModelName); err != nil {
+			s.log.Warn("set model %q: %s", p.ModelName, err)
+		}
 	}
 
 	if p.VAE != "" {
-		_ = s.sd.SetVAE(p.VAE)
+		if err := s.sd.SetVAE(p.VAE); err != nil {
+			s.log.Warn("set vae %q: %s", p.VAE, err)
+		}
 	} else {
-		_ = s.sd.SetVAE("Automatic")
+		if err := s.sd.SetVAE("Automatic"); err != nil {
+			s.log.Warn("set vae automatic: %s", err)
+		}
 	}
 
-	samplerName := buildSamplerName(p.Sampler, p.ScheduleType)
+	samplerName := promptutil.BuildSamplerName(p.Sampler, p.ScheduleType)
 
 	batchSize := 1
 	if p.BatchSize != nil {
@@ -941,230 +971,12 @@ func (s *Service) GenerateImage(params GenerateImageParams) (*GenerateImageResul
 	return img, nil
 }
 
-// --- BatchGenerate ---
-
-func (s *Service) BatchGenerate(params BatchGenerateParams) error {
-	s.StartSDPolling()
-	defer s.StopSDPolling()
-	if params.Count <= 0 || params.Count > 100 {
-		return fmt.Errorf("count must be between 1 and 100")
-	}
-	if params.OutputFolder == "" {
-		return fmt.Errorf("output folder is required")
-	}
-	if params.Prompt == "" {
-		return fmt.Errorf("prompt is required")
-	}
-
-	s.batchMu.Lock()
-	if s.batchRunning {
-		s.batchMu.Unlock()
-		return fmt.Errorf("batch generation is already running")
-	}
-	s.batchRunning = true
-	s.batchMu.Unlock()
-	defer func() {
-		s.batchMu.Lock()
-		s.batchRunning = false
-		s.batchMu.Unlock()
-	}()
-
-	if err := os.MkdirAll(params.OutputFolder, 0755); err != nil {
-		return fmt.Errorf("create output folder: %w", err)
-	}
-
-	p := &preset.Preset{
-		Prompt:         "",
-		NegativePrompt: "",
-		Sampler:        "Euler a",
-		Steps:          20,
-		CfgScale:       7.0,
-	}
-	if params.PresetID > 0 {
-		var err error
-		p, err = s.db.Get(params.PresetID)
-		if err != nil {
-			return fmt.Errorf("preset not found: %w", err)
-		}
-	}
-
-	prompt := params.Prompt
-	var filterErr error
-	prompt, filterErr = s.kids.FilterInput(prompt)
-	if filterErr != nil {
-		return filterErr
-	}
-	prompt = appendLorasToPrompt(prompt, p.Loras)
-
-	negativePrompt := params.NegativePrompt
-	negativePrompt, filterErr = s.kids.FilterInput(negativePrompt)
-	if filterErr != nil {
-		return filterErr
-	}
-	negativePrompt = s.kids.ApplyNegative(negativePrompt)
-
-	if p.ModelName != "" {
-		_ = s.sd.SetModel(p.ModelName)
-	}
-	if p.VAE != "" {
-		_ = s.sd.SetVAE(p.VAE)
-	} else {
-		_ = s.sd.SetVAE("Automatic")
-	}
-
-	samplerName := buildSamplerName(p.Sampler, p.ScheduleType)
-
-	clipSkip := 1
-	if p.ClipSkip != nil {
-		clipSkip = *p.ClipSkip
-	}
-	batchSize := 1
-	batchCount := 1
-
-	denoisingStrength := p.DenoisingStrength
-	hiresEnabled, hiresUpscale, hiresDenoising, hiresUpscaler := s.resolveHires(p, params.HiresProfileID)
-	var hiresFix *bool
-	if hiresEnabled {
-		hiresFix = &hiresEnabled
-	}
-	if denoisingStrength == nil && hiresEnabled {
-		ds := 0.5
-		if hiresDenoising != nil {
-			ds = *hiresDenoising
-		}
-		denoisingStrength = &ds
-	}
-
-	width, height := s.resolveResolution(p, params.ResolutionID)
-
-	timestamp := time.Now().Format("20060102_150405")
-
-	for i := 0; i < params.Count; i++ {
-		s.emitter.Emit("batch:progress", BatchProgress{
-			Current: i + 1,
-			Total:   params.Count,
-			Status:  "generating",
-		})
-
-		req := sd.Txt2ImgRequest{
-			Prompt:                 prompt,
-			NegativePrompt:         negativePrompt,
-			SamplerName:            samplerName,
-			Scheduler:              p.ScheduleType,
-			Steps:                  p.Steps,
-			CfgScale:               p.CfgScale,
-			Width:                  width,
-			Height:                 height,
-			Seed:                   p.Seed,
-			DenoisingStrength:      denoisingStrength,
-			ClipSkip:               &clipSkip,
-			BatchSize:              &batchSize,
-			BatchCount:             &batchCount,
-			HiresFix:               hiresFix,
-			HiresUpscale:           hiresUpscale,
-			HiresDenoisingStrength: hiresDenoising,
-			HiresUpscaler:          hiresUpscaler,
-			DoNotSaveImages:        true,
-			DoNotSaveGrid:          true,
-		}
-
-		result, err := s.sd.Txt2Img(req)
-		if err != nil {
-			if ierr := s.checkSDInterrupted(); ierr != nil {
-				s.emitter.Emit("batch:progress", BatchProgress{
-					Current: i + 1,
-					Total:   params.Count,
-					Status:  "interrupted",
-				})
-				return ierr
-			}
-			if hiresFix != nil {
-				s.log.Warn("SD error with hires fix enabled, retrying with manual upscale: %s", err)
-				time.Sleep(3 * time.Second)
-				req.HiresFix = nil
-				req.HiresUpscale = nil
-				req.HiresDenoisingStrength = nil
-				req.HiresUpscaler = ""
-				req.HiresResizeX = 0
-				req.HiresResizeY = 0
-				req.HiresSecondPassSteps = 0
-				result, err = s.sd.Txt2Img(req)
-				if err == nil && len(result.Images) > 0 {
-					scale := 2.0
-					if hiresUpscale != nil {
-						scale = *hiresUpscale
-					}
-					ds := 0.5
-					if hiresDenoising != nil {
-						ds = *hiresDenoising
-					}
-					s.log.Info("Manual hires upscale: %.1fx, denoise=%.2f, upscaler=%s", scale, ds, hiresUpscaler)
-					hrResult, hrErr := s.manualHiresUpscale(result.Images[0], req, scale, ds, hiresUpscaler)
-					if hrErr == nil && len(hrResult.Images) > 0 {
-						result = hrResult
-					}
-				}
-			}
-			if err != nil {
-				s.emitter.Emit("batch:progress", BatchProgress{
-					Current: i + 1,
-					Total:   params.Count,
-					Status:  fmt.Sprintf("error: image %d failed", i+1),
-				})
-				return fmt.Errorf("image %d/%d failed: %w", i+1, params.Count, err)
-			}
-		}
-		if len(result.Images) == 0 {
-			if ierr := s.checkSDInterrupted(); ierr != nil {
-				s.emitter.Emit("batch:progress", BatchProgress{
-					Current: i + 1,
-					Total:   params.Count,
-					Status:  "interrupted",
-				})
-				return ierr
-			}
-			s.emitter.Emit("batch:progress", BatchProgress{
-				Current: i + 1,
-				Total:   params.Count,
-				Status:  "error: no image returned",
-			})
-			return fmt.Errorf("image %d/%d: no image returned", i+1, params.Count)
-		}
-
-		if len(result.Images[0]) > 67*1024*1024 {
-			return fmt.Errorf("image %d too large (max 50 MB)", i+1)
-		}
-
-		imgData, err := base64.StdEncoding.DecodeString(result.Images[0])
-		if err != nil {
-			return fmt.Errorf("decode image %d: %w", i+1, err)
-		}
-
-		fileName := fmt.Sprintf("batch_%s_%03d.png", timestamp, i+1)
-		filePath := filepath.Join(params.OutputFolder, fileName)
-		if err := os.WriteFile(filePath, imgData, 0644); err != nil {
-			return fmt.Errorf("save image %d: %w", i+1, err)
-		}
-
-		s.emitter.Emit("batch:progress", BatchProgress{
-			Current:  i + 1,
-			Total:    params.Count,
-			FilePath: filePath,
-			Status:   "saved",
-		})
-	}
-
-	s.emitter.Emit("batch:progress", BatchProgress{
-		Current: params.Count,
-		Total:   params.Count,
-		Status:  "done",
-	})
-	return nil
-}
-
 // --- TestGenerate ---
 
 func (s *Service) TestGenerate(params TestGenerateParams) ([]TestGenerateResultItem, error) {
+	if err := s.sd.HealthCheck(); err != nil {
+		return nil, fmt.Errorf("SD is not available: %w", err)
+	}
 	s.StartSDPolling()
 	defer s.StopSDPolling()
 	if params.Mode != "presets" && params.Mode != "models" {
@@ -1221,16 +1033,24 @@ func (s *Service) TestGenerate(params TestGenerateParams) ([]TestGenerateResultI
 			p = loaded
 			item.Name = p.Name
 			if p.ModelName != "" {
-				_ = s.sd.SetModel(p.ModelName)
+				if err := s.sd.SetModel(p.ModelName); err != nil {
+					s.log.Warn("set model %q: %s", p.ModelName, err)
+				}
 			}
 			if p.VAE != "" {
-				_ = s.sd.SetVAE(p.VAE)
+				if err := s.sd.SetVAE(p.VAE); err != nil {
+					s.log.Warn("set vae %q: %s", p.VAE, err)
+				}
 			} else {
-				_ = s.sd.SetVAE("Automatic")
+				if err := s.sd.SetVAE("Automatic"); err != nil {
+					s.log.Warn("set vae automatic: %s", err)
+				}
 			}
 		} else {
 			modelTitle := params.SelectedModels[idx]
-			_ = s.sd.SetModel(modelTitle)
+			if err := s.sd.SetModel(modelTitle); err != nil {
+				s.log.Warn("set model %q: %s", modelTitle, err)
+			}
 			item.Name = modelTitle
 		}
 
@@ -1244,24 +1064,13 @@ func (s *Service) TestGenerate(params TestGenerateParams) ([]TestGenerateResultI
 			p.CfgScale = defaultPreset.CfgScale
 		}
 
-		prompt := params.Prompt
-		prompt, filterErr := s.kids.FilterInput(prompt)
+		filteredPrompt, filterErr := s.kids.FilterInput(params.Prompt)
 		if filterErr != nil {
 			return nil, fmt.Errorf("generating image: %w", filterErr)
 		}
-		if p.Loras != "" && params.Mode == "presets" {
-			prompt = appendLorasToPrompt(prompt, p.Loras)
-		}
-
-		negPrompt := params.NegativePrompt
-		if params.Mode == "presets" && p.NegativePrompt != "" {
-			if negPrompt != "" {
-				negPrompt = p.NegativePrompt + ", " + negPrompt
-			} else {
-				negPrompt = p.NegativePrompt
-			}
-		}
-		negPrompt = s.kids.ApplyNegative(negPrompt)
+		bp := s.buildPrompts(p.Prompt, p.NegativePrompt, p.Loras, filteredPrompt, params.NegativePrompt)
+		prompt := bp.Prompt
+		negPrompt := bp.NegativePrompt
 
 		sampler := p.Sampler
 		scheduleType := p.ScheduleType
@@ -1299,7 +1108,7 @@ func (s *Service) TestGenerate(params TestGenerateParams) ([]TestGenerateResultI
 			seed = params.Seed
 		}
 
-		samplerName := buildSamplerName(sampler, scheduleType)
+		samplerName := promptutil.BuildSamplerName(sampler, scheduleType)
 
 		clipSkip := 1
 		if p.ClipSkip != nil {
@@ -1409,6 +1218,8 @@ func (s *Service) TestGenerate(params TestGenerateParams) ([]TestGenerateResultI
 			item.ModelName = p.ModelName
 		}
 
+		s.sessions.AddToSession(item.Image, result.Info, "compare", false, nil)
+
 		results = append(results, item)
 
 		s.emitter.Emit("test:progress", map[string]any{
@@ -1419,27 +1230,6 @@ func (s *Service) TestGenerate(params TestGenerateParams) ([]TestGenerateResultI
 	}
 
 	return results, nil
-}
-
-// --- GetPresetForBatch ---
-
-func (s *Service) GetPresetForBatch(presetID int64, description string) (*GenerateSDPromptResult, error) {
-	if presetID <= 0 {
-		return nil, fmt.Errorf("preset is required")
-	}
-
-	if description != "" {
-		result, err := s.GenerateSDPrompt(GenerateSDPromptParams{
-			PresetID:    presetID,
-			Description: description,
-		})
-		if err != nil {
-			return nil, err
-		}
-		return result, nil
-	}
-
-	return nil, nil
 }
 
 // --- UpscaleImage ---
@@ -1529,12 +1319,18 @@ func (s *Service) UpscaleImage(params UpscaleImageParams) (*GenerateImageResult,
 			clipSkip = *p.ClipSkip
 		}
 		if p.ModelName != "" {
-			_ = s.sd.SetModel(p.ModelName)
+			if err := s.sd.SetModel(p.ModelName); err != nil {
+				s.log.Warn("set model %q: %s", p.ModelName, err)
+			}
 		}
 		if p.VAE != "" {
-			_ = s.sd.SetVAE(p.VAE)
+			if err := s.sd.SetVAE(p.VAE); err != nil {
+				s.log.Warn("set vae %q: %s", p.VAE, err)
+			}
 		} else {
-			_ = s.sd.SetVAE("Automatic")
+			if err := s.sd.SetVAE("Automatic"); err != nil {
+				s.log.Warn("set vae automatic: %s", err)
+			}
 		}
 	}
 
@@ -1604,16 +1400,22 @@ func (s *Service) UpscalePreview(params UpscalePreviewParams) (*GenerateImageRes
 	negativePrompt = s.kids.ApplyNegative(negativePrompt)
 
 	if p.ModelName != "" {
-		_ = s.sd.SetModel(p.ModelName)
+		if err := s.sd.SetModel(p.ModelName); err != nil {
+			s.log.Warn("set model %q: %s", p.ModelName, err)
+		}
 	}
 
 	if p.VAE != "" {
-		_ = s.sd.SetVAE(p.VAE)
+		if err := s.sd.SetVAE(p.VAE); err != nil {
+			s.log.Warn("set vae %q: %s", p.VAE, err)
+		}
 	} else {
-		_ = s.sd.SetVAE("Automatic")
+		if err := s.sd.SetVAE("Automatic"); err != nil {
+			s.log.Warn("set vae automatic: %s", err)
+		}
 	}
 
-	samplerName := buildSamplerName(p.Sampler, p.ScheduleType)
+	samplerName := promptutil.BuildSamplerName(p.Sampler, p.ScheduleType)
 
 	batchSize := 1
 	if p.BatchSize != nil {
@@ -1766,11 +1568,14 @@ func (s *Service) DecomposeScene(params DecomposeSceneParams) (*compositor.Scene
 		userMessage += fmt.Sprintf("\nPreset negative prompt (MERGE into scene negative_prompt): %s", p.NegativePrompt)
 	}
 
-	maxTokens := 1024
+	maxTokens := 2048
 	if v, err := s.db.GetSetting("llm_max_tokens"); err == nil && v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
 			maxTokens = n
 		}
+	}
+	if maxTokens < 2048 {
+		maxTokens = 2048
 	}
 
 	generateModel := s.getGenerateModel()
@@ -1786,7 +1591,12 @@ func (s *Service) DecomposeScene(params DecomposeSceneParams) (*compositor.Scene
 
 	scene, err := compositor.DecomposeSceneFromJSON(raw)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse scene from LLM response: %w", err)
+		preview := raw
+		if len(preview) > 200 {
+			preview = preview[:200] + "..."
+		}
+		s.log.Warn("Scene parse failed, LLM response: %s", preview)
+		return nil, fmt.Errorf("failed to parse scene from LLM response: %w (raw: %s)", err, preview)
 	}
 
 	scene.PresetID = params.PresetID
@@ -1819,12 +1629,18 @@ func (s *Service) GenerateMultiPass(scene compositor.Scene) (*compositor.MultiPa
 		}
 	}
 
-	rembgURL, _ := s.db.GetSetting("rembg_url")
+	mode, _ := s.db.GetSetting("connection_mode")
+	if mode != "server" {
+		rembgURL, _ := s.db.GetSetting("rembg_url")
+		if rembgURL != "" {
+			s.rembg.SetURL(rembgURL)
+		}
+	}
+
 	var rembgIf compositor.RembgClient
-	if rembgURL != "" {
-		s.rembg.SetURL(rembgURL)
+	if s.rembg.HasURL() {
 		rembgIf = s.rembg
-		s.log.Debug("Rembg enabled: %s", rembgURL)
+		s.log.Debug("Rembg enabled: %s", s.rembg.URL())
 	} else {
 		s.log.Warn("Rembg not configured, using Go-based background removal")
 	}

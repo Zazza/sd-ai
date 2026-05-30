@@ -167,10 +167,6 @@ func (m *Manager) FilterOutput(text string) string {
 	return FilterOutput(text, m.getDisabledCategories())
 }
 
-func (m *Manager) DisabledCategories() map[string]bool {
-	return m.getDisabledCategories()
-}
-
 func (m *Manager) getDisabledCategories() map[string]bool {
 	disabled := make(map[string]bool)
 	for _, cat := range Categories {

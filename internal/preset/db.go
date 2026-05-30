@@ -2,7 +2,9 @@ package preset
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -102,6 +104,30 @@ func Open(dbPath string) (*DB, error) {
 		return nil, fmt.Errorf("migrate v19: %w", err)
 	}
 
+	if err := migrateV20(db); err != nil {
+		return nil, fmt.Errorf("migrate v20: %w", err)
+	}
+
+	if err := migrateV21(db); err != nil {
+		return nil, fmt.Errorf("migrate v21: %w", err)
+	}
+
+	if err := migrateV22(db); err != nil {
+		return nil, fmt.Errorf("migrate v22: %w", err)
+	}
+
+	if err := migrateV23(db); err != nil {
+		return nil, fmt.Errorf("migrate v23: %w", err)
+	}
+
+	if err := migrateV24(db); err != nil {
+		return nil, fmt.Errorf("migrate v24: %w", err)
+	}
+
+	if err := migrateV25(db); err != nil {
+		return nil, fmt.Errorf("migrate v25: %w", err)
+	}
+
 	return &DB{db: db}, nil
 }
 
@@ -141,6 +167,14 @@ func migrate(db *sql.DB) error {
 	return err
 }
 
+func addColumnIfNotExists(db *sql.DB, table, col, typ string) error {
+	_, err := db.Exec("ALTER TABLE " + table + " ADD COLUMN " + col + " " + typ)
+	if err != nil && strings.Contains(err.Error(), "duplicate column name") {
+		return nil
+	}
+	return err
+}
+
 func migrateV2(db *sql.DB) error {
 	columns := []struct {
 		name string
@@ -157,11 +191,7 @@ func migrateV2(db *sql.DB) error {
 		{"vae", "TEXT DEFAULT ''"},
 	}
 	for _, col := range columns {
-		_, err := db.Exec("ALTER TABLE presets ADD COLUMN " + col.name + " " + col.typ)
-		if err != nil && strings.Contains(err.Error(), "duplicate column name") {
-			continue
-		}
-		if err != nil {
+		if err := addColumnIfNotExists(db, "presets", col.name, col.typ); err != nil {
 			return err
 		}
 	}
@@ -169,11 +199,7 @@ func migrateV2(db *sql.DB) error {
 }
 
 func migrateV3(db *sql.DB) error {
-	_, err := db.Exec("ALTER TABLE presets ADD COLUMN schedule_type TEXT DEFAULT ''")
-	if err != nil && strings.Contains(err.Error(), "duplicate column name") {
-		return nil
-	}
-	if err != nil {
+	if err := addColumnIfNotExists(db, "presets", "schedule_type", "TEXT DEFAULT ''"); err != nil {
 		return err
 	}
 
@@ -206,7 +232,7 @@ func (d *DB) DB() *sql.DB {
 	return d.db
 }
 
-const presetColumns = `id, name, preset_type, prompt, negative_prompt, sampler, schedule_type, steps, cfg_scale, model_name, seed, denoising_strength, clip_skip, batch_size, batch_count, hires_fix, hires_upscale, hires_denoising_strength, hires_upscaler, vae, type_id, tags, loras, created_at, updated_at`
+const presetColumns = `id, name, preset_type, prompt, negative_prompt, sampler, schedule_type, steps, cfg_scale, model_name, seed, denoising_strength, clip_skip, batch_size, batch_count, vae, type_id, tags, loras, is_bundled, created_at, updated_at`
 
 func scanPreset(scanner interface{ Scan(...any) error }, p *Preset) error {
 	var seed sql.NullInt64
@@ -214,9 +240,6 @@ func scanPreset(scanner interface{ Scan(...any) error }, p *Preset) error {
 	var clipSkip sql.NullInt64
 	var batchSize sql.NullInt64
 	var batchCount sql.NullInt64
-	var hiresFix sql.NullInt64
-	var hiresUpscale sql.NullFloat64
-	var hiresDenoisingStrength sql.NullFloat64
 	var typeID sql.NullInt64
 
 	err := scanner.Scan(
@@ -224,9 +247,8 @@ func scanPreset(scanner interface{ Scan(...any) error }, p *Preset) error {
 		&p.Sampler, &p.ScheduleType, &p.Steps, &p.CfgScale,
 		&p.ModelName, &seed,
 		&denoisingStrength, &clipSkip, &batchSize, &batchCount,
-		&hiresFix, &hiresUpscale, &hiresDenoisingStrength,
-		&p.HiresUpscaler, &p.VAE,
-		&typeID, &p.Tags, &p.Loras,
+		&p.VAE,
+		&typeID, &p.Tags, &p.Loras, &p.IsBundled,
 		&p.CreatedAt, &p.UpdatedAt,
 	)
 	if err != nil {
@@ -250,16 +272,6 @@ func scanPreset(scanner interface{ Scan(...any) error }, p *Preset) error {
 	if batchCount.Valid {
 		v := int(batchCount.Int64)
 		p.BatchCount = &v
-	}
-	if hiresFix.Valid {
-		v := hiresFix.Int64 != 0
-		p.HiresFix = &v
-	}
-	if hiresUpscale.Valid {
-		p.HiresUpscale = &hiresUpscale.Float64
-	}
-	if hiresDenoisingStrength.Valid {
-		p.HiresDenoisingStrength = &hiresDenoisingStrength.Float64
 	}
 	if typeID.Valid {
 		p.TypeID = &typeID.Int64
@@ -312,10 +324,57 @@ func (d *DB) Get(id int64) (*Preset, error) {
 	return &p, nil
 }
 
+func (d *DB) GetBundledInstallStatus(sdModels []string, loraModels []string) ([]PresetInstallStatus, error) {
+	sdSet := make(map[string]bool, len(sdModels))
+	for _, m := range sdModels {
+		sdSet[strings.TrimSuffix(m, ".safetensors")] = true
+	}
+	loraSet := make(map[string]bool, len(loraModels))
+	for _, m := range loraModels {
+		loraSet[strings.TrimSuffix(m, ".safetensors")] = true
+	}
+
+	rows, err := d.db.Query(`SELECT id, name, model_name, loras FROM presets WHERE is_bundled = 1`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var result []PresetInstallStatus
+	for rows.Next() {
+		var id int64
+		var name, modelName, lorasJSON string
+		if err := rows.Scan(&id, &name, &modelName, &lorasJSON); err != nil {
+			return nil, err
+		}
+
+		status := PresetInstallStatus{ID: id, Name: name}
+
+		if modelName != "" && !sdSet[modelName] {
+			status.MissingSD = append(status.MissingSD, modelName)
+		}
+
+		if lorasJSON != "" && lorasJSON != "[]" {
+			var loras []LoRAEntry
+			if json.Unmarshal([]byte(lorasJSON), &loras) == nil {
+				for _, l := range loras {
+					if !loraSet[l.Name] {
+						status.MissingLoRA = append(status.MissingLoRA, l.Name)
+					}
+				}
+			}
+		}
+
+		status.Installed = len(status.MissingSD) == 0 && len(status.MissingLoRA) == 0
+		result = append(result, status)
+	}
+	return result, rows.Err()
+}
+
 func (d *DB) Create(p *Preset) error {
-	result, err := d.db.Exec(`INSERT INTO presets (name, preset_type, prompt, negative_prompt, sampler, schedule_type, steps, cfg_scale, model_name, seed, denoising_strength, clip_skip, batch_size, batch_count, hires_fix, hires_upscale, hires_denoising_strength, hires_upscaler, vae, type_id, tags, loras) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+	result, err := d.db.Exec(`INSERT INTO presets (name, preset_type, prompt, negative_prompt, sampler, schedule_type, steps, cfg_scale, model_name, seed, denoising_strength, clip_skip, batch_size, batch_count, vae, type_id, tags, loras) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		p.Name, p.PresetType, p.Prompt, p.NegativePrompt, p.Sampler, p.ScheduleType, p.Steps, p.CfgScale, p.ModelName, p.Seed,
-		p.DenoisingStrength, p.ClipSkip, p.BatchSize, p.BatchCount, p.HiresFix, p.HiresUpscale, p.HiresDenoisingStrength, p.HiresUpscaler, p.VAE,
+		p.DenoisingStrength, p.ClipSkip, p.BatchSize, p.BatchCount, p.VAE,
 		p.TypeID, p.Tags, p.Loras)
 	if err != nil {
 		return err
@@ -325,9 +384,9 @@ func (d *DB) Create(p *Preset) error {
 }
 
 func (d *DB) Update(p *Preset) error {
-	_, err := d.db.Exec(`UPDATE presets SET name=?, preset_type=?, prompt=?, negative_prompt=?, sampler=?, schedule_type=?, steps=?, cfg_scale=?, model_name=?, seed=?, denoising_strength=?, clip_skip=?, batch_size=?, batch_count=?, hires_fix=?, hires_upscale=?, hires_denoising_strength=?, hires_upscaler=?, vae=?, type_id=?, tags=?, loras=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`,
+	_, err := d.db.Exec(`UPDATE presets SET name=?, preset_type=?, prompt=?, negative_prompt=?, sampler=?, schedule_type=?, steps=?, cfg_scale=?, model_name=?, seed=?, denoising_strength=?, clip_skip=?, batch_size=?, batch_count=?, vae=?, type_id=?, tags=?, loras=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`,
 		p.Name, p.PresetType, p.Prompt, p.NegativePrompt, p.Sampler, p.ScheduleType, p.Steps, p.CfgScale, p.ModelName, p.Seed,
-		p.DenoisingStrength, p.ClipSkip, p.BatchSize, p.BatchCount, p.HiresFix, p.HiresUpscale, p.HiresDenoisingStrength, p.HiresUpscaler, p.VAE,
+		p.DenoisingStrength, p.ClipSkip, p.BatchSize, p.BatchCount, p.VAE,
 		p.TypeID, p.Tags, p.Loras, p.ID)
 	return err
 }
@@ -375,9 +434,9 @@ func (d *DB) CreateBatch(items []Preset) ([]Preset, error) {
 
 	var created []Preset
 	for _, item := range items {
-		result, err := tx.Exec(`INSERT INTO presets (name, preset_type, prompt, negative_prompt, sampler, schedule_type, steps, cfg_scale, model_name, seed, denoising_strength, clip_skip, batch_size, batch_count, hires_fix, hires_upscale, hires_denoising_strength, hires_upscaler, vae, type_id, tags, loras) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		result, err := tx.Exec(`INSERT INTO presets (name, preset_type, prompt, negative_prompt, sampler, schedule_type, steps, cfg_scale, model_name, seed, denoising_strength, clip_skip, batch_size, batch_count, vae, type_id, tags, loras) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			item.Name, item.PresetType, item.Prompt, item.NegativePrompt, item.Sampler, item.ScheduleType, item.Steps, item.CfgScale, item.ModelName, item.Seed,
-			item.DenoisingStrength, item.ClipSkip, item.BatchSize, item.BatchCount, item.HiresFix, item.HiresUpscale, item.HiresDenoisingStrength, item.HiresUpscaler, item.VAE,
+			item.DenoisingStrength, item.ClipSkip, item.BatchSize, item.BatchCount, item.VAE,
 			item.TypeID, item.Tags, item.Loras)
 		if err != nil {
 			tx.Rollback()
@@ -530,11 +589,7 @@ func migrateV5(db *sql.DB) error {
 		{"loras", "TEXT DEFAULT ''"},
 	}
 	for _, col := range newCols {
-		_, err := db.Exec("ALTER TABLE presets ADD COLUMN " + col.name + " " + col.typ)
-		if err != nil && strings.Contains(err.Error(), "duplicate column name") {
-			continue
-		}
-		if err != nil {
+		if err := addColumnIfNotExists(db, "presets", col.name, col.typ); err != nil {
 			return err
 		}
 	}
@@ -815,12 +870,18 @@ func (d *DB) GetCompoundPresetsByIDs(ids []int64) ([]CompoundPreset, error) {
 		if err := rows.Scan(&cp.ID, &cp.Name, &cp.Description, &cp.CreatedAt, &cp.UpdatedAt); err != nil {
 			return nil, err
 		}
-		steps, err := d.getCompoundSteps(cp.ID)
+		items = append(items, cp)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	for i := range items {
+		steps, err := d.getCompoundSteps(items[i].ID)
 		if err != nil {
 			return nil, err
 		}
-		cp.Steps = steps
-		items = append(items, cp)
+		items[i].Steps = steps
 	}
 	return items, nil
 }
@@ -847,11 +908,7 @@ func migrateV8(db *sql.DB) error {
 		{"type", "TEXT DEFAULT ''"},
 	}
 	for _, col := range newCols {
-		_, err := db.Exec("ALTER TABLE saved_descriptions ADD COLUMN " + col.name + " " + col.typ)
-		if err != nil && strings.Contains(err.Error(), "duplicate column name") {
-			continue
-		}
-		if err != nil {
+		if err := addColumnIfNotExists(db, "saved_descriptions", col.name, col.typ); err != nil {
 			return err
 		}
 	}
@@ -1004,7 +1061,34 @@ func migrateV10(db *sql.DB) error {
 	return err
 }
 
+type bundledPresetsFile struct {
+	Version  int              `json:"version"`
+	Presets  []bundledPreset  `json:"presets"`
+}
+
+type bundledPreset struct {
+	Name           string  `json:"name"`
+	PresetType     string  `json:"preset_type"`
+	TypeName       string  `json:"type_name"`
+	Tags           string  `json:"tags"`
+	Loras          string  `json:"loras"`
+	Prompt         string  `json:"prompt"`
+	NegativePrompt string  `json:"negative_prompt"`
+	Sampler        string  `json:"sampler"`
+	ScheduleType   string  `json:"schedule_type"`
+	Steps          int     `json:"steps"`
+	CfgScale       float64 `json:"cfg_scale"`
+	ModelName      string  `json:"model_name"`
+	ClipSkip       *int    `json:"clip_skip"`
+	VAE            string  `json:"vae"`
+}
+
 func migrateV11(db *sql.DB) error {
+	return addColumnIfNotExists(db, "presets", "is_bundled", "INTEGER NOT NULL DEFAULT 0")
+}
+
+
+func migrateV12(db *sql.DB) error {
 	_, err := db.Exec(`
 		CREATE TABLE IF NOT EXISTS resolutions (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1059,7 +1143,7 @@ func migrateV11(db *sql.DB) error {
 	return nil
 }
 
-func migrateV12(db *sql.DB) error {
+func migrateV13(db *sql.DB) error {
 	_, err := db.Exec(`
 		CREATE TABLE IF NOT EXISTS hires_profiles (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1092,7 +1176,7 @@ func migrateV12(db *sql.DB) error {
 		{"Light", 1.5, 0.3, "R-ESRGAN 4x+"},
 		{"Standard", 2.0, 0.45, "R-ESRGAN 4x+"},
 		{"Heavy", 2.5, 0.55, "R-ESRGAN 4x+"},
-		{"Max", 4.0, 0.4, "R-ESRGAN 4x+"},
+		{"Max", 3.0, 0.6, "R-ESRGAN 4x+"},
 	}
 	for _, h := range builtins {
 		_, err := db.Exec(
@@ -1106,7 +1190,7 @@ func migrateV12(db *sql.DB) error {
 	return nil
 }
 
-func migrateV13(db *sql.DB) error {
+func migrateV14(db *sql.DB) error {
 	newCols := []struct {
 		name string
 		typ  string
@@ -1115,26 +1199,18 @@ func migrateV13(db *sql.DB) error {
 		{"default_hires_profile_id", "INTEGER REFERENCES hires_profiles(id)"},
 	}
 	for _, col := range newCols {
-		_, err := db.Exec("ALTER TABLE presets ADD COLUMN " + col.name + " " + col.typ)
-		if err != nil && strings.Contains(err.Error(), "duplicate column name") {
-			continue
-		}
-		if err != nil {
+		if err := addColumnIfNotExists(db, "presets", col.name, col.typ); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func migrateV14(db *sql.DB) error {
-	_, err := db.Exec("ALTER TABLE compound_preset_steps ADD COLUMN resolution_id INTEGER REFERENCES resolutions(id)")
-	if err != nil && strings.Contains(err.Error(), "duplicate column name") {
-		return nil
-	}
-	return err
+func migrateV15(db *sql.DB) error {
+	return addColumnIfNotExists(db, "compound_preset_steps", "resolution_id", "INTEGER REFERENCES resolutions(id)")
 }
 
-func migrateV15(db *sql.DB) error {
+func migrateV16(db *sql.DB) error {
 	cols := []string{"default_resolution_id", "default_hires_profile_id"}
 	for _, col := range cols {
 		_, err := db.Exec("ALTER TABLE presets DROP COLUMN " + col)
@@ -1145,7 +1221,7 @@ func migrateV15(db *sql.DB) error {
 	return nil
 }
 
-func migrateV16(db *sql.DB) error {
+func migrateV17(db *sql.DB) error {
 	cols := []string{"width", "height"}
 	for _, col := range cols {
 		_, err := db.Exec("ALTER TABLE presets DROP COLUMN " + col)
@@ -1156,12 +1232,12 @@ func migrateV16(db *sql.DB) error {
 	return nil
 }
 
-func migrateV17(db *sql.DB) error {
+func migrateV18(db *sql.DB) error {
 	_, err := db.Exec("UPDATE hires_profiles SET upscaler = 'Latent' WHERE upscaler = '' OR upscaler IS NULL")
 	return err
 }
 
-func migrateV18(db *sql.DB) error {
+func migrateV19(db *sql.DB) error {
 	cols := []string{"width", "height"}
 	for _, col := range cols {
 		_, err := db.Exec("ALTER TABLE compound_preset_steps DROP COLUMN " + col)
@@ -1172,7 +1248,156 @@ func migrateV18(db *sql.DB) error {
 	return nil
 }
 
-func migrateV19(db *sql.DB) error {
+func migrateV20(db *sql.DB) error {
+	_, err := db.Exec(`DELETE FROM presets WHERE is_bundled = 1`)
+	if err != nil {
+		return err
+	}
+	_, err = db.Exec(`DELETE FROM preset_types WHERE id NOT IN (SELECT DISTINCT type_id FROM presets WHERE type_id IS NOT NULL)`)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func migrateV21(db *sql.DB) error {
+	for _, col := range []string{"hires_fix", "hires_upscale", "hires_denoising_strength", "hires_upscaler"} {
+		_, err := db.Exec("ALTER TABLE presets DROP COLUMN " + col)
+		if err != nil && !strings.Contains(err.Error(), "no such column") {
+			return err
+		}
+	}
+	return nil
+}
+
+func (d *DB) SeedBundled(fsys fs.FS) error {
+	var bundledCount int
+	if err := d.db.QueryRow(`SELECT COUNT(*) FROM presets WHERE is_bundled = 1`).Scan(&bundledCount); err != nil {
+		return err
+	}
+	if bundledCount > 0 {
+		return nil
+	}
+
+	entries, err := fs.ReadDir(fsys, "data/presets")
+	if err != nil {
+		return fmt.Errorf("read bundled presets: %w", err)
+	}
+
+	var files []bundledPresetsFile
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
+			continue
+		}
+		raw, err := fs.ReadFile(fsys, "data/presets/"+entry.Name())
+		if err != nil {
+			continue
+		}
+		var file bundledPresetsFile
+		if err := json.Unmarshal(raw, &file); err != nil || file.Version != 2 {
+			continue
+		}
+		files = append(files, file)
+	}
+
+	typeCache := make(map[string]int64)
+	existing, _ := d.ListPresetTypes()
+	for _, t := range existing {
+		typeCache[t.Name] = t.ID
+	}
+	for _, f := range files {
+		for _, p := range f.Presets {
+			typeName := p.TypeName
+			if typeName == "" {
+				typeName = p.PresetType
+			}
+			if typeName == "" {
+				continue
+			}
+			if _, ok := typeCache[typeName]; ok {
+				continue
+			}
+			pt := &PresetType{Name: typeName}
+			if err := d.CreatePresetType(pt); err != nil {
+				return err
+			}
+			typeCache[typeName] = pt.ID
+		}
+	}
+
+	stmt, err := d.db.Prepare(`INSERT INTO presets (name, preset_type, tags, loras, prompt, negative_prompt, sampler, schedule_type, steps, cfg_scale, model_name, clip_skip, vae, type_id, is_bundled) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	for _, f := range files {
+		for _, p := range f.Presets {
+			if p.Name == "" {
+				continue
+			}
+			presetType := p.TypeName
+			if presetType == "" {
+				presetType = p.PresetType
+			}
+			var typeID *int64
+			if id, ok := typeCache[presetType]; ok {
+				typeID = &id
+			}
+			if _, err := stmt.Exec(p.Name, presetType, p.Tags, p.Loras, p.Prompt, p.NegativePrompt, p.Sampler, p.ScheduleType, p.Steps, p.CfgScale, p.ModelName, p.ClipSkip, p.VAE, typeID); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+func migrateV22(db *sql.DB) error {
 	_, err := db.Exec("UPDATE hires_profiles SET upscaler = 'R-ESRGAN 4x+' WHERE upscaler = 'Latent'")
+	return err
+}
+
+func migrateV23(db *sql.DB) error {
+	_, err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS job_queue (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			type TEXT NOT NULL,
+			status TEXT NOT NULL DEFAULT 'pending',
+			params TEXT NOT NULL DEFAULT '{}',
+			progress REAL NOT NULL DEFAULT 0,
+			progress_detail TEXT NOT NULL DEFAULT '{}',
+			result TEXT NOT NULL DEFAULT '',
+			error TEXT NOT NULL DEFAULT '',
+			source TEXT NOT NULL DEFAULT '',
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			started_at DATETIME,
+			completed_at DATETIME
+		);
+		CREATE INDEX IF NOT EXISTS idx_job_queue_status ON job_queue(status)
+	`)
+	return err
+}
+
+func migrateV24(db *sql.DB) error {
+	cols := []struct {
+		name string
+		typ  string
+	}{
+		{"retry_count", "INTEGER NOT NULL DEFAULT 0"},
+		{"max_retries", "INTEGER NOT NULL DEFAULT 3"},
+		{"next_retry_at", "DATETIME"},
+	}
+	for _, col := range cols {
+		if err := addColumnIfNotExists(db, "job_queue", col.name, col.typ); err != nil {
+			return err
+		}
+	}
+	_, err := db.Exec(`CREATE INDEX IF NOT EXISTS idx_job_queue_next_retry ON job_queue(next_retry_at) WHERE status = 'pending' AND next_retry_at IS NOT NULL`)
+	return err
+}
+
+func migrateV25(db *sql.DB) error {
+	_, err := db.Exec(`UPDATE hires_profiles SET upscale = 3.0, denoising_strength = 0.6 WHERE name = 'Max' AND is_builtin = 1`)
 	return err
 }

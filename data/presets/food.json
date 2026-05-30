@@ -4,7 +4,7 @@
   "presets": [
     {
       "name": "Gourmet Plate (photon_v1)",
-      "preset_type": "style",
+      "preset_type": "food",
       "type_name": "food",
       "prompt": "masterpiece, best quality, gourmet food photography, plated dish, restaurant quality, steam rising, garnish, shallow depth of field, professional food styling, warm lighting, cookbook photo, appetizing",
       "negative_prompt": "(worst quality, low quality:1.4), blurry, messy, dirty, unappetizing, raw meat, spoiled, plastic looking, artificial colors, text, watermark, cartoon, anime",
@@ -18,13 +18,12 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "food, gourmet, plate, restaurant",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.6},{\"name\":\"HDR_Photography\",\"weight\":0.5}]"
     },
     {
       "name": "Bakery Sweets (photon_v1)",
-      "preset_type": "style",
+      "preset_type": "food",
       "type_name": "food",
       "prompt": "masterpiece, best quality, bakery sweets photography, pastries, cakes, rustic wooden table, flour dust, morning light, artisan bread, croissants, cozy bakery atmosphere, food magazine",
       "negative_prompt": "(worst quality, low quality:1.4), blurry, messy, dirty, unappetizing, raw meat, spoiled, plastic looking, artificial colors, text, watermark, cartoon, anime",
@@ -38,13 +37,12 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "food, bakery, sweets, pastry",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.5},{\"name\":\"HDR_Photography\",\"weight\":0.5}]"
     },
     {
       "name": "Coffee Art (juggernautXL)",
-      "preset_type": "style",
+      "preset_type": "food",
       "type_name": "food",
       "prompt": "masterpiece, best quality, latte art photography, cappuccino, coffee cup, latte art rosetta, coffee beans scattered, warm cafe lighting, bokeh, artisan coffee, cafe atmosphere, professional barista",
       "negative_prompt": "(worst quality, low quality:1.4), blurry, messy, dirty, unappetizing, raw meat, spoiled, plastic looking, artificial colors, text, watermark, cartoon, anime",
@@ -58,13 +56,12 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "food, coffee, latte, art",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.5},{\"name\":\"HDR_Photography\",\"weight\":0.6}]"
     },
     {
       "name": "Fresh Ingredients (juggernautXL)",
-      "preset_type": "style",
+      "preset_type": "food",
       "type_name": "food",
       "prompt": "masterpiece, best quality, fresh ingredients photography, colorful vegetables, herbs, rustic cutting board, natural light, farm to table, organic produce, food styling, vibrant colors, overhead shot",
       "negative_prompt": "(worst quality, low quality:1.4), blurry, messy, dirty, unappetizing, raw meat, spoiled, plastic looking, artificial colors, text, watermark, cartoon, anime",
@@ -78,7 +75,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "food, ingredients, fresh, organic",
       "loras": "[{\"name\":\"HDR_Photography\",\"weight\":0.6},{\"name\":\"add-detail-xl\",\"weight\":0.4}]"
     },
@@ -98,7 +94,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "food, street food, market, asian",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.5}]"
     },
@@ -118,7 +113,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "food, cocktail, bar, drinks",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.5}]"
     },
@@ -138,7 +132,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "food, BBQ, grill, smoke, outdoor",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.5}]"
     },
@@ -158,7 +151,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "food, breakfast, pancakes, coffee, morning",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.4}]"
     },
@@ -178,7 +170,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "food, japanese, sushi, sashimi, elegant",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.5}]"
     },
@@ -198,7 +189,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "food, flatlay, overhead, table setting, styled",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.5}]"
     },
@@ -218,7 +208,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "food, farm, organic, harvest, rustic",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.4}]"
     },
@@ -238,7 +227,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "food, dessert, pastry, chocolate, fine dining",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.5}]"
     }

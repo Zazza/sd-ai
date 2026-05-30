@@ -4,7 +4,7 @@
   "presets": [
     {
       "name": "Watercolor Landscape (dreamshaper_8)",
-      "preset_type": "positive",
+      "preset_type": "watercolor",
       "type_name": "watercolor",
       "prompt": "masterpiece, best quality, watercolor painting, landscape, soft washes, wet on wet technique, paper texture visible, bleeding colors, artistic watercolor, serene nature scene, light and airy",
       "negative_prompt": "(worst quality, low quality:1.4), photorealistic, 3d render, digital painting, oil painting, acrylic, marker, harsh lines, dark, gritty",
@@ -18,13 +18,12 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "watercolor, landscape, painting, art",
       "loras": "[{\"name\":\"watercolor_v1_sdxl\",\"weight\":0.8}]"
     },
     {
       "name": "Watercolor Botanical (revAnimated)",
-      "preset_type": "positive",
+      "preset_type": "watercolor",
       "type_name": "watercolor",
       "prompt": "masterpiece, best quality, watercolor botanical illustration, detailed flowers, leaves, scientific illustration style, white background, delicate color washes, naturalistic, vintage botanical art",
       "negative_prompt": "(worst quality, low quality:1.4), photorealistic, 3d render, digital painting, oil painting, acrylic, marker, harsh lines, dark, gritty",
@@ -38,13 +37,12 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "watercolor, botanical, flowers, art",
       "loras": "[{\"name\":\"watercolor_v1_sdxl\",\"weight\":0.7}]"
     },
     {
       "name": "Vibrant Watercolor XL (juggernautXL)",
-      "preset_type": "positive",
+      "preset_type": "watercolor",
       "type_name": "watercolor",
       "prompt": "masterpiece, best quality, vibrant watercolor painting, bold colors, wet on wet, color blooms, artistic splatter, expressive brushwork, abstract watercolor, vivid hues, painterly",
       "negative_prompt": "(worst quality, low quality:1.4), photorealistic, 3d render, digital painting, oil painting, acrylic, marker, harsh lines, dark, gritty",
@@ -58,13 +56,12 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "watercolor, vibrant, expressive, painting",
       "loras": "[{\"name\":\"watercolor_v1_sdxl\",\"weight\":0.8}]"
     },
     {
       "name": "Soft Wash Illustration (dreamshaper_8)",
-      "preset_type": "positive",
+      "preset_type": "watercolor",
       "type_name": "watercolor",
       "prompt": "masterpiece, best quality, soft watercolor illustration, gentle washes, pastel tones, dreamy atmosphere, light wash, muted colors, delicate brush strokes, whimsical scene, children book art",
       "negative_prompt": "(worst quality, low quality:1.4), photorealistic, 3d render, digital painting, oil painting, acrylic, marker, harsh lines, dark, gritty",
@@ -78,7 +75,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "watercolor, soft, illustration, whimsical",
       "loras": "[{\"name\":\"watercolor_v1_sdxl\",\"weight\":0.7}]"
     },
@@ -98,7 +94,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "watercolor, portrait, wet on wet, artistic",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.4}]"
     },
@@ -118,7 +113,6 @@
       "clip_skip": 2,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "watercolor, cityscape, urban, sketch",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.4}]"
     },
@@ -138,7 +132,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "watercolor, animal, bird, splatter",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.4}]"
     },
@@ -158,7 +151,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "watercolor, abstract, contemporary, experimental",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.3}]"
     },
@@ -178,7 +170,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "watercolor, still life, flowers, fruit",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.4}]"
     },
@@ -198,7 +189,6 @@
       "clip_skip": 2,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "watercolor, seascape, waves, beach",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.4}]"
     },
@@ -218,7 +208,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "watercolor, oriental, ink wash, zen",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.3}]"
     },
@@ -238,7 +227,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "watercolor, impressionist, monet, garden",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.4}]"
     }

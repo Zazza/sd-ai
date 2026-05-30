@@ -16,14 +16,11 @@ type Preset struct {
 	ClipSkip               *int     `json:"clip_skip"`
 	BatchSize              *int     `json:"batch_size"`
 	BatchCount             *int     `json:"batch_count"`
-	HiresFix               *bool    `json:"hires_fix"`
-	HiresUpscale           *float64 `json:"hires_upscale"`
-	HiresDenoisingStrength *float64 `json:"hires_denoising_strength"`
-	HiresUpscaler          string   `json:"hires_upscaler"`
 	VAE                    string   `json:"vae"`
 	TypeID                 *int64   `json:"type_id"`
 	Tags                   string   `json:"tags"`
 	Loras                  string   `json:"loras"`
+	IsBundled              bool     `json:"is_bundled"`
 	CreatedAt              string   `json:"created_at"`
 	UpdatedAt              string   `json:"updated_at"`
 }
@@ -34,6 +31,14 @@ type PresetType struct {
 	Description string `json:"description"`
 	SortOrder   int    `json:"sort_order"`
 	CreatedAt   string `json:"created_at"`
+}
+
+type PresetInstallStatus struct {
+	ID          int64    `json:"id"`
+	Name        string   `json:"name"`
+	Installed   bool     `json:"installed"`
+	MissingSD   []string `json:"missing_sd"`
+	MissingLoRA []string `json:"missing_lora"`
 }
 
 type LoRAEntry struct {

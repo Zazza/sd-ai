@@ -33,6 +33,10 @@ func (m *mockLLM) Chat(_, _, _ string, _ float64, _ int) (string, error) {
 	return m.prompt, m.err
 }
 
+func (m *mockLLM) ChatJSON(_, _, _ string, _ float64, _ int) (string, error) {
+	return m.prompt, m.err
+}
+
 func (m *mockLLM) ChatVision(_, _, _, _ string, _ float64, _ int) (string, error) {
 	return m.prompt, m.err
 }
@@ -691,8 +695,7 @@ func TestGenerateImage_WithScheduleType(t *testing.T) {
 func TestGenerateImage_HiresFixDefaults(t *testing.T) {
 	t.Parallel()
 	db := openTestDB(t)
-	hf := true
-	p := &preset.Preset{Name: "gen", Prompt: "p", Sampler: "Euler a", Steps: 20, CfgScale: 7, HiresFix: &hf}
+	p := &preset.Preset{Name: "gen", Prompt: "p", Sampler: "Euler a", Steps: 20, CfgScale: 7}
 	require.NoError(t, db.Create(p))
 
 	sdClient := &mockSD{
@@ -1156,25 +1159,6 @@ func TestWriteError_Format(t *testing.T) {
 	err = json.NewDecoder(resp.Body).Decode(&m)
 	require.NoError(t, err)
 	assert.Equal(t, "something went wrong", m["error"])
-}
-
-func TestWriteHTML_ContentType(t *testing.T) {
-	t.Parallel()
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		writeHTML(w, "<h1>Hello</h1>")
-	})
-	ts := httptest.NewServer(handler)
-	defer ts.Close()
-
-	resp, err := http.Get(ts.URL + "/")
-	require.NoError(t, err)
-	defer resp.Body.Close()
-
-	assert.Equal(t, "text/html; charset=utf-8", resp.Header.Get("Content-Type"))
-	assert.Equal(t, http.StatusOK, resp.StatusCode)
-
-	body, _ := io.ReadAll(resp.Body)
-	assert.Equal(t, "<h1>Hello</h1>", string(body))
 }
 
 func TestMain(m *testing.M) {

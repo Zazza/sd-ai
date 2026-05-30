@@ -4,7 +4,7 @@
   "presets": [
     {
       "name": "Runway Editorial (realisticVisionV60B1)",
-      "preset_type": "style",
+      "preset_type": "fashion",
       "type_name": "fashion",
       "prompt": "masterpiece, best quality, haute couture runway, fashion model, designer dress, dramatic pose, studio lighting, vogue editorial, luxury fashion, catwalk, high fashion photography",
       "negative_prompt": "(worst quality, low quality:1.4), deformed, bad anatomy, bad hands, missing fingers, extra digit, blurry, watermark, text, amateur, low class",
@@ -18,13 +18,12 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "fashion, runway, editorial, haute-couture",
       "loras": "[{\"name\":\"Shiny_Satin_Ribboned_Puffy_Dress\",\"weight\":0.6},{\"name\":\"add-detail-xl\",\"weight\":0.5}]"
     },
     {
       "name": "Street Fashion (realisticVisionV60B1)",
-      "preset_type": "style",
+      "preset_type": "fashion",
       "type_name": "fashion",
       "prompt": "masterpiece, best quality, street fashion photography, urban setting, stylish outfit, candid pose, natural lighting, city background, fashion blog style, trendy, casual chic",
       "negative_prompt": "(worst quality, low quality:1.4), deformed, bad anatomy, bad hands, missing fingers, extra digit, blurry, watermark, text, amateur, low class",
@@ -38,13 +37,12 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "fashion, street, urban, casual",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.5},{\"name\":\"Shiny_Satin_Ribboned_Puffy_Dress\",\"weight\":0.4}]"
     },
     {
       "name": "Portrait Beauty (realismByStableYogi_pony)",
-      "preset_type": "style",
+      "preset_type": "fashion",
       "type_name": "fashion",
       "prompt": "score_9, score_8_up, score_7_up, masterpiece, best quality, fashion portrait beauty shot, close-up face, professional makeup, perfect skin, studio lighting, beauty editorial, magazine cover, glamorous, detailed hair",
       "negative_prompt": "(worst quality, low quality:1.4), deformed, bad anatomy, bad hands, missing fingers, extra digit, blurry, watermark, text, amateur, low class",
@@ -58,13 +56,12 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "fashion, portrait, beauty, editorial",
       "loras": "[{\"name\":\"Shiny_Satin_Ribboned_Puffy_Dress\",\"weight\":0.5},{\"name\":\"add-detail-xl\",\"weight\":0.5}]"
     },
     {
       "name": "Cinematic Lookbook (photon_v1)",
-      "preset_type": "style",
+      "preset_type": "fashion",
       "type_name": "fashion",
       "prompt": "masterpiece, best quality, cinematic fashion lookbook, dramatic lighting, flowing fabric, elegant pose, moody atmosphere, film grain, designer clothing, editorial photography, shallow depth of field",
       "negative_prompt": "(worst quality, low quality:1.4), deformed, bad anatomy, bad hands, missing fingers, extra digit, blurry, watermark, text, amateur, low class",
@@ -78,13 +75,12 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "fashion, cinematic, lookbook, moody",
       "loras": "[{\"name\":\"Shiny_Satin_Ribboned_Puffy_Dress\",\"weight\":0.5},{\"name\":\"add-detail-xl\",\"weight\":0.5}]"
     },
     {
       "name": "Fantasy Couture (photon_v1)",
-      "preset_type": "style",
+      "preset_type": "fashion",
       "type_name": "fashion",
       "prompt": "masterpiece, best quality, fantasy fashion couture, elaborate costume, magical setting, ethereal lighting, ornate details, runway fantasy, avant-garde fashion, dreamlike atmosphere, theatrical",
       "negative_prompt": "(worst quality, low quality:1.4), deformed, bad anatomy, bad hands, missing fingers, extra digit, blurry, watermark, text, amateur, low class",
@@ -98,13 +94,12 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "fashion, fantasy, couture, avant-garde",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.6},{\"name\":\"Shiny_Satin_Ribboned_Puffy_Dress\",\"weight\":0.7}]"
     },
     {
       "name": "Elegant Illustration (realismByStableYogi_pony)",
-      "preset_type": "style",
+      "preset_type": "fashion",
       "type_name": "fashion",
       "prompt": "score_9, score_8_up, score_7_up, masterpiece, best quality, fashion illustration, elegant dress, artistic style, detailed fabric, sophisticated design, haute couture sketch, stylish model pose, refined color palette",
       "negative_prompt": "(worst quality, low quality:1.4), deformed, bad anatomy, bad hands, missing fingers, extra digit, blurry, watermark, text, amateur, low class",
@@ -118,7 +113,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "fashion, illustration, elegant, couture",
       "loras": "[{\"name\":\"Shiny_Satin_Ribboned_Puffy_Dress\",\"weight\":0.5},{\"name\":\"add-detail-xl\",\"weight\":0.5}]"
     },
@@ -138,7 +132,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "fashion, vintage, retro, classic",
       "loras": "[{\"name\":\"closeupface-v1\",\"weight\":0.5},{\"name\":\"add-detail-xl\",\"weight\":0.5}]"
     },
@@ -158,7 +151,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "fashion, haute couture, avant-garde, runway",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.5}]"
     },
@@ -178,7 +170,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "fashion, streetwear, urban, casual",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.5}]"
     },
@@ -198,7 +189,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "fashion, swimwear, beach, summer",
       "loras": "[{\"name\":\"closeupface-v1\",\"weight\":0.5},{\"name\":\"add-detail-xl\",\"weight\":0.4}]"
     },
@@ -218,7 +208,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "fashion, sportswear, athletic, active",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.4}]"
     },
@@ -238,7 +227,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "fashion, accessories, jewelry, detail",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.6}]"
     }

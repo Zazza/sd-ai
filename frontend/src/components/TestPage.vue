@@ -9,6 +9,13 @@ import HiresProfileSelector from './HiresProfileSelector.vue'
 
 const shared = inject('sharedGenState', null)
 
+const props = defineProps({
+  externalPrompt: { type: String, default: '' },
+  hidePromptInput: { type: Boolean, default: false },
+})
+
+const effectivePrompt = computed(() => props.externalPrompt || prompt.value)
+
 const mode = ref('presets')
 const presets = ref([])
 const models = ref([])
@@ -30,7 +37,10 @@ const height = ref(512)
 const generating = ref(false)
 const { sdProgress, interrupt: interruptGeneration, reset: resetProgress } = useGenerationProgress()
 const error = ref('')
-const progress = ref(null)
+const compareTotal = ref(0)
+const compareCompleted = ref(0)
+const compareStarted = ref(0)
+const compareJobIds = ref(new Set())
 const results = ref([])
 const selectedResolutionId = ref(null)
 const selectedHiresProfileId = ref(null)
@@ -110,33 +120,27 @@ async function generate() {
     error.value = t('test.error_select_item')
     return
   }
-  if (!prompt.value.trim()) {
+  if (!effectivePrompt.value.trim()) {
     error.value = t('test.error_prompt_required')
     return
   }
 
   generating.value = true
   error.value = ''
-  progress.value = null
   results.value = []
   resetProgress()
+  compareTotal.value = selectedItems.value.length
+  compareCompleted.value = 0
+  compareStarted.value = 0
+  compareJobIds.value = new Set()
 
   try {
-    let res
-    if (mode.value === 'compounds') {
-      res = await api.testCompoundGenerate({
-        selected_ids: selectedCompoundIds.value,
-        prompt: prompt.value,
-        negative_prompt: negativePrompt.value,
-        resolution_id: selectedResolutionId.value,
-        hires_profile_id: selectedHiresProfileId.value,
-      })
-    } else {
-      res = await api.testGenerate({
+    for (let i = 0; i < selectedItems.value.length; i++) {
+      const params = {
         mode: mode.value,
-        selected_ids: mode.value === 'presets' ? selectedPresetIds.value : [],
-        selected_models: mode.value === 'models' ? selectedModelNames.value : [],
-        prompt: prompt.value,
+        selected_ids: mode.value === 'presets' ? [selectedPresetIds.value[i]] : mode.value === 'compounds' ? [selectedCompoundIds.value[i]] : [],
+        selected_models: mode.value === 'models' ? [selectedModelNames.value[i]] : [],
+        prompt: effectivePrompt.value,
         negative_prompt: negativePrompt.value,
         sampler: showAdvanced.value ? sampler.value : '',
         schedule_type: showAdvanced.value ? scheduleType.value : '',
@@ -146,13 +150,47 @@ async function generate() {
         height: showAdvanced.value ? height.value : 0,
         resolution_id: selectedResolutionId.value,
         hires_profile_id: selectedHiresProfileId.value,
-      })
+      }
+      const jobId = await api.enqueueCompareItem(params, i)
+      compareJobIds.value.add(jobId)
     }
-    results.value = res || []
+    error.value = ''
   } catch (e) {
     error.value = String(e)
-  } finally {
     generating.value = false
+  }
+}
+
+async function enqueueCompare() {
+  if (selectedItems.value.length === 0) {
+    error.value = t('test.error_select_item')
+    return
+  }
+  if (!effectivePrompt.value.trim()) {
+    error.value = t('test.error_prompt_required')
+    return
+  }
+
+  try {
+    for (let i = 0; i < selectedItems.value.length; i++) {
+      const params = {
+        mode: mode.value,
+        selected_ids: mode.value === 'presets' ? [selectedPresetIds.value[i]] : mode.value === 'compounds' ? [selectedCompoundIds.value[i]] : [],
+        selected_models: mode.value === 'models' ? [selectedModelNames.value[i]] : [],
+        prompt: effectivePrompt.value,
+        negative_prompt: negativePrompt.value,
+        sampler: showAdvanced.value ? sampler.value : '',
+        schedule_type: showAdvanced.value ? scheduleType.value : '',
+        steps: showAdvanced.value ? steps.value : 0,
+        cfg_scale: showAdvanced.value ? cfgScale.value : 0,
+        width: showAdvanced.value ? width.value : 0,
+        height: showAdvanced.value ? height.value : 0,
+      }
+      await api.enqueueCompareItem(params, i)
+    }
+    error.value = ''
+  } catch (e) {
+    error.value = String(e)
   }
 }
 
@@ -165,13 +203,67 @@ async function downloadImage(imageBase64, name) {
   }
 }
 
-function onProgress(data) {
-  progress.value = data
+function onQueueStarted(data) {
+  if (!data) return
+  if (compareJobIds.value.size > 0 && compareJobIds.value.has(data.job_id)) {
+    compareStarted.value++
+  }
+}
+
+function onQueueCompleted(data) {
+  if (!data) return
+
+  if (compareJobIds.value.size > 0 && compareJobIds.value.has(data.job_id)) {
+    compareCompleted.value++
+
+    if (data.result) {
+      try {
+        const r = typeof data.result === 'string' ? JSON.parse(data.result) : data.result
+        if (r.image_base64) {
+          let name = '', seed = '', modelName = ''
+          if (r.info) {
+            try {
+              const items = typeof r.info === 'string' ? JSON.parse(r.info) : r.info
+              if (Array.isArray(items) && items.length > 0) {
+                name = items[0].name || ''
+                seed = items[0].seed || ''
+                modelName = items[0].model_name || ''
+              }
+            } catch {}
+          }
+          results.value.push({ image: r.image_base64, name, seed, model_name: modelName })
+        }
+      } catch {}
+    }
+
+    if (compareTotal.value > 0 && compareCompleted.value >= compareTotal.value) {
+      generating.value = false
+      compareJobIds.value.clear()
+    }
+    return
+  }
+}
+
+function onQueueFailed(data) {
+  if (!data) return
+
+  if (compareJobIds.value.size > 0 && compareJobIds.value.has(data.job_id)) {
+    compareCompleted.value++
+    if (data.error) error.value = data.error
+
+    if (compareTotal.value > 0 && compareCompleted.value >= compareTotal.value) {
+      generating.value = false
+      compareJobIds.value.clear()
+    }
+    return
+  }
 }
 
 onMounted(async () => {
   loadData()
-  EventsOn('test:progress', onProgress)
+  EventsOn('queue:started', onQueueStarted)
+  EventsOn('queue:completed', onQueueCompleted)
+  EventsOn('queue:failed', onQueueFailed)
   if (shared) {
     if (!prompt.value) prompt.value = shared.description || ''
     if (!negativePrompt.value) negativePrompt.value = shared.negative || ''
@@ -197,7 +289,9 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
-  EventsOff('test:progress')
+  EventsOff('queue:started')
+  EventsOff('queue:completed')
+  EventsOff('queue:failed')
   saveTestState()
   if (shared) {
     if (prompt.value) shared.description = prompt.value
@@ -256,8 +350,8 @@ function saveTestState() {
           {{ t('test.selected_count', { count: selectedItems.length }) }}
         </label>
         <div style="display: flex; gap: 6px;">
-          <button class="btn btn-sm btn-secondary" @click="selectAll" :disabled="generating">{{ t('test.btn_all') }}</button>
-          <button class="btn btn-sm btn-secondary" @click="deselectAll" :disabled="generating">{{ t('test.btn_none') }}</button>
+          <button class="btn btn-sm btn-secondary" @click="selectAll">{{ t('test.btn_all') }}</button>
+          <button class="btn btn-sm btn-secondary" @click="deselectAll">{{ t('test.btn_none') }}</button>
         </div>
       </div>
 
@@ -287,14 +381,14 @@ function saveTestState() {
         </template>
       </div>
 
-      <div class="form-group" style="margin-top: 16px;">
+      <div v-if="!hidePromptInput" class="form-group" style="margin-top: 16px;">
         <label class="form-label">{{ t('test.label_prompt') }}</label>
-        <textarea class="form-textarea" v-model="prompt" rows="3" :placeholder="t('test.placeholder_prompt')" :disabled="generating"></textarea>
+        <textarea class="form-textarea" v-model="prompt" rows="3" :placeholder="t('test.placeholder_prompt')"></textarea>
       </div>
 
-      <div class="form-group">
+      <div v-if="!hidePromptInput" class="form-group">
         <label class="form-label">{{ t('test.label_negative') }}</label>
-        <textarea class="form-textarea" v-model="negativePrompt" rows="2" :placeholder="t('test.placeholder_negative')" :disabled="generating"></textarea>
+        <textarea class="form-textarea" v-model="negativePrompt" rows="2" :placeholder="t('test.placeholder_negative')"></textarea>
       </div>
 
       <div v-if="mode !== 'compounds'" style="margin-bottom: 12px;">
@@ -306,53 +400,46 @@ function saveTestState() {
       <div v-if="showAdvanced && mode !== 'compounds'" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px;">
         <div class="form-group">
           <label class="form-label">{{ t('test.label_sampler') }}</label>
-          <select class="form-select" v-model="sampler" :disabled="generating">
+          <select class="form-select" v-model="sampler">
             <option value="">{{ t('test.default') }}</option>
             <option v-for="s in samplers" :key="s.name" :value="s.name">{{ s.name }}</option>
           </select>
         </div>
         <div class="form-group">
           <label class="form-label">{{ t('test.label_schedule') }}</label>
-          <select class="form-select" v-model="scheduleType" :disabled="generating">
+          <select class="form-select" v-model="scheduleType">
             <option value="">{{ t('test.default') }}</option>
             <option v-for="s in schedulers" :key="s.name" :value="s.name">{{ s.label || s.name }}</option>
           </select>
         </div>
         <div class="form-group">
-          <label class="form-label">{{ t('test.label_width') }}</label>
-          <input class="form-input" type="number" v-model.number="width" min="64" max="2048" step="64" :disabled="generating" />
-        </div>
-        <div class="form-group">
-          <label class="form-label">{{ t('test.label_height') }}</label>
-          <input class="form-input" type="number" v-model.number="height" min="64" max="2048" step="64" :disabled="generating" />
-        </div>
-        <div class="form-group">
           <label class="form-label">{{ t('test.label_steps') }}</label>
-          <input class="form-input" type="number" v-model.number="steps" min="1" max="150" :disabled="generating" />
+          <input class="form-input" type="number" v-model.number="steps" min="1" max="150" />
         </div>
         <div class="form-group">
           <label class="form-label">{{ t('test.label_cfg') }}</label>
-          <input class="form-input" type="number" v-model.number="cfgScale" min="1" max="30" step="0.5" :disabled="generating" />
+          <input class="form-input" type="number" v-model.number="cfgScale" min="1" max="30" step="0.5" />
         </div>
       </div>
 
       <ResolutionSelector v-model="selectedResolutionId" />
       <HiresProfileSelector v-model="selectedHiresProfileId" />
 
-      <div v-if="generating && progress" style="margin-bottom: 12px;">
+      <div v-if="generating && compareTotal > 0" style="margin-bottom: 12px;">
         <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-          <span style="color: var(--text-dim); font-size: 12px;">{{ progress.current }} / {{ progress.total }}</span>
-          <span style="color: var(--text-dim); font-size: 12px;">{{ progress.status }}</span>
+          <span style="color: var(--text-dim); font-size: 12px;">{{ compareCompleted }} / {{ compareTotal }}</span>
+          <span style="color: var(--text-dim); font-size: 12px;">{{ compareCompleted < compareTotal ? 'generating' : 'done' }}</span>
         </div>
         <div style="background: var(--surface-2); border-radius: 4px; overflow: hidden; height: 4px;">
-          <div :style="{ width: (progress.total ? (progress.current / progress.total * 100) : 0) + '%', background: 'var(--accent)', height: '100%', transition: 'width 0.3s' }"></div>
+          <div :style="{ width: (compareTotal ? (compareCompleted / compareTotal * 100) : 0) + '%', background: 'var(--accent)', height: '100%', transition: 'width 0.3s' }"></div>
         </div>
       </div>
 
-      <button class="btn btn-primary" style="width: 100%; justify-content: center; padding: 12px;" @click="generate" :disabled="generating || selectedItems.length === 0 || !prompt.trim()">
+      <button class="btn btn-primary" style="width: 100%; justify-content: center; padding: 12px;" @click="generate" :disabled="selectedItems.length === 0 || !effectivePrompt.trim()">
+
         <span v-if="generating" style="display: inline-flex; align-items: center; gap: 6px;">
           <span class="spinner" style="width: 14px; height: 14px; border-width: 2px;"></span>
-          Generating {{ progress ? `${progress.current}/${progress.total}` : '...' }}
+          Generating {{ compareTotal > 0 ? `${compareStarted}/${compareTotal}` : '...' }}
         </span>
         <span v-else>Generate ({{ selectedItems.length }} items)</span>
       </button>
@@ -450,7 +537,7 @@ function saveTestState() {
 }
 .test-result-error {
   padding: 16px;
-  color: var(--error, #e55);
+  color: var(--danger);
   font-size: 13px;
 }
 </style>

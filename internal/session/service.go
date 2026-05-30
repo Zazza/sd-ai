@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"image"
 	"image/jpeg"
+	"image/png"
 	"io"
 	"math"
 	"os"
@@ -102,12 +103,12 @@ func (s *Service) AddToSession(imageBase64 string, info json.RawMessage, source 
 	os.MkdirAll(sessionDir, 0o755)
 	os.MkdirAll(thumbDir, 0o755)
 
-	fileName := strconv.FormatInt(itemID, 10) + ".jpg"
+	fileName := strconv.FormatInt(itemID, 10) + ".png"
 	filePath := filepath.Join(sessionDir, fileName)
 
 	f, err := os.Create(filePath)
 	if err == nil {
-		jpeg.Encode(f, img, &jpeg.Options{Quality: 95})
+		png.Encode(f, img)
 		f.Close()
 	}
 

@@ -10,8 +10,10 @@ import (
 	"image/png"
 	"math/rand"
 	"strings"
+	"unicode/utf8"
 
 	"go-sd/internal/preset"
+	"go-sd/internal/promptutil"
 	"go-sd/internal/rembg"
 	"go-sd/internal/sd"
 )
@@ -29,6 +31,8 @@ type RembgClient interface {
 
 type PresetGetter interface {
 	Get(id int64) (*preset.Preset, error)
+	GetResolution(id int64) (*preset.Resolution, error)
+	GetHiresProfile(id int64) (*preset.HiresProfile, error)
 }
 
 type ProgressEmitter func(progress MultiPassProgress)
@@ -59,6 +63,30 @@ func (c *Compositor) GenerateScene(scene Scene) (*MultiPassResult, error) {
 	if scene.Width < 64 || scene.Width > 2048 || scene.Height < 64 || scene.Height > 2048 {
 		return nil, fmt.Errorf("invalid dimensions %dx%d (must be 64-2048)", scene.Width, scene.Height)
 	}
+
+	if scene.ResolutionID != nil && *scene.ResolutionID > 0 {
+		if r, err := c.presets.GetResolution(*scene.ResolutionID); err == nil {
+			scene.Width = r.Width
+			scene.Height = r.Height
+		}
+	}
+
+	hiresEnabled := false
+	var hiresUpscale float64
+	var hiresDenoise float64
+	hiresUpscaler := ""
+	if scene.HiresProfileID != nil && *scene.HiresProfileID > 0 {
+		if h, err := c.presets.GetHiresProfile(*scene.HiresProfileID); err == nil {
+			hiresEnabled = true
+			hiresUpscale = h.Upscale
+			hiresDenoise = h.DenoisingStrength
+			hiresUpscaler = h.Upscaler
+			if hiresUpscaler == "" {
+				hiresUpscaler = "R-ESRGAN 4x+"
+			}
+		}
+	}
+
 	for _, ch := range scene.Characters {
 		if len(ch.Prompt) > 2000 {
 			return nil, fmt.Errorf("character %q prompt too long (max 2000 chars)", ch.Name)
@@ -103,6 +131,12 @@ func (c *Compositor) GenerateScene(scene Scene) (*MultiPassResult, error) {
 	}
 
 	bgReq := buildTxt2ImgRequest(p, bgPrompt, bgNeg, scene.Width, scene.Height)
+	if hiresEnabled {
+		bgReq.HiresFix = &hiresEnabled
+		bgReq.HiresUpscale = &hiresUpscale
+		bgReq.HiresDenoisingStrength = &hiresDenoise
+		bgReq.HiresUpscaler = hiresUpscaler
+	}
 	bgResp, err := c.sd.Txt2Img(bgReq)
 	if err != nil {
 		return nil, fmt.Errorf("background generation failed: %w", err)
@@ -214,20 +248,35 @@ func (c *Compositor) GenerateScene(scene Scene) (*MultiPassResult, error) {
 		return nil, fmt.Errorf("encode composite: %w", err)
 	}
 
-	refinePrompt := extractStyleTags(p.Prompt) + ", " + scene.BackgroundPrompt
+	refinePrompt := buildRefinePrompt(scene, stylePrefix)
 	refineNeg := p.NegativePrompt
 	if scene.NegativePrompt != "" {
 		refineNeg = scene.NegativePrompt + ", " + p.NegativePrompt
 	}
 
 	denoise := 0.35
+	if scene.RefineDenoise > 0 {
+		denoise = scene.RefineDenoise
+	}
+	if denoise < 0.1 {
+		denoise = 0.1
+	}
+	if denoise > 0.8 {
+		denoise = 0.8
+	}
+
+	refineSteps := p.Steps
+	if refineSteps > 15 {
+		refineSteps = 15
+	}
+
 	refineReq := sd.Img2ImgRequest{
 		InitImages:        []string{compositeBase64},
 		Prompt:            refinePrompt,
 		NegativePrompt:    refineNeg,
-		SamplerName:       buildSamplerName(p),
+		SamplerName:       promptutil.BuildSamplerName(p.Sampler, p.ScheduleType),
 		Scheduler:         p.ScheduleType,
-		Steps:             p.Steps,
+		Steps:             refineSteps,
 		CfgScale:          p.CfgScale,
 		Width:             scene.Width,
 		Height:            scene.Height,
@@ -255,6 +304,38 @@ func (c *Compositor) GenerateScene(scene Scene) (*MultiPassResult, error) {
 	return result, nil
 }
 
+func positionLabel(x float64) string {
+	if x < 0.33 {
+		return "on the left"
+	}
+	if x > 0.66 {
+		return "on the right"
+	}
+	return "in the center"
+}
+
+func truncatePrompt(s string, maxRunes int) string {
+	if utf8.RuneCountInString(s) <= maxRunes {
+		return s
+	}
+	runes := []rune(s)
+	return string(runes[:maxRunes])
+}
+
+func buildRefinePrompt(scene Scene, stylePrefix string) string {
+	if scene.RefinePrompt != "" {
+		return scene.RefinePrompt
+	}
+
+	parts := []string{stylePrefix, scene.BackgroundPrompt}
+	for _, ch := range scene.Characters {
+		label := positionLabel(ch.Position.X)
+		truncated := truncatePrompt(ch.Prompt, 80)
+		parts = append(parts, fmt.Sprintf("character %s %s: %s", label, ch.Name, truncated))
+	}
+	return strings.Join(parts, ", ")
+}
+
 func DecomposeSceneFromJSON(jsonStr string) (*Scene, error) {
 	jsonStr = strings.TrimSpace(jsonStr)
 	jsonStr = extractJSON(jsonStr)
@@ -271,10 +352,19 @@ func DecomposeSceneFromJSON(jsonStr string) (*Scene, error) {
 			scene.Characters[i].Scale = 0.4
 		}
 	}
+	if scene.RefineDenoise <= 0 {
+		scene.RefineDenoise = 0.35
+	}
 	return &scene, nil
 }
 
 func extractJSON(s string) string {
+	s = strings.TrimSpace(s)
+	s = strings.TrimPrefix(s, "```json")
+	s = strings.TrimPrefix(s, "```")
+	s = strings.TrimSuffix(s, "```")
+	s = strings.TrimSpace(s)
+
 	start := strings.Index(s, "{")
 	end := strings.LastIndex(s, "}")
 	if start >= 0 && end > start {
@@ -338,15 +428,6 @@ func extractStyleTags(prompt string) string {
 	return strings.Join(style, ", ")
 }
 
-func buildSamplerName(p *preset.Preset) string {
-	samplerName := p.Sampler
-	if p.ScheduleType != "" {
-		st := strings.ToUpper(p.ScheduleType[:1]) + p.ScheduleType[1:]
-		samplerName = p.Sampler + " " + st
-	}
-	return samplerName
-}
-
 func buildClipSkip(p *preset.Preset) *int {
 	clipSkip := 1
 	if p.ClipSkip != nil {
@@ -359,7 +440,7 @@ func buildTxt2ImgRequestWithSeed(p *preset.Preset, prompt, negativePrompt string
 	return sd.Txt2ImgRequest{
 		Prompt:                 prompt,
 		NegativePrompt:         negativePrompt,
-		SamplerName:            buildSamplerName(p),
+		SamplerName:            promptutil.BuildSamplerName(p.Sampler, p.ScheduleType),
 		Scheduler:              p.ScheduleType,
 		Steps:                  p.Steps,
 		CfgScale:               p.CfgScale,

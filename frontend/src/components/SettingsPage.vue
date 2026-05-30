@@ -10,6 +10,7 @@ const props = defineProps({
 })
 
 const activeTab = ref(props.initialTab || 'connection')
+watch(() => props.initialTab, (tab) => { if (tab) activeTab.value = tab })
 
 const defaultURLs = {
   lmstudio: 'http://localhost:1234',
@@ -23,12 +24,37 @@ const backendLabel = {
   llamacpp: 'llama.cpp',
 }
 
+// --- Connection mode ---
+const connectionMode = ref('direct')
+const serverURL = ref('')
+
+// --- Server discovery & status ---
+const discoveredServers = ref([])
+const discovering = ref(false)
+const serverStatus = ref(null)
+
+// --- Server models ---
+const serverModels = reactive({ sd: [], lora: [], vae: [], llm: [] })
+const serverModelsLoading = reactive({ sd: false, lora: false, vae: false, llm: false })
+const serverModelDownload = reactive({ type: 'sd', url: '', filename: '' })
+const llmPullName = ref('')
+const modelActionLoading = reactive({})
+const processActionLoading = reactive({})
+const visibleLogs = reactive({})
+const processLogs = reactive({})
+const utilitiesExpanded = ref(false)
+const activeDownload = reactive({ type: '', name: '', progress: '' })
+
+// --- Model catalog ---
+const modelCatalog = ref(null)
+
+// --- Direct mode forms ---
 const connectionForm = reactive({
   llm_url: '',
   sd_url: '',
   llm_backend: 'lmstudio',
   llm_keep_alive: '5m',
-  llm_num_gpu: '0',
+  llm_num_gpu: '-1',
   llm_max_tokens: '256',
 })
 const connectionSaved = ref(false)
@@ -120,7 +146,7 @@ async function loadSettings() {
     connectionForm.sd_url = settings.sd_url || ''
     connectionForm.llm_backend = settings.llm_backend || 'lmstudio'
     connectionForm.llm_keep_alive = settings.llm_keep_alive || '5m'
-    connectionForm.llm_num_gpu = settings.llm_num_gpu || '0'
+    connectionForm.llm_num_gpu = settings.llm_num_gpu || '-1'
     connectionForm.llm_max_tokens = settings.llm_max_tokens || '256'
     generateModel.value = settings.llm_generate_model || settings.sd_prompt_model || ''
     analyzeModel.value = settings.llm_analyze_model || settings.vision_model || ''
@@ -142,6 +168,11 @@ async function loadSettings() {
     generationForm.preview_height = parseInt(settings.preview_height) || 512
     promptInstruction.value = settings.sd_prompt_instruction || ''
     rembgForm.rembg_url = settings.rembg_url || ''
+    connectionMode.value = settings.connection_mode || 'direct'
+    serverURL.value = settings.server_url || ''
+    if (connectionMode.value === 'server' && serverURL.value) {
+      loadServerStatus()
+    }
   } catch (e) {
     console.error('loadSettings:', e)
   }
@@ -185,6 +216,14 @@ async function loadSettings() {
       analyzeChainPrompts[i] = defaultAnalyzePrompts.value.chain_prompts[i] || ''
     }
   }
+
+  // Load model catalog
+  try {
+    modelCatalog.value = await api.getModelCatalog()
+  } catch (e) {
+    console.error('getModelCatalog:', e)
+    modelCatalogError.value = String(e)
+  }
 }
 
 async function loadConnectionLLMModels() {
@@ -204,6 +243,7 @@ async function saveConnection() {
   connectionError.value = ''
   try {
     await api.updateSettings({
+      connection_mode: connectionMode.value,
       llm_url: connectionForm.llm_url,
       sd_url: connectionForm.sd_url,
       llm_backend: connectionForm.llm_backend,
@@ -217,6 +257,224 @@ async function saveConnection() {
   } catch (e) {
     connectionError.value = String(e)
   }
+}
+
+// --- Server mode functions ---
+
+async function discoverServers() {
+  discovering.value = true
+  discoveredServers.value = []
+  try {
+    discoveredServers.value = await api.discoverServers() || []
+  } catch (e) {
+    console.error('discoverServers:', e)
+  } finally {
+    discovering.value = false
+  }
+}
+
+async function selectServer(server) {
+  const url = `http://${server.ip_address}:${server.port}`
+  serverURL.value = url
+  await loadServerStatus()
+}
+
+async function loadServerStatus() {
+  if (!serverURL.value) return
+  try {
+    await api.updateSettings({ connection_mode: 'server', server_url: serverURL.value })
+    serverStatus.value = await api.getServerStatus()
+    loadServerModels()
+  } catch (e) {
+    console.error('loadServerStatus:', e)
+  }
+}
+
+async function startProcess(name) {
+  processActionLoading[name] = true
+  try {
+    await api.startServerProcess(name)
+    pollServerStatus()
+  } catch (e) {
+    alert('Start failed: ' + e)
+    await loadServerStatus()
+  } finally {
+    delete processActionLoading[name]
+  }
+}
+
+async function stopProcess(name) {
+  processActionLoading[name] = true
+  try {
+    await api.stopServerProcess(name)
+    pollServerStatus()
+  } catch (e) {
+    alert('Stop failed: ' + e)
+    await loadServerStatus()
+  } finally {
+    delete processActionLoading[name]
+  }
+}
+
+async function restartProcess(name) {
+  processActionLoading[name] = true
+  try {
+    await api.restartServerProcess(name)
+    pollServerStatus()
+  } catch (e) {
+    alert('Restart failed: ' + e)
+    await loadServerStatus()
+  } finally {
+    delete processActionLoading[name]
+  }
+}
+
+function pollServerStatus(interval = 2000, count = 10) {
+  let i = 0
+  const timer = setInterval(async () => {
+    i++
+    try { await loadServerStatus() } catch {}
+    if (i >= count) clearInterval(timer)
+  }, interval)
+}
+
+async function showProcessLogs(name) {
+  if (visibleLogs[name]) {
+    visibleLogs[name] = false
+    return
+  }
+  try {
+    const resp = await fetch(`${serverURL.value}/api/server/logs/${name}?lines=50`)
+    const data = await resp.json()
+    processLogs[name] = data.logs || []
+  } catch {
+    processLogs[name] = ['Failed to load logs']
+  }
+  visibleLogs[name] = true
+}
+
+async function saveServerConnection() {
+  connectionSaved.value = false
+  connectionError.value = ''
+  try {
+    await api.updateSettings({
+      connection_mode: 'server',
+      server_url: serverURL.value,
+      llm_generate_model: generateModel.value,
+      llm_analyze_model: analyzeModel.value,
+      llm_num_gpu: String(parseInt(connectionForm.llm_num_gpu) || -1),
+    })
+    connectionSaved.value = true
+    await loadServerStatus()
+  } catch (e) {
+    connectionError.value = String(e)
+  }
+}
+
+async function loadServerModels() {
+  for (const type of ['sd', 'lora', 'vae']) {
+    serverModelsLoading[type] = true
+    try {
+      serverModels[type] = await api.getServerModels(type) || []
+    } catch { serverModels[type] = [] }
+    finally { serverModelsLoading[type] = false }
+  }
+  serverModelsLoading.llm = true
+  try {
+    serverModels.llm = await api.getServerLLMModels() || []
+  } catch { serverModels.llm = [] }
+  finally { serverModelsLoading.llm = false }
+}
+
+function isCatalogInstalled(type, name) {
+  if (type === 'llm') return serverModels.llm.some(i => i.name === name)
+  return serverModels[type].some(i => i.name === name + '.safetensors')
+}
+
+async function downloadModel(type, url, filename) {
+  const key = `dl_${type}`
+  modelActionLoading[key] = true
+  activeDownload.type = type
+  activeDownload.name = filename
+  activeDownload.progress = 'Starting download...'
+  try {
+    if (serverURL.value) {
+      await api.downloadServerModelStream(serverURL.value, type, url, filename, (line) => {
+        activeDownload.progress = line
+      })
+    } else {
+      await api.downloadServerModel(type, url, filename)
+    }
+    await loadServerModels()
+  } catch (e) {
+    alert('Download failed: ' + e)
+  } finally {
+    delete modelActionLoading[key]
+    activeDownload.type = ''
+    activeDownload.name = ''
+    activeDownload.progress = ''
+  }
+}
+
+async function deleteModel(type, filename) {
+  if (!confirm(`Delete ${filename}?`)) return
+  const key = `del_${type}_${filename}`
+  modelActionLoading[key] = true
+  try {
+    await api.deleteServerModel(type, filename)
+    await loadServerModels()
+  } catch (e) {
+    alert('Delete failed: ' + e)
+  } finally {
+    delete modelActionLoading[key]
+  }
+}
+
+async function pullLLM(name) {
+  if (!name) return
+  modelActionLoading['pull_llm'] = true
+  activeDownload.type = 'llm'
+  activeDownload.name = name
+  activeDownload.progress = 'Starting pull...'
+  try {
+    if (serverURL.value) {
+      await api.pullServerLLMModelStream(serverURL.value, name, (line) => {
+        activeDownload.progress = line
+      })
+    } else {
+      await api.pullServerLLMModel(name)
+    }
+    llmPullName.value = ''
+    await loadServerModels()
+  } catch (e) {
+    alert('Pull failed: ' + e)
+  } finally {
+    delete modelActionLoading['pull_llm']
+    activeDownload.type = ''
+    activeDownload.name = ''
+    activeDownload.progress = ''
+  }
+}
+
+async function deleteLLMModel(name) {
+  if (!confirm(`Delete ${name}?`)) return
+  modelActionLoading[`del_llm_${name}`] = true
+  try {
+    await api.deleteServerLLMModel(name)
+    await loadServerModels()
+  } catch (e) {
+    alert('Delete failed: ' + e)
+  } finally {
+    delete modelActionLoading[`del_llm_${name}`]
+  }
+}
+
+function formatBytes(bytes) {
+  if (bytes === 0) return '0 B'
+  const k = 1024
+  const sizes = ['B', 'KB', 'MB', 'GB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
 }
 
 async function saveLLMParams() {
@@ -432,6 +690,7 @@ onMounted(loadSettings)
       <button class="tab" :class="{ active: activeTab === 'analyze' }" @click="switchTab('analyze')">{{ t('settings.tab_analyze') }}</button>
       <button class="tab" :class="{ active: activeTab === 'safety' }" @click="switchTab('safety')">{{ t('settings.tab_safety') }}</button>
       <button class="tab" :class="{ active: activeTab === 'advanced' }" @click="switchTab('advanced')">{{ t('settings.tab_advanced') }}</button>
+      <button v-if="connectionMode === 'server'" class="tab" :class="{ active: activeTab === 'catalog' }" @click="activeTab = 'catalog'">{{ t('settings.tab_catalog') }}</button>
     </div>
 
     <!-- Connection Tab -->
@@ -439,97 +698,223 @@ onMounted(loadSettings)
       <div v-if="connectionSaved" class="status status-success" style="margin-bottom: 16px;">{{ t('settings.saved_immediate') }}</div>
       <div v-if="connectionError" class="status status-error" style="margin-bottom: 16px;">{{ connectionError }}</div>
 
+      <!-- Mode Selector -->
       <div class="form-group">
-        <label class="form-label">{{ t('settings.label_llm_backend') }}</label>
-        <select class="form-input" v-model="connectionForm.llm_backend">
-          <option value="lmstudio">LM Studio</option>
-          <option value="ollama">Ollama</option>
-          <option value="llamacpp">llama.cpp</option>
-        </select>
-      </div>
-
-      <div class="form-group">
-        <label class="form-label">{{ t('settings.label_llm_url') }}</label>
-        <input class="form-input" v-model="connectionForm.llm_url" :placeholder="defaultURLs[connectionForm.llm_backend]" />
-      </div>
-
-      <div class="form-group" v-if="connectionForm.llm_backend !== 'llamacpp'">
-        <label class="form-label">{{ t('settings.label_model_generate') }}</label>
+        <label class="form-label">{{ t('settings.label_connection_mode') }}</label>
         <div style="display: flex; gap: 8px;">
-          <select class="form-input" v-model="generateModel" style="flex: 1;">
-            <option value="">default</option>
-            <option v-for="m in connectionLLMModels" :key="m.id" :value="m.id">{{ m.id }}</option>
-          </select>
-          <button class="btn btn-secondary btn-sm" @click="loadConnectionLLMModels" :disabled="connectionLLMLoading">
-            {{ connectionLLMLoading ? '...' : 'Refresh' }}
-          </button>
+          <button class="btn" :class="connectionMode === 'direct' ? 'btn-primary' : 'btn-secondary'" @click="connectionMode = 'direct'">{{ t('settings.mode_direct') }}</button>
+          <button class="btn" :class="connectionMode === 'server' ? 'btn-primary' : 'btn-secondary'" @click="connectionMode = 'server'">{{ t('settings.mode_server') }}</button>
         </div>
       </div>
 
-      <div class="form-group" v-if="connectionForm.llm_backend !== 'llamacpp'">
-        <label class="form-label">{{ t('settings.label_model_analyze') }}</label>
-        <div style="display: flex; gap: 8px;">
-          <select class="form-input" v-model="analyzeModel" style="flex: 1;">
+      <!-- Direct Mode -->
+      <template v-if="connectionMode === 'direct'">
+        <div class="form-group">
+          <label class="form-label">{{ t('settings.label_llm_backend') }}</label>
+          <select class="form-input" v-model="connectionForm.llm_backend">
+            <option value="lmstudio">LM Studio</option>
+            <option value="ollama">Ollama</option>
+            <option value="llamacpp">llama.cpp</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">{{ t('settings.label_llm_url') }}</label>
+          <input class="form-input" v-model="connectionForm.llm_url" :placeholder="defaultURLs[connectionForm.llm_backend]" />
+        </div>
+
+        <div class="form-group" v-if="connectionForm.llm_backend !== 'llamacpp'">
+          <label class="form-label">{{ t('settings.label_model_generate') }}</label>
+          <div style="display: flex; gap: 8px;">
+            <select class="form-input" v-model="generateModel" style="flex: 1;">
+              <option value="">default</option>
+              <option v-for="m in connectionLLMModels" :key="m.id" :value="m.id">{{ m.id }}</option>
+            </select>
+            <button class="btn btn-secondary btn-sm" @click="loadConnectionLLMModels" :disabled="connectionLLMLoading">
+              {{ connectionLLMLoading ? '...' : 'Refresh' }}
+            </button>
+          </div>
+        </div>
+
+        <div class="form-group" v-if="connectionForm.llm_backend !== 'llamacpp'">
+          <label class="form-label">{{ t('settings.label_model_analyze') }}</label>
+          <div style="display: flex; gap: 8px;">
+            <select class="form-input" v-model="analyzeModel" style="flex: 1;">
+              <option value="">{{ t('settings.same_as_generate') }}</option>
+              <option v-for="m in connectionLLMModels" :key="m.id" :value="m.id">{{ m.id }}</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group" v-if="connectionForm.llm_backend === 'llamacpp'">
+          <div style="color: var(--text-dim); font-size: 13px; padding: 8px; background: var(--surface-2); border-radius: 6px;">
+            {{ t('settings.llamacpp_single_model') }}
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">{{ t('settings.label_max_tokens') }}</label>
+          <input class="form-input" type="number" v-model="connectionForm.llm_max_tokens" placeholder="256" min="64" max="8192" />
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">{{ t('settings.label_sd_url') }}</label>
+          <input class="form-input" v-model="connectionForm.sd_url" placeholder="http://localhost:7860" />
+        </div>
+
+        <!-- Ollama-specific -->
+        <template v-if="connectionForm.llm_backend === 'ollama'">
+          <div class="form-group">
+            <label class="form-label">{{ t('settings.label_keep_alive') }}</label>
+            <input class="form-input" v-model="connectionForm.llm_keep_alive" placeholder="5m" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">{{ t('settings.label_gpu_layers') }}</label>
+            <input class="form-input" type="number" v-model="connectionForm.llm_num_gpu" placeholder="0" />
+          </div>
+        </template>
+
+        <!-- llama.cpp-specific -->
+        <template v-if="connectionForm.llm_backend === 'llamacpp'">
+          <div class="form-group">
+            <label class="form-label">{{ t('settings.label_gpu_layers') }}</label>
+            <input class="form-input" type="number" v-model="connectionForm.llm_num_gpu" placeholder="0" />
+          </div>
+        </template>
+
+        <button class="btn btn-primary" @click="saveConnection">{{ t('settings.btn_save_connection') }}</button>
+      </template>
+
+      <!-- Server Mode -->
+      <template v-if="connectionMode === 'server'">
+        <div class="form-group">
+          <label class="form-label">{{ t('settings.label_server_url') }}</label>
+          <div style="display: flex; gap: 8px;">
+            <input class="form-input" v-model="serverURL" placeholder="http://192.168.1.100:8080" style="flex: 1;" />
+            <button class="btn btn-secondary btn-sm" @click="discoverServers" :disabled="discovering">
+              {{ discovering ? t('settings.btn_discovering') : t('settings.btn_discover') }}
+            </button>
+          </div>
+        </div>
+
+        <!-- Discovered Servers -->
+        <div v-if="discoveredServers.length > 0" style="margin-bottom: 16px;">
+          <div v-for="srv in discoveredServers" :key="srv.ip_address + ':' + srv.port"
+            @click="selectServer(srv)"
+            style="padding: 10px 12px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 6px; margin-bottom: 6px; cursor: pointer; transition: border-color 0.15s;"
+            @mouseenter="$event.target.style.borderColor = 'var(--accent)'"
+            @mouseleave="$event.target.style.borderColor = 'var(--border)'"
+          >
+            <div style="color: var(--text-bright); font-size: 13px; font-weight: 500;">{{ srv.name || 'SD Studio Server' }}</div>
+            <div style="color: var(--text-dim); font-size: 12px;">{{ srv.ip_address }}:{{ srv.port }}</div>
+          </div>
+        </div>
+        <div v-else-if="discovering" style="color: var(--text-dim); font-size: 13px; margin-bottom: 16px; text-align: center;">
+          <span class="spinner"></span> {{ t('settings.btn_discovering') }}
+        </div>
+
+        <!-- Server Status -->
+        <div v-if="serverStatus" style="margin-bottom: 16px; padding: 12px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 6px;">
+          <div style="color: var(--text-bright); font-weight: 500; margin-bottom: 8px;">{{ t('settings.section_server_status') }}</div>
+          <!-- Services -->
+          <div v-for="(proc, name) in serverStatus.processes" :key="name" v-show="proc.name && proc.category !== 'utility'" style="padding: 6px 0; border-bottom: 1px solid var(--border);">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <div>
+                <span style="color: var(--text-bright); font-size: 13px;">{{ proc.name || name }}</span>
+                <span :style="{ color: proc.status === 'running' ? '#4ade80' : proc.status === 'starting' ? '#fbbf24' : '#f87171', marginLeft: '8px', fontSize: '12px' }">
+                  {{ proc.status === 'running' ? t('settings.process_running') : proc.status === 'starting' ? 'Starting...' : proc.status === 'crashed' ? 'Crashed' : t('settings.process_stopped') }}
+                </span>
+                <span v-if="proc.pid" style="color: var(--text-dim); font-size: 11px; margin-left: 6px;">PID {{ proc.pid }}</span>
+                <span v-if="proc.uptime" style="color: var(--text-dim); font-size: 11px; margin-left: 6px;">{{ proc.uptime }}</span>
+                <span v-if="proc.restarts > 0" style="color: #fbbf24; font-size: 11px; margin-left: 6px;">restarts: {{ proc.restarts }}</span>
+              </div>
+              <div style="display: flex; gap: 6px;">
+                <button v-if="proc.status !== 'running' && proc.status !== 'starting'" class="btn btn-primary btn-sm" @click="startProcess(name)" :disabled="processActionLoading[name]">{{ t('settings.btn_start') || 'Start' }}</button>
+                <button v-if="proc.status === 'running'" class="btn btn-secondary btn-sm" @click="stopProcess(name)" :disabled="processActionLoading[name]">{{ t('settings.btn_stop') || 'Stop' }}</button>
+                <button v-if="proc.status === 'running'" class="btn btn-secondary btn-sm" @click="restartProcess(name)" :disabled="processActionLoading[name]">{{ t('settings.btn_restart') || 'Restart' }}</button>
+                <button class="btn btn-secondary btn-sm" @click="showProcessLogs(name)">Logs</button>
+              </div>
+            </div>
+            <div v-if="visibleLogs[name]" style="margin-top: 6px; padding: 8px; background: var(--bg-dark); border-radius: 4px; max-height: 200px; overflow-y: auto; font-family: monospace; font-size: 11px; color: var(--text-dim);">
+              <div v-if="processLogs[name] && processLogs[name].length > 0">
+                <div v-for="(line, i) in processLogs[name]" :key="i">{{ line }}</div>
+              </div>
+              <div v-else style="color: var(--text-dim);">No logs available</div>
+            </div>
+          </div>
+          <!-- GPU -->
+          <div v-if="serverStatus.gpu && serverStatus.gpu.available" style="margin-top: 8px; font-size: 12px; color: var(--text-dim);">
+            {{ t('settings.gpu_vram', { name: serverStatus.gpu.name, used: serverStatus.gpu.memory_used_mb, total: serverStatus.gpu.memory_total_mb }) }}
+          </div>
+          <!-- Utilities (collapsed) -->
+          <div v-if="Object.values(serverStatus.processes).some(p => p.category === 'utility' && p.name)" style="margin-top: 12px; border-top: 1px solid var(--border); padding-top: 8px;">
+            <div @click="utilitiesExpanded = !utilitiesExpanded" style="cursor: pointer; color: var(--text-dim); font-size: 12px; font-weight: 500; display: flex; align-items: center; gap: 4px;">
+              <span :style="{ transform: utilitiesExpanded ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.15s', display: 'inline-block', fontSize: '10px' }">&#9654;</span>
+              {{ t('settings.section_utilities') }}
+            </div>
+            <div v-if="utilitiesExpanded">
+              <div v-for="(proc, name) in serverStatus.processes" :key="'u-'+name" v-show="proc.name && proc.category === 'utility' && name !== 'python'" style="padding: 6px 0; border-bottom: 1px solid var(--border);">
+                <div>
+                  <span style="color: var(--text-bright); font-size: 13px;">{{ proc.name || name }}</span>
+                  <span v-if="serverStatus.installs && serverStatus.installs[name]" :style="{ color: serverStatus.installs[name].installed ? '#4ade80' : '#f87171', marginLeft: '8px', fontSize: '11px', padding: '1px 6px', borderRadius: '3px', background: serverStatus.installs[name].installed ? 'rgba(74,222,128,0.1)' : 'rgba(248,113,113,0.1)' }">
+                    {{ serverStatus.installs[name].installed ? t('settings.installed') : t('settings.not_installed') }}
+                  </span>
+                  <span v-if="serverStatus.installs && serverStatus.installs[name] && serverStatus.installs[name].version" style="color: var(--text-dim); font-size: 11px; margin-left: 6px;">v{{ serverStatus.installs[name].version }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Server LLM Model selection -->
+        <div class="form-group" v-if="serverModels.llm.length > 0" style="margin-top: 16px;">
+          <label class="form-label">{{ t('settings.label_model_generate') }}</label>
+          <div style="display: flex; gap: 8px;">
+            <select class="form-input" v-model="generateModel" style="flex: 1;">
+              <option value="">default</option>
+              <option v-for="m in serverModels.llm" :key="m.name" :value="m.name">{{ m.name }}</option>
+            </select>
+            <button class="btn btn-secondary btn-sm" @click="loadServerModels" :disabled="serverModelsLoading.llm">
+              {{ serverModelsLoading.llm ? '...' : 'Refresh' }}
+            </button>
+          </div>
+        </div>
+
+        <div class="form-group" v-if="serverModels.llm.length > 0">
+          <label class="form-label">{{ t('settings.label_model_analyze') }}</label>
+          <select class="form-input" v-model="analyzeModel">
             <option value="">{{ t('settings.same_as_generate') }}</option>
-            <option v-for="m in connectionLLMModels" :key="m.id" :value="m.id">{{ m.id }}</option>
+            <option v-for="m in serverModels.llm" :key="m.name" :value="m.name">{{ m.name }}</option>
           </select>
         </div>
-      </div>
 
-      <div class="form-group" v-if="connectionForm.llm_backend === 'llamacpp'">
-        <div style="color: var(--text-dim); font-size: 13px; padding: 8px; background: var(--surface-2); border-radius: 6px;">
-          {{ t('settings.llamacpp_single_model') }}
-        </div>
-      </div>
-
-      <div class="form-group">
-        <label class="form-label">{{ t('settings.label_max_tokens') }}</label>
-        <input class="form-input" type="number" v-model="connectionForm.llm_max_tokens" placeholder="256" min="64" max="8192" />
-      </div>
-
-      <div class="form-group">
-        <label class="form-label">{{ t('settings.label_sd_url') }}</label>
-        <input class="form-input" v-model="connectionForm.sd_url" placeholder="http://localhost:7860" />
-      </div>
-
-      <!-- Ollama-specific -->
-      <template v-if="connectionForm.llm_backend === 'ollama'">
-        <div class="form-group">
-          <label class="form-label">{{ t('settings.label_keep_alive') }}</label>
-          <input class="form-input" v-model="connectionForm.llm_keep_alive" placeholder="5m" />
-        </div>
-        <div class="form-group">
+        <div class="form-group" style="margin-top: 16px;">
           <label class="form-label">{{ t('settings.label_gpu_layers') }}</label>
-          <input class="form-input" type="number" v-model="connectionForm.llm_num_gpu" placeholder="0" />
+          <input class="form-input" type="number" v-model="connectionForm.llm_num_gpu" placeholder="-1" min="-1" max="999" />
         </div>
+
+        <button class="btn btn-primary" @click="saveServerConnection">{{ t('settings.btn_save_server') }}</button>
       </template>
 
-      <!-- llama.cpp-specific -->
-      <template v-if="connectionForm.llm_backend === 'llamacpp'">
-        <div class="form-group">
-          <label class="form-label">{{ t('settings.label_gpu_layers') }}</label>
-          <input class="form-input" type="number" v-model="connectionForm.llm_num_gpu" placeholder="0" />
-        </div>
-      </template>
-
-      <button class="btn btn-primary" @click="saveConnection">{{ t('settings.btn_save_connection') }}</button>
-
+      <!-- Rembg section (shared) -->
       <div class="card" style="margin-top: 24px;">
         <h3 style="color: var(--text-bright); margin-bottom: 16px;">{{ t('settings.section_rembg') }}</h3>
         <div v-if="rembgSaved" class="status status-success" style="margin-bottom: 16px;">{{ t('settings.rembg_saved') }}</div>
         <div v-if="rembgError" class="status status-error" style="margin-bottom: 16px;">{{ rembgError }}</div>
 
-        <div style="color: var(--text-dim); font-size: 13px; margin-bottom: 12px; line-height: 1.5;">
-          {{ t('settings.rembg_description') }}
-          <code style="background: var(--surface-2); padding: 2px 6px; border-radius: 4px; font-size: 12px;">rembg s --host 0.0.0.0 --port 7000</code>
-          <br>{{ t('settings.rembg_required') }}
-        </div>
+        <template v-if="connectionMode === 'direct'">
+          <div style="color: var(--text-dim); font-size: 13px; margin-bottom: 12px; line-height: 1.5;">
+            {{ t('settings.rembg_description') }}
+            <code style="background: var(--surface-2); padding: 2px 6px; border-radius: 4px; font-size: 12px;">rembg s --host 0.0.0.0 --port 7000</code>
+            <br>{{ t('settings.rembg_required') }}
+          </div>
+        </template>
 
         <div class="form-group">
           <label class="form-label">{{ t('settings.label_rembg_url') }}</label>
           <div style="display: flex; gap: 8px;">
-            <input class="form-input" v-model="rembgForm.rembg_url" placeholder="http://192.168.1.100:7000" style="flex: 1;" />
-            <button class="btn btn-secondary btn-sm" @click="testRembg" :disabled="rembgTesting || !rembgForm.rembg_url">
+            <input class="form-input" v-model="rembgForm.rembg_url" :placeholder="connectionMode === 'server' ? 'Auto-configured via server' : 'http://192.168.1.100:7000'" :disabled="connectionMode === 'server'" style="flex: 1;" />
+            <button v-if="connectionMode === 'direct'" class="btn btn-secondary btn-sm" @click="testRembg" :disabled="rembgTesting || !rembgForm.rembg_url">
               {{ rembgTesting ? t('settings.btn_testing') : t('settings.btn_test') }}
             </button>
           </div>
@@ -542,14 +927,15 @@ onMounted(loadSettings)
           {{ t('settings.rembg_error') }}
         </div>
 
-        <div v-if="!rembgForm.rembg_url" style="color: var(--text-dim); font-size: 12px; padding: 8px; background: var(--surface-2); border-radius: 6px; margin-bottom: 12px;">
+        <div v-if="connectionMode === 'direct' && !rembgForm.rembg_url" style="color: var(--text-dim); font-size: 12px; padding: 8px; background: var(--surface-2); border-radius: 6px; margin-bottom: 12px;">
           {{ t('settings.rembg_no_url') }}
         </div>
 
-        <button class="btn btn-primary" @click="saveRembg">{{ t('settings.btn_save_rembg') }}</button>
+        <button v-if="connectionMode === 'direct'" class="btn btn-primary" @click="saveRembg">{{ t('settings.btn_save_rembg') }}</button>
       </div>
 
-      <div class="card" style="margin-top: 24px;">
+      <!-- LLM Models (direct mode only) -->
+      <div v-if="connectionMode === 'direct'" class="card" style="margin-top: 24px;">
         <h3 style="color: var(--text-bright); margin-bottom: 16px;">{{ t('settings.section_llm_models') }}</h3>
         <div v-if="llmError" class="status status-error" style="margin-bottom: 8px;">{{ llmError }}</div>
         <div v-if="llmLoading" style="text-align: center; padding: 20px;"><span class="spinner"></span></div>
@@ -563,6 +949,7 @@ onMounted(loadSettings)
         </button>
       </div>
 
+      <!-- LLM Parameters (shared) -->
       <div class="card" style="margin-top: 16px;">
         <h3 style="color: var(--text-bright); margin-bottom: 16px;">{{ t('settings.section_llm_params') }}</h3>
         <div v-if="llmParamsSaved" class="status status-success" style="margin-bottom: 16px;">{{ t('settings.params_saved') }}</div>
@@ -770,38 +1157,196 @@ onMounted(loadSettings)
       </div>
     </div>
 
-    <!-- Advanced Tab (SD Models + Rembg) -->
+    <!-- Advanced Tab — changes in server mode -->
     <div v-if="activeTab === 'advanced'">
-      <div v-if="sdError" class="status status-error">{{ sdError }}</div>
-
-      <div class="form-row-2">
-        <div class="card">
-          <h3 style="color: var(--text-bright); margin-bottom: 16px;">{{ t('settings.section_sd_models') }}</h3>
-          <div v-if="sdLoading" style="text-align: center; padding: 20px;"><span class="spinner"></span></div>
-          <div v-else-if="sdModels.length === 0" style="color: var(--text-dim);">{{ t('settings.no_models_loaded') }}</div>
-          <div v-for="m in sdModels" :key="m.model_name" style="padding: 8px 0; border-bottom: 1px solid var(--border);">
-            <div style="color: var(--text-bright); font-size: 13px;">{{ m.title }}</div>
-            <div style="color: var(--text-dim); font-size: 11px;">{{ m.model_name }}</div>
+      <!-- Direct mode: read-only SD models/LoRAs -->
+      <template v-if="connectionMode === 'direct'">
+        <div v-if="sdError" class="status status-error">{{ sdError }}</div>
+        <div class="form-row-2">
+          <div class="card">
+            <h3 style="color: var(--text-bright); margin-bottom: 16px;">{{ t('settings.section_sd_models') }}</h3>
+            <div v-if="sdLoading" style="text-align: center; padding: 20px;"><span class="spinner"></span></div>
+            <div v-else-if="sdModels.length === 0" style="color: var(--text-dim);">{{ t('settings.no_models_loaded') }}</div>
+            <div v-for="m in sdModels" :key="m.model_name" style="padding: 8px 0; border-bottom: 1px solid var(--border);">
+              <div style="color: var(--text-bright); font-size: 13px;">{{ m.title }}</div>
+              <div style="color: var(--text-dim); font-size: 11px;">{{ m.model_name }}</div>
+            </div>
+          </div>
+          <div class="card">
+            <h3 style="color: var(--text-bright); margin-bottom: 16px;">{{ t('settings.section_sd_lora') }}</h3>
+            <div v-if="sdLoading" style="text-align: center; padding: 20px;"><span class="spinner"></span></div>
+            <div v-else-if="sdLoRAs.length === 0" style="color: var(--text-dim);">{{ t('settings.no_lora') }}</div>
+            <div v-else style="display: flex; flex-wrap: wrap; gap: 6px;">
+              <span v-for="l in sdLoRAs" :key="l.name"
+                style="padding: 4px 10px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 4px; font-size: 12px; color: var(--text);"
+                :title="l.path">
+                {{ l.name }}
+              </span>
+            </div>
           </div>
         </div>
+        <button class="btn btn-secondary" style="margin-top: 16px;" @click="loadSD" :disabled="sdLoading">
+          {{ sdLoading ? t('settings.btn_loading') : t('settings.btn_refresh') }}
+        </button>
+      </template>
 
-        <div class="card">
-          <h3 style="color: var(--text-bright); margin-bottom: 16px;">{{ t('settings.section_sd_lora') }}</h3>
-          <div v-if="sdLoading" style="text-align: center; padding: 20px;"><span class="spinner"></span></div>
-          <div v-else-if="sdLoRAs.length === 0" style="color: var(--text-dim);">{{ t('settings.no_lora') }}</div>
-          <div v-else style="display: flex; flex-wrap: wrap; gap: 6px;">
-            <span v-for="l in sdLoRAs" :key="l.name"
-              style="padding: 4px 10px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 4px; font-size: 12px; color: var(--text);"
-              :title="l.path">
-              {{ l.name }}
-            </span>
+      <!-- Server mode: model management -->
+      <template v-if="connectionMode === 'server'">
+        <div v-if="!serverURL" style="color: var(--text-dim); padding: 20px; text-align: center;">{{ t('settings.server_not_configured') }}</div>
+        <template v-else>
+          <!-- SD Models -->
+          <div class="card" style="margin-bottom: 16px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+              <h3 style="color: var(--text-bright);">SD Models</h3>
+              <button class="btn btn-secondary btn-sm" @click="loadServerModels">Refresh</button>
+            </div>
+            <div v-if="serverModelsLoading.sd" style="text-align: center; padding: 20px;"><span class="spinner"></span></div>
+            <div v-else-if="serverModels.sd.length === 0" style="color: var(--text-dim);">No models</div>
+            <div v-for="m in serverModels.sd" :key="m.name" style="display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--border);">
+              <div>
+                <div style="color: var(--text-bright); font-size: 13px;">{{ m.name }}</div>
+                <div style="color: var(--text-dim); font-size: 11px;">{{ formatBytes(m.size) }}</div>
+              </div>
+              <button class="btn btn-secondary btn-sm" @click="deleteModel('sd', m.name)" :disabled="modelActionLoading[`del_sd_${m.name}`]">{{ t('settings.btn_delete_model') }}</button>
+            </div>
+            <!-- Download form -->
+            <div style="display: flex; gap: 8px; margin-top: 12px; align-items: flex-end;">
+              <div class="form-group" style="flex: 2; margin: 0;">
+                <input class="form-input" v-model="serverModelDownload.url" placeholder="Download URL" style="font-size: 12px;" />
+              </div>
+              <div class="form-group" style="flex: 1; margin: 0;">
+                <input class="form-input" v-model="serverModelDownload.filename" placeholder="filename.safetensors" style="font-size: 12px;" />
+              </div>
+              <button class="btn btn-primary btn-sm" @click="downloadModel('sd', serverModelDownload.url, serverModelDownload.filename)" :disabled="!serverModelDownload.url || !serverModelDownload.filename || modelActionLoading['dl_sd']">
+                {{ modelActionLoading['dl_sd'] ? t('settings.btn_downloading') : t('settings.btn_download_model') }}
+              </button>
+            </div>
+            <div v-if="activeDownload.progress && activeDownload.type === 'sd'" style="margin-top: 8px; padding: 6px 10px; background: var(--bg-dark); border-radius: 6px; color: var(--text-dim); font-size: 12px; font-family: monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+              {{ activeDownload.progress }}
+            </div>
           </div>
-        </div>
+
+          <!-- LoRA -->
+          <div class="card" style="margin-bottom: 16px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+              <h3 style="color: var(--text-bright);">LoRA</h3>
+            </div>
+            <div v-if="serverModelsLoading.lora" style="text-align: center; padding: 20px;"><span class="spinner"></span></div>
+            <div v-else-if="serverModels.lora.length === 0" style="color: var(--text-dim);">No LoRAs</div>
+            <div v-else style="display: flex; flex-wrap: wrap; gap: 6px;">
+              <span v-for="m in serverModels.lora" :key="m.name" style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 4px;">
+                <span style="font-size: 12px; color: var(--text);">{{ m.name }}</span>
+                <button style="background: none; border: none; color: #f87171; cursor: pointer; font-size: 12px; padding: 0 2px;" @click="deleteModel('lora', m.name)">&times;</button>
+              </span>
+            </div>
+          </div>
+
+          <!-- LLM Models -->
+          <div class="card">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+              <h3 style="color: var(--text-bright);">LLM Models (Ollama)</h3>
+            </div>
+            <div v-if="serverModelsLoading.llm" style="text-align: center; padding: 20px;"><span class="spinner"></span></div>
+            <div v-else-if="serverModels.llm.length === 0" style="color: var(--text-dim);">No models</div>
+            <div v-for="m in serverModels.llm" :key="m.name" style="display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--border);">
+              <span style="color: var(--text-bright); font-size: 13px;">{{ m.name }}</span>
+              <button class="btn btn-secondary btn-sm" @click="deleteLLMModel(m.name)" :disabled="modelActionLoading[`del_llm_${m.name}`]">{{ t('settings.btn_delete_model') }}</button>
+            </div>
+            <!-- Pull form -->
+            <div style="display: flex; gap: 8px; margin-top: 12px;">
+              <input class="form-input" v-model="llmPullName" placeholder="e.g. qwen3:8b" style="flex: 1; font-size: 12px;" :disabled="modelActionLoading['pull_llm']" />
+              <button class="btn btn-primary btn-sm" @click="pullLLM(llmPullName)" :disabled="!llmPullName || modelActionLoading['pull_llm']">
+                {{ modelActionLoading['pull_llm'] ? t('settings.btn_pulling') : t('settings.btn_pull_llm') }}
+              </button>
+            </div>
+            <div v-if="activeDownload.progress && activeDownload.type === 'llm'" style="margin-top: 8px; padding: 6px 10px; background: var(--bg-dark); border-radius: 6px; color: var(--text-dim); font-size: 12px; font-family: monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+              {{ activeDownload.progress }}
+            </div>
+          </div>
+        </template>
+      </template>
+    </div>
+
+    <!-- Catalog Tab (server mode only) -->
+    <div v-if="activeTab === 'catalog' && connectionMode === 'server'">
+      <div v-if="!modelCatalog" style="color: var(--text-dim); text-align: center; padding: 20px;">
+        <template v-if="modelCatalogError">Failed to load catalog: {{ modelCatalogError }}</template>
+        <template v-else>Loading catalog...</template>
       </div>
+      <template v-else>
+        <!-- LLM Generate -->
+        <div class="card" style="margin-bottom: 16px;">
+          <h3 style="color: var(--text-bright); margin-bottom: 12px;">LLM — Prompt Generation</h3>
+          <div v-for="m in modelCatalog.llm_generate" :key="m.name" style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border);">
+            <div>
+              <div style="color: var(--text-bright); font-size: 13px;">
+                {{ m.name }}
+                <span v-if="isCatalogInstalled('llm', m.name)" style="color: #4ade80; font-size: 11px; margin-left: 4px;">installed</span>
+                <span v-if="m.recommended" style="color: #fbbf24; font-size: 11px; margin-left: 6px;">{{ t('settings.recommended') }}</span>
+              </div>
+              <div style="color: var(--text-dim); font-size: 12px;">{{ m.description }} &mdash; {{ m.size_gb }} GB</div>
+            </div>
+            <span v-if="activeDownload.type === 'llm' && activeDownload.name === m.name" style="font-size: 11px; color: var(--text-dim); font-family: monospace; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ activeDownload.progress }}</span>
+            <button v-else-if="isCatalogInstalled('llm', m.name)" style="background: none; border: none; color: #f87171; cursor: pointer; font-size: 12px;" @click="deleteLLMModel(m.name)">Delete</button>
+            <button v-else class="btn btn-secondary btn-sm" @click="pullLLM(m.name)" :disabled="modelActionLoading['pull_llm']">{{ t('settings.btn_pull_llm') }}</button>
+          </div>
+        </div>
 
-      <button class="btn btn-secondary" style="margin-top: 16px;" @click="loadSD" :disabled="sdLoading">
-        {{ sdLoading ? t('settings.btn_loading') : t('settings.btn_refresh') }}
-      </button>
+        <!-- LLM Vision -->
+        <div class="card" style="margin-bottom: 16px;">
+          <h3 style="color: var(--text-bright); margin-bottom: 12px;">LLM — Image Analysis (Vision)</h3>
+          <div v-for="m in modelCatalog.llm_vision" :key="m.name" style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border);">
+            <div>
+              <div style="color: var(--text-bright); font-size: 13px;">
+                {{ m.name }}
+                <span v-if="isCatalogInstalled('llm', m.name)" style="color: #4ade80; font-size: 11px; margin-left: 4px;">installed</span>
+                <span v-if="m.recommended" style="color: #fbbf24; font-size: 11px; margin-left: 6px;">{{ t('settings.recommended') }}</span>
+              </div>
+              <div style="color: var(--text-dim); font-size: 12px;">{{ m.description }} &mdash; {{ m.size_gb }} GB</div>
+            </div>
+            <span v-if="activeDownload.type === 'llm' && activeDownload.name === m.name" style="font-size: 11px; color: var(--text-dim); font-family: monospace; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ activeDownload.progress }}</span>
+            <button v-else-if="isCatalogInstalled('llm', m.name)" style="background: none; border: none; color: #f87171; cursor: pointer; font-size: 12px;" @click="deleteLLMModel(m.name)">Delete</button>
+            <button v-else class="btn btn-secondary btn-sm" @click="pullLLM(m.name)" :disabled="modelActionLoading['pull_llm']">{{ t('settings.btn_pull_llm') }}</button>
+          </div>
+        </div>
+
+        <!-- SD Models -->
+        <div class="card" style="margin-bottom: 16px;">
+          <h3 style="color: var(--text-bright); margin-bottom: 12px;">SD Models</h3>
+          <div v-for="m in modelCatalog.sd_models" :key="m.name" style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border);">
+            <div>
+              <div style="color: var(--text-bright); font-size: 13px;">
+                {{ m.name }}
+                <span style="color: var(--text-dim); font-size: 11px; margin-left: 4px;">[{{ m.base }}]</span>
+                <span v-if="isCatalogInstalled('sd', m.name)" style="color: #4ade80; font-size: 11px; margin-left: 4px;">installed</span>
+                <span v-if="m.recommended" style="color: #fbbf24; font-size: 11px; margin-left: 6px;">{{ t('settings.recommended') }}</span>
+              </div>
+              <div style="color: var(--text-dim); font-size: 12px;">{{ m.category }} &mdash; {{ m.description }} &mdash; {{ m.size_gb }} GB</div>
+            </div>
+            <span v-if="activeDownload.type === 'sd' && activeDownload.name === m.name + '.safetensors'" style="font-size: 11px; color: var(--text-dim); font-family: monospace; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ activeDownload.progress }}</span>
+            <button v-else-if="isCatalogInstalled('sd', m.name)" style="background: none; border: none; color: #f87171; cursor: pointer; font-size: 12px;" @click="deleteModel('sd', m.name + '.safetensors')">Delete</button>
+            <button v-else-if="m.url" class="btn btn-secondary btn-sm" @click="downloadModel('sd', m.url, m.name + '.safetensors')" :disabled="modelActionLoading['dl_sd']">{{ t('settings.btn_download_model') }}</button>
+          </div>
+        </div>
+
+        <!-- LoRA -->
+        <div class="card">
+          <h3 style="color: var(--text-bright); margin-bottom: 12px;">LoRA</h3>
+          <div v-for="m in modelCatalog.lora" :key="m.name" style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border);">
+            <div>
+              <div style="color: var(--text-bright); font-size: 13px;">
+                {{ m.name }}
+                <span style="color: var(--text-dim); font-size: 11px; margin-left: 4px;">[{{ m.base }}]</span>
+                <span v-if="isCatalogInstalled('lora', m.name)" style="color: #4ade80; font-size: 11px; margin-left: 4px;">installed</span>
+              </div>
+              <div style="color: var(--text-dim); font-size: 12px;">{{ m.category }} &mdash; {{ m.description }} &mdash; {{ m.size_mb }} MB</div>
+            </div>
+            <span v-if="activeDownload.type === 'lora' && activeDownload.name === m.name + '.safetensors'" style="font-size: 11px; color: var(--text-dim); font-family: monospace; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ activeDownload.progress }}</span>
+            <button v-else-if="isCatalogInstalled('lora', m.name)" style="background: none; border: none; color: #f87171; cursor: pointer; font-size: 12px;" @click="deleteModel('lora', m.name + '.safetensors')">Delete</button>
+            <button v-else-if="m.url" class="btn btn-secondary btn-sm" @click="downloadModel('lora', m.url, m.name + '.safetensors')" :disabled="modelActionLoading['dl_lora']">{{ t('settings.btn_download_model') }}</button>
+          </div>
+        </div>
+      </template>
     </div>
 
     <PinModal v-if="showPinModal" :mode="pinMode" :error="pinError" @confirm="onPinConfirm" @cancel="onPinCancel" />

@@ -18,7 +18,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "mecha, robot, battle, gundam, cinematic",
       "loras": "[{\"name\":\"CyberPunkAI\",\"weight\":0.7},{\"name\":\"Dramatic Lighting Slider\",\"weight\":0.6}]"
     },
@@ -38,7 +37,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "mecha, hangar, garage, repair, industrial",
       "loras": "[{\"name\":\"CyberPunkAI\",\"weight\":0.5},{\"name\":\"Dramatic Lighting Slider\",\"weight\":0.5}]"
     },
@@ -58,7 +56,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "mecha, dark, ominous, heavy armor",
       "loras": "[{\"name\":\"Dramatic Lighting Slider\",\"weight\":0.7},{\"name\":\"CyberPunkAI\",\"weight\":0.6}]"
     },
@@ -78,7 +75,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "mecha, sleek, chrome, futuristic, clean",
       "loras": "[{\"name\":\"Dramatic Lighting Slider\",\"weight\":0.6},{\"name\":\"CyberPunkAI\",\"weight\":0.5}]"
     },
@@ -98,7 +94,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "mecha, scout, patrol, military, gritty",
       "loras": "[{\"name\":\"CyberPunkAI\",\"weight\":0.5},{\"name\":\"Dramatic Lighting Slider\",\"weight\":0.6}]"
     },
@@ -118,7 +113,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "mecha, duel, combat, dynamic, beam",
       "loras": "[{\"name\":\"Dramatic Lighting Slider\",\"weight\":0.7},{\"name\":\"CyberPunkAI\",\"weight\":0.5}]"
     },
@@ -138,7 +132,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "mecha, real robot, military, gundam, tactical",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.6}]"
     },
@@ -158,7 +151,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "mecha, super robot, heroic, colorful, dynamic",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.5}]"
     },
@@ -178,7 +170,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "mecha, workshop, repair, industrial, mechanics",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.5}]"
     },
@@ -198,7 +189,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "mecha, transforming, vehicle, mechanical, shifting",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.5}]"
     },
@@ -218,7 +208,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "mecha, steampunk, brass, victorian, gears",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.5}]"
     },
@@ -238,7 +227,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "mecha, arena, battle, stadium, combat",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.5}]"
     }

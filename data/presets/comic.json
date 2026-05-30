@@ -18,7 +18,6 @@
       "clip_skip": 2,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "comic, superhero, action, bold",
       "loras": "[{\"name\":\"comicStrips\",\"weight\":0.7},{\"name\":\"celshading\",\"weight\":0.5}]"
     },
@@ -38,7 +37,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "comic, graphic novel, atmospheric, storytelling",
       "loras": "[{\"name\":\"comicStrips\",\"weight\":0.6},{\"name\":\"coloricher\",\"weight\":0.5}]"
     },
@@ -58,7 +56,6 @@
       "clip_skip": 2,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "comic, european, ligne-claire, adventure",
       "loras": "[{\"name\":\"celshading\",\"weight\":0.6},{\"name\":\"coloricher\",\"weight\":0.5}]"
     },
@@ -78,7 +75,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "comic, pop art, retro, bright",
       "loras": "[{\"name\":\"comicStrips\",\"weight\":0.7},{\"name\":\"celshading\",\"weight\":0.5}]"
     },
@@ -98,7 +94,6 @@
       "clip_skip": 2,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "comic, manga, black-white, screentone, ink",
       "loras": "[{\"name\":\"comicStrips\",\"weight\":0.6},{\"name\":\"celshading\",\"weight\":0.5}]"
     },
@@ -118,7 +113,6 @@
       "clip_skip": 2,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "comic, webtoon, manhwa, korean, digital",
       "loras": "[{\"name\":\"celshading\",\"weight\":0.5},{\"name\":\"coloricher\",\"weight\":0.5}]"
     },
@@ -138,7 +132,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "comic, retro, silver-age, vintage, 1960s",
       "loras": "[{\"name\":\"comicStrips\",\"weight\":0.7},{\"name\":\"coloricher\",\"weight\":0.4}]"
     },
@@ -158,7 +151,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "comic, dark, gritty, noir, mature",
       "loras": "[{\"name\":\"comicStrips\",\"weight\":0.5},{\"name\":\"coloricher\",\"weight\":0.4}]"
     },
@@ -178,7 +170,6 @@
       "clip_skip": 2,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "comic, strip, newspaper, humor, simple",
       "loras": "[{\"name\":\"comicStrips\",\"weight\":0.7},{\"name\":\"celshading\",\"weight\":0.5}]"
     },
@@ -198,7 +189,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "comic, indie, alternative, quirky, underground",
       "loras": "[{\"name\":\"comicStrips\",\"weight\":0.6},{\"name\":\"coloricher\",\"weight\":0.4}]"
     },
@@ -218,7 +208,6 @@
       "clip_skip": 2,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "comic, superhero, action, dynamic, speed-lines",
       "loras": "[{\"name\":\"comicStrips\",\"weight\":0.6},{\"name\":\"celshading\",\"weight\":0.5}]"
     },
@@ -238,7 +227,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "comic, horror, creepy, EC, macabre",
       "loras": "[{\"name\":\"comicStrips\",\"weight\":0.6},{\"name\":\"coloricher\",\"weight\":0.3}]"
     }

@@ -15,10 +15,14 @@ type CharacterSlot struct {
 type Scene struct {
 	BackgroundPrompt string          `json:"background_prompt"`
 	NegativePrompt   string          `json:"negative_prompt"`
+	RefinePrompt     string          `json:"refine_prompt,omitempty"`
+	RefineDenoise    float64         `json:"refine_denoise,omitempty"`
 	Characters       []CharacterSlot `json:"characters"`
 	Width            int             `json:"width"`
 	Height           int             `json:"height"`
 	PresetID         int64           `json:"preset_id"`
+	ResolutionID     *int64          `json:"resolution_id,omitempty"`
+	HiresProfileID   *int64          `json:"hires_profile_id,omitempty"`
 }
 
 type MultiPassProgress struct {

@@ -1,6 +1,7 @@
 package settings
 
 import (
+	"context"
 	"fmt"
 	"net/url"
 	"strconv"
@@ -13,6 +14,7 @@ import (
 	"go-sd/internal/preset"
 	"go-sd/internal/rembg"
 	"go-sd/internal/sd"
+	"go-sd/internal/serverclient"
 )
 
 type ServiceInfo struct {
@@ -27,16 +29,17 @@ type ServiceStatus struct {
 }
 
 type Service struct {
-	db      *preset.DB
-	llm     llm.Service
-	sd      sd.Service
-	cfg     *config.Config
-	rembg   *rembg.Client
-	log     *logger.Logger
+	db          *preset.DB
+	llm         llm.Service
+	sd          sd.Service
+	cfg         *config.Config
+	rembg       *rembg.Client
+	log         *logger.Logger
+	serverClient *serverclient.Client
 }
 
-func New(db *preset.DB, llmSvc llm.Service, sdSvc sd.Service, cfg *config.Config, rembgClient *rembg.Client, log *logger.Logger) *Service {
-	return &Service{db: db, llm: llmSvc, sd: sdSvc, cfg: cfg, rembg: rembgClient, log: log}
+func New(db *preset.DB, llmSvc llm.Service, sdSvc sd.Service, cfg *config.Config, rembgClient *rembg.Client, log *logger.Logger, srvClient *serverclient.Client) *Service {
+	return &Service{db: db, llm: llmSvc, sd: sdSvc, cfg: cfg, rembg: rembgClient, log: log, serverClient: srvClient}
 }
 
 func (s *Service) CheckServices() ServiceStatus {
@@ -124,7 +127,7 @@ func (s *Service) GetSettings() (map[string]string, error) {
 		"llm_backend":               s.cfg.LLMBackend,
 		"llm_keep_alive":            "5m",
 		"llm_num_ctx":               "4096",
-		"llm_num_gpu":               "0",
+		"llm_num_gpu":               "-1",
 		"llm_max_tokens":            "256",
 		"llm_generate_model":        s.cfg.SDPromptModel,
 		"llm_analyze_model":         s.cfg.VisionModel,
@@ -145,6 +148,8 @@ func (s *Service) GetSettings() (map[string]string, error) {
 		"kids_cat_substances":       "true",
 		"kids_cat_mature":           "true",
 		"rembg_url":                 "",
+		"connection_mode":           "direct",
+		"server_url":                "",
 		"preview_mode":              "false",
 		"preview_width":             "512",
 		"preview_height":            "512",
@@ -158,7 +163,7 @@ func (s *Service) GetSettings() (map[string]string, error) {
 }
 
 func (s *Service) UpdateSettings(data map[string]string) error {
-	urlFields := map[string]bool{"llm_url": true, "sd_url": true, "rembg_url": true}
+	urlFields := map[string]bool{"llm_url": true, "sd_url": true, "rembg_url": true, "server_url": true}
 	for k, v := range data {
 		if urlFields[k] && v != "" {
 			if _, err := url.Parse(v); err != nil {
@@ -190,13 +195,59 @@ func (s *Service) UpdateSettings(data map[string]string) error {
 		}
 	}
 
+	// Handle server mode switching
+	if mode, ok := data["connection_mode"]; ok {
+		if mode == "server" {
+			serverURL := data["server_url"]
+			if savedURL, err := s.db.GetSetting("server_url"); err == nil && savedURL != "" {
+				serverURL = savedURL
+			}
+			if serverURL != "" && s.serverClient != nil {
+				s.serverClient.SetBaseURL(serverURL)
+				sdURL, llmURL, rembgURL := s.serverClient.ProxyURLs()
+				s.llm.SetURL(llmURL)
+				s.sd.SetURL(sdURL)
+				s.rembg.SetURL(rembgURL)
+				s.llm.SetBackend("ollama")
+				s.cfg.LLMUrl = llmURL
+				s.cfg.SDUrl = sdURL
+				s.cfg.LLMBackend = "ollama"
+				s.log.Info("Switched to server mode: %s", serverURL)
+			}
+		} else {
+			// Direct mode — restore saved direct URLs
+			if v, err := s.db.GetSetting("llm_url"); err == nil && v != "" {
+				s.llm.SetURL(v)
+				s.cfg.LLMUrl = v
+			}
+			if v, err := s.db.GetSetting("sd_url"); err == nil && v != "" {
+				s.sd.SetURL(v)
+				s.cfg.SDUrl = v
+			}
+			if v, err := s.db.GetSetting("rembg_url"); err == nil && v != "" {
+				s.rembg.SetURL(v)
+			}
+			if v, err := s.db.GetSetting("llm_backend"); err == nil && v != "" {
+				s.llm.SetBackend(v)
+				s.cfg.LLMBackend = v
+			}
+			s.log.Info("Switched to direct mode")
+		}
+	}
+
 	if v, ok := data["llm_url"]; ok {
-		s.llm.SetURL(v)
-		s.cfg.LLMUrl = v
+		mode, _ := s.db.GetSetting("connection_mode")
+		if mode != "server" {
+			s.llm.SetURL(v)
+			s.cfg.LLMUrl = v
+		}
 	}
 	if v, ok := data["sd_url"]; ok {
-		s.sd.SetURL(v)
-		s.cfg.SDUrl = v
+		mode, _ := s.db.GetSetting("connection_mode")
+		if mode != "server" {
+			s.sd.SetURL(v)
+			s.cfg.SDUrl = v
+		}
 	}
 	if v, ok := data["llm_model"]; ok {
 		s.cfg.LLMModel = v
@@ -208,17 +259,23 @@ func (s *Service) UpdateSettings(data map[string]string) error {
 		s.cfg.VisionModel = v
 	}
 	if v, ok := data["llm_backend"]; ok {
-		s.llm.SetBackend(v)
-		s.cfg.LLMBackend = v
+		mode, _ := s.db.GetSetting("connection_mode")
+		if mode != "server" {
+			s.llm.SetBackend(v)
+			s.cfg.LLMBackend = v
+		}
 	}
-	if v, ok := data["llm_generate_model"]; ok {
+	if v, ok := data["llm_generate_model"]; ok && v != "" {
 		s.cfg.SDPromptModel = v
 	}
-	if v, ok := data["llm_analyze_model"]; ok {
+	if v, ok := data["llm_analyze_model"]; ok && v != "" {
 		s.cfg.VisionModel = v
 	}
 	if v, ok := data["rembg_url"]; ok {
-		s.rembg.SetURL(v)
+		mode, _ := s.db.GetSetting("connection_mode")
+		if mode != "server" {
+			s.rembg.SetURL(v)
+		}
 	}
 
 	var changed []string
@@ -268,4 +325,105 @@ func (s *Service) ApplyLLMConfig(mode string) {
 		}
 	}
 	s.llm.SetBackendConfig(cfg)
+}
+
+// --- Server mode methods ---
+
+func (s *Service) DiscoverServers(ctx context.Context) ([]serverclient.DiscoveredServer, error) {
+	return serverclient.DiscoverServers(ctx, 5e9) // 5 seconds
+}
+
+func (s *Service) ensureServerClient() error {
+	if s.serverClient == nil || s.serverClient.GetBaseURL() == "" {
+		return fmt.Errorf("server not configured")
+	}
+	return nil
+}
+
+func (s *Service) GetServerStatus() (*serverclient.ServerStatus, error) {
+	if err := s.ensureServerClient(); err != nil {
+		return nil, err
+	}
+	return s.serverClient.GetStatus()
+}
+
+func (s *Service) StartServerProcess(name string) error {
+	if err := s.ensureServerClient(); err != nil {
+		return err
+	}
+	return s.serverClient.StartProcess(name)
+}
+
+func (s *Service) StopServerProcess(name string) error {
+	if err := s.ensureServerClient(); err != nil {
+		return err
+	}
+	return s.serverClient.StopProcess(name)
+}
+
+func (s *Service) RestartServerProcess(name string) error {
+	if err := s.ensureServerClient(); err != nil {
+		return err
+	}
+	return s.serverClient.RestartProcess(name)
+}
+
+func (s *Service) GetServerModels(modelType string) ([]serverclient.ModelInfo, error) {
+	if err := s.ensureServerClient(); err != nil {
+		return nil, err
+	}
+	return s.serverClient.GetModels(modelType)
+}
+
+func (s *Service) GetServerLLMModels() ([]serverclient.LLMModelInfo, error) {
+	if err := s.ensureServerClient(); err != nil {
+		return nil, err
+	}
+	return s.serverClient.GetLLMModels()
+}
+
+func (s *Service) DownloadServerModel(modelType, url, filename string) error {
+	if err := s.ensureServerClient(); err != nil {
+		return err
+	}
+	return s.serverClient.DownloadModel(modelType, url, filename)
+}
+
+func (s *Service) DeleteServerModel(modelType, filename string) error {
+	if err := s.ensureServerClient(); err != nil {
+		return err
+	}
+	return s.serverClient.DeleteModel(modelType, filename)
+}
+
+func (s *Service) PullServerLLMModel(name string) error {
+	if err := s.ensureServerClient(); err != nil {
+		return err
+	}
+	return s.serverClient.PullLLMModel(name)
+}
+
+func (s *Service) DeleteServerLLMModel(name string) error {
+	if err := s.ensureServerClient(); err != nil {
+		return err
+	}
+	return s.serverClient.DeleteLLMModel(name)
+}
+
+func (s *Service) GetServerBackends() ([]serverclient.BackendInfo, error) {
+	if err := s.ensureServerClient(); err != nil {
+		return nil, err
+	}
+	return s.serverClient.GetBackends()
+}
+
+func (s *Service) SwitchServerBackend(backend string) error {
+	if err := s.ensureServerClient(); err != nil {
+		return err
+	}
+	return s.serverClient.SwitchBackend(backend)
+}
+
+func (s *Service) GetModelCatalog() (*serverclient.Catalog, error) {
+	return serverclient.LoadCatalog()
 }

@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -55,7 +57,7 @@ func (l *Logger) emit(level Level, format string, args ...interface{}) {
 	ctx := l.ctx
 	l.mu.Unlock()
 
-	log.Printf("[%s] %s", level, e.Message)
+	fmt.Fprintf(os.Stderr, "[%s] %s\n", level, e.Message)
 
 	if ctx != nil {
 		runtime.EventsEmit(ctx, "log:entry", string(data))
@@ -92,6 +94,32 @@ func (l *Logger) APIResponse(method, url string, status int) {
 
 func (l *Logger) UserAction(action string, args ...interface{}) {
 	l.Info(action, args...)
+}
+
+type logBridge struct {
+	logger *Logger
+	prev   io.Writer
+}
+
+func (b *logBridge) Write(p []byte) (int, error) {
+	n, err := b.prev.Write(p)
+	line := strings.TrimSpace(string(p))
+
+	level := INFO
+	lower := strings.ToLower(line)
+	if strings.Contains(lower, "error") || strings.Contains(lower, "failed") || strings.Contains(lower, "[error]") {
+		level = ERROR
+	} else if strings.Contains(lower, "warn") || strings.Contains(lower, "[warn]") {
+		level = WARN
+	}
+
+	b.logger.emit(level, "%s", line)
+	return n, err
+}
+
+func (l *Logger) InstallBridge() {
+	lb := &logBridge{logger: l, prev: os.Stderr}
+	log.SetOutput(lb)
 }
 
 func shortURL(url string) string {

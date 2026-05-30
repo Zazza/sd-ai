@@ -19,12 +19,38 @@ const filterSearch = ref('')
 const filterType = ref('')
 const importPresets = ref([])
 
+const installStatuses = ref([])
+const installingId = ref(null)
+
 const pendingDeleteId = ref(null)
 let deleteTimer = null
 
 const showDeleteConfirm = ref(false)
 
 const selectedCount = computed(() => selectedIds.value.size)
+
+async function loadInstallStatuses() {
+  try {
+    const statuses = await api.getPresetsInstallStatus()
+    installStatuses.value = statuses || []
+  } catch { installStatuses.value = [] }
+}
+
+function getStatus(presetId) {
+  return installStatuses.value.find(s => s.id === presetId)
+}
+
+async function installDeps(presetId) {
+  installingId.value = presetId
+  try {
+    await api.installPresetDeps(presetId)
+    await loadInstallStatuses()
+  } catch (e) {
+    alert('Install failed: ' + e)
+  } finally {
+    installingId.value = null
+  }
+}
 
 async function load() {
   loading.value = true
@@ -37,6 +63,7 @@ async function load() {
   } finally {
     loading.value = false
   }
+  loadInstallStatuses()
 }
 
 const filteredPresets = computed(() => {
@@ -130,12 +157,16 @@ function selectAll() {
 
 async function handleExport() {
   if (selectedIds.value.size === 0) return
+  const ids = [...selectedIds.value]
   try {
-    await api.exportPresets([...selectedIds.value])
-    selectMode.value = false
-    selectedIds.value = new Set()
+    const path = await api.preparePresetsExport(ids)
+    if (path) {
+      selectMode.value = false
+      selectedIds.value = new Set()
+      alert('Saved: ' + path)
+    }
   } catch (e) {
-    if (String(e)) alert('Export failed: ' + e)
+    alert('Export failed: ' + e)
   }
 }
 
@@ -241,6 +272,17 @@ onMounted(load)
           <span>{{ p.sampler }}</span>
           <span>{{ p.steps }} steps</span>
           <span>CFG {{ p.cfg_scale }}</span>
+          <template v-if="getStatus(p.id)">
+            <span v-if="getStatus(p.id).installed" style="color: #4ade80;">installed</span>
+            <span v-else style="color: #fbbf24;">
+              missing: {{ [...(getStatus(p.id).missing_sd || []), ...(getStatus(p.id).missing_lora || [])].join(', ') }}
+            </span>
+          </template>
+        </div>
+        <div v-if="!selectMode && getStatus(p.id) && !getStatus(p.id).installed" class="preset-actions" style="margin-top: 4px;">
+          <button class="btn btn-secondary btn-sm" @click="installDeps(p.id)" :disabled="installingId === p.id">
+            {{ installingId === p.id ? 'Installing...' : 'Install' }}
+          </button>
         </div>
         <div v-if="!selectMode" class="preset-actions">
           <button class="btn btn-secondary btn-sm" @click="openEdit(p)">{{ t('presets.btn_edit') }}</button>

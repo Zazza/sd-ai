@@ -28,6 +28,14 @@ func (c *Client) SetURL(baseURL string) {
 	c.baseURL = baseURL
 }
 
+func (c *Client) HasURL() bool {
+	return c.baseURL != ""
+}
+
+func (c *Client) URL() string {
+	return c.baseURL
+}
+
 func (c *Client) HealthCheck() error {
 	if c.baseURL == "" {
 		return fmt.Errorf("rembg URL not configured")

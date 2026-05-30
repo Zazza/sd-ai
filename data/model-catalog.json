@@ -1,0 +1,244 @@
+{
+  "llm_generate": [
+    {
+      "name": "qwen3:8b",
+      "description": "Best overall — fast, great instruction following, dual-mode (think/no-think)",
+      "size_gb": 5.2,
+      "recommended": true
+    },
+    {
+      "name": "qwen3:14b",
+      "description": "Higher quality for complex prompts. Optimal for 16 GB VRAM",
+      "size_gb": 9.0
+    },
+    {
+      "name": "gemma3:12b",
+      "description": "Excellent text quality, good instruction following",
+      "size_gb": 8.1
+    },
+    {
+      "name": "phi4-mini",
+      "description": "Ultra-lightweight for weak hardware, decent quality",
+      "size_gb": 2.7
+    }
+  ],
+  "llm_vision": [
+    {
+      "name": "minicpm-v:latest",
+      "description": "Best vision — OCR, objects, colors, details",
+      "size_gb": 5.5,
+      "recommended": true
+    },
+    {
+      "name": "gemma3:12b",
+      "description": "Multimodal — native image understanding",
+      "size_gb": 8.1
+    },
+    {
+      "name": "llava:13b",
+      "description": "Classic vision+language, good scene description",
+      "size_gb": 8.0
+    },
+    {
+      "name": "moondream2:latest",
+      "description": "Lightweight vision for weak hardware",
+      "size_gb": 1.7
+    }
+  ],
+  "sd_models": [
+    {
+      "name": "juggernautXL_ragnarokBy",
+      "base": "SDXL",
+      "category": "Photorealism",
+      "description": "Versatile photorealism — landscapes, characters, objects",
+      "size_gb": 6.5,
+      "recommended": true
+    },
+    {
+      "name": "photon_v1",
+      "base": "SDXL",
+      "category": "Photorealism",
+      "description": "Cinematic, film-like look",
+      "size_gb": 6.5
+    },
+    {
+      "name": "realisticVisionV60B1_v51HyperVAE",
+      "base": "SD 1.5",
+      "category": "Photorealism",
+      "description": "Portraits and headshots",
+      "size_gb": 2.1
+    },
+    {
+      "name": "epicrealism_naturalSinRC1VAE",
+      "base": "SD 1.5",
+      "category": "Photorealism",
+      "description": "Cinematic, dramatic scenes",
+      "size_gb": 2.1
+    },
+    {
+      "name": "dreamshaper_8",
+      "base": "SD 1.5",
+      "category": "Universal",
+      "description": "Fantasy, illustration, concept art",
+      "size_gb": 2.1
+    },
+    {
+      "name": "flux_dev",
+      "base": "FLUX",
+      "category": "Universal",
+      "description": "Next-gen, superior prompt adherence",
+      "size_gb": 12.0
+    },
+    {
+      "name": "revAnimated_v2Rebirth",
+      "base": "SD 1.5",
+      "category": "Anime",
+      "description": "Classic anime style",
+      "size_gb": 2.1
+    },
+    {
+      "name": "neoMoeDreamxl_v10",
+      "base": "SDXL",
+      "category": "Anime",
+      "description": "Moe/soft anime style",
+      "size_gb": 6.5
+    },
+    {
+      "name": "veloriamixIllustrious_v20",
+      "base": "Illustrious",
+      "category": "Anime",
+      "description": "Detailed illustration style",
+      "size_gb": 6.5
+    }
+  ],
+  "lora": [
+    {
+      "name": "add-detail-xl",
+      "base": "SDXL",
+      "category": "Detail & Quality",
+      "default_weight": 0.7,
+      "description": "Increases detail and sharpness",
+      "size_mb": 136
+    },
+    {
+      "name": "Add_Details_v1.2",
+      "base": "SD 1.5",
+      "category": "Detail & Quality",
+      "default_weight": 0.6,
+      "description": "Enhances fine details",
+      "size_mb": 144
+    },
+    {
+      "name": "HDR_Photography",
+      "base": "SDXL",
+      "category": "Photography",
+      "default_weight": 0.5,
+      "description": "HDR photography look",
+      "size_mb": 136
+    },
+    {
+      "name": "SDXL_FILM_PHOTOGRAPHY_STYLE_V1",
+      "base": "SDXL",
+      "category": "Photography",
+      "default_weight": 0.6,
+      "description": "Film photography style",
+      "size_mb": 136
+    },
+    {
+      "name": "Anamorphic film style v2.5",
+      "base": "SDXL",
+      "category": "Photography",
+      "default_weight": 0.5,
+      "description": "Anamorphic cinematic look",
+      "size_mb": 136
+    },
+    {
+      "name": "closeupface-v1",
+      "base": "SDXL",
+      "category": "Portraits",
+      "default_weight": 0.7,
+      "description": "Enhanced close-up face details",
+      "size_mb": 136
+    },
+    {
+      "name": "hairdetailer",
+      "base": "SD 1.5",
+      "category": "Portraits",
+      "default_weight": 0.7,
+      "description": "Detailed hair rendering",
+      "size_mb": 144
+    },
+    {
+      "name": "realistic hands",
+      "base": "SD 1.5",
+      "category": "Portraits",
+      "default_weight": 0.6,
+      "description": "Better hand rendering",
+      "size_mb": 144
+    },
+    {
+      "name": "Super_Eye_Detailer_By_Stable_Yogi_SDPD0",
+      "base": "SD 1.5",
+      "category": "Portraits",
+      "default_weight": 0.7,
+      "description": "Enhanced eye details",
+      "size_mb": 144
+    },
+    {
+      "name": "celshading",
+      "base": "SD 1.5",
+      "category": "Style",
+      "default_weight": 0.7,
+      "description": "Cel-shading style",
+      "size_mb": 144
+    },
+    {
+      "name": "watercolor",
+      "base": "SD 1.5",
+      "category": "Style",
+      "default_weight": 0.8,
+      "description": "Watercolor painting effect",
+      "size_mb": 144
+    },
+    {
+      "name": "pixel-art-xl-v1.1",
+      "base": "SDXL",
+      "category": "Style",
+      "default_weight": 0.9,
+      "description": "Pixel art style",
+      "size_mb": 136
+    },
+    {
+      "name": "comicStrips",
+      "base": "SD 1.5",
+      "category": "Style",
+      "default_weight": 0.7,
+      "description": "Comic strip style",
+      "size_mb": 144
+    },
+    {
+      "name": "CyberPunkAI",
+      "base": "SD 1.5",
+      "category": "Style",
+      "default_weight": 0.6,
+      "description": "Cyberpunk aesthetic",
+      "size_mb": 144
+    },
+    {
+      "name": "Dramatic Lighting Slider",
+      "base": "SD 1.5",
+      "category": "Lighting",
+      "default_weight": 0.5,
+      "description": "Dramatic lighting effects",
+      "size_mb": 144
+    },
+    {
+      "name": "dynamic_shot_42_rim_light",
+      "base": "SDXL",
+      "category": "Lighting",
+      "default_weight": 0.6,
+      "description": "Dynamic rim lighting",
+      "size_mb": 136
+    }
+  ]
+}

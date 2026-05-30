@@ -25,3 +25,9 @@ tidy:
 
 clean:
 	rm -rf build/
+
+build-server:
+	cd server && go build -o ../build/sd-studio-server .
+
+test-server:
+	cd server && go test ./... -v

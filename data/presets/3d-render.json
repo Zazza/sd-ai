@@ -18,7 +18,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "3d-render, clay, mockup, design",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.6},{\"name\":\"Dramatic Lighting Slider\",\"weight\":0.5}]"
     },
@@ -38,7 +37,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "3d-render, lowpoly, geometric, game",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.5},{\"name\":\"Dramatic Lighting Slider\",\"weight\":0.4}]"
     },
@@ -58,7 +56,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "3d-render, product, visualization, studio",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.7},{\"name\":\"Dramatic Lighting Slider\",\"weight\":0.5}]"
     },
@@ -78,7 +75,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "3d-render, character, stylized, cinematic",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.6},{\"name\":\"Dramatic Lighting Slider\",\"weight\":0.6}]"
     },
@@ -98,7 +94,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "3d-render, glass, transparent, refraction",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.5}]"
     },
@@ -118,7 +113,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "3d-render, wireframe, technical, CAD",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.5}]"
     },
@@ -138,7 +132,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "3d-render, octane, photorealistic, global illumination",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.6}]"
     },
@@ -158,7 +151,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "3d-render, isometric, room, diorama, cute",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.5}]"
     },
@@ -178,7 +170,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "3d-render, neon, cyberpunk, holographic",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.5}]"
     },
@@ -198,7 +189,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "3d-render, PBR, material, texture, metallic",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.6}]"
     },
@@ -218,7 +208,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "3d-render, toy, figure, collectible, vinyl",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.5}]"
     },
@@ -238,7 +227,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "3d-render, voxel, pixel, minecraft, blocky",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.4}]"
     }

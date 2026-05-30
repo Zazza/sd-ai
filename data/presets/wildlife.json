@@ -18,7 +18,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "wildlife, safari, animal, africa",
       "loras": "[{\"name\":\"Nature SDXL\",\"weight\":0.7},{\"name\":\"add-detail-xl\",\"weight\":0.5}]"
     },
@@ -38,7 +37,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "wildlife, bird, macro, feathers",
       "loras": "[{\"name\":\"Nature SDXL\",\"weight\":0.6},{\"name\":\"add-detail-xl\",\"weight\":0.5}]"
     },
@@ -58,7 +56,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "wildlife, underwater, ocean, fish",
       "loras": "[{\"name\":\"Nature SDXL\",\"weight\":0.5},{\"name\":\"add-detail-xl\",\"weight\":0.5}]"
     },
@@ -78,7 +75,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "wildlife, forest, woodland, nature",
       "loras": "[{\"name\":\"Nature SDXL\",\"weight\":0.6},{\"name\":\"add-detail-xl\",\"weight\":0.5}]"
     },
@@ -98,7 +94,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "wildlife, insect, macro, butterfly, dragonfly",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.7}]"
     },
@@ -118,7 +113,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "wildlife, predator, lion, tiger, fierce",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.6}]"
     },
@@ -138,7 +132,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "wildlife, deep ocean, bioluminescent, jellyfish",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.5}]"
     },
@@ -158,7 +151,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "wildlife, arctic, polar bear, snow, ice",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.5}]"
     },
@@ -178,7 +170,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "wildlife, tropical bird, toucan, parrot, rainforest",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.5}]"
     },
@@ -198,7 +189,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "wildlife, reptile, snake, scales, texture",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.7}]"
     },
@@ -218,7 +208,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "wildlife, african savanna, zebras, giraffes, sunset",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.5}]"
     },
@@ -238,7 +227,6 @@
       "clip_skip": 1,
       "batch_size": null,
       "batch_count": null,
-      "vae": "",
       "tags": "wildlife, nocturnal, owl, fox, moonlight",
       "loras": "[{\"name\":\"add-detail-xl\",\"weight\":0.5}]"
     }

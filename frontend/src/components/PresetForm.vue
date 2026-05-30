@@ -39,10 +39,6 @@ const form = reactive({
   clip_skip: props.preset?.clip_skip ?? null,
   batch_size: props.preset?.batch_size ?? 1,
   batch_count: props.preset?.batch_count ?? 1,
-  hires_fix: props.preset?.hires_fix ?? false,
-  hires_upscale: props.preset?.hires_upscale ?? 2.0,
-  hires_denoising_strength: props.preset?.hires_denoising_strength ?? 0.5,
-  hires_upscaler: props.preset?.hires_upscaler ?? '',
   vae: props.preset?.vae ?? '',
   tags: props.preset?.tags || '',
 })
@@ -105,10 +101,6 @@ async function save() {
       clip_skip: form.clip_skip != null ? Number(form.clip_skip) : null,
       batch_size: form.batch_size != null ? Number(form.batch_size) : null,
       batch_count: form.batch_count != null ? Number(form.batch_count) : null,
-      hires_fix: form.hires_fix || false,
-      hires_upscale: form.hires_upscale ? Number(form.hires_upscale) : null,
-      hires_denoising_strength: form.hires_denoising_strength != null ? Number(form.hires_denoising_strength) : null,
-      hires_upscaler: form.hires_upscaler || '',
       vae: form.vae || '',
       tags: form.tags || '',
       loras: lorasData.length > 0 ? JSON.stringify(lorasData) : '',
@@ -183,7 +175,7 @@ onMounted(() => {
         </div>
 
         <div class="form-group">
-          <label class="form-label">{{ t('preset.label_negative_prompt') }}</label>
+          <label class="form-label">{{ t('preset.label_exclude_prompt') }}</label>
           <textarea class="form-textarea" v-model="form.negative_prompt" rows="2"></textarea>
         </div>
 

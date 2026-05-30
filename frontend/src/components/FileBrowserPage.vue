@@ -187,9 +187,6 @@ function getEntryIndex(entry) {
   return imageIndexMap.value.get(entry.path) ?? -1
 }
 
-let lastClickTime = 0
-let lastClickPath = ''
-
 function handleCardClick(entry) {
   if (entry.is_dir) {
     openDir(entry)
@@ -265,7 +262,7 @@ onUnmounted(() => {
             <div class="fb-card-meta">{{ formatSize(entry.size) }}</div>
           </div>
           <div class="fb-card-actions" @click.stop>
-            <button class="fb-action-btn" :title="t('browser.send_to_from_image')" @click="sendToFromImage(entry)">
+            <button class="fb-action-btn" :title="t('browser.send_to_remix')" @click="sendToFromImage(entry)">
               <Send :size="12" />
             </button>
             <button class="fb-action-btn" :title="t('browser.send_to_export')" @click="sendToExport(entry)">
@@ -321,11 +318,11 @@ onUnmounted(() => {
 
 .fb-path-input:focus {
   outline: none;
-  border-color: var(--primary, #7c5cfc);
+  border-color: var(--accent);
 }
 
 .fb-error {
-  color: var(--error, #e55);
+  color: var(--danger);
   font-size: 13px;
   padding: 8px;
 }
@@ -354,7 +351,7 @@ onUnmounted(() => {
 }
 
 .fb-card:hover {
-  border-color: var(--primary, #7c5cfc);
+  border-color: var(--accent);
 }
 
 .fb-card-dir:hover {
@@ -433,8 +430,8 @@ onUnmounted(() => {
 }
 
 .fb-action-btn:hover {
-  background: var(--primary, #7c5cfc);
+  background: var(--accent);
   color: #fff;
-  border-color: var(--primary, #7c5cfc);
+  border-color: var(--accent);
 }
 </style>

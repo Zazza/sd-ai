@@ -4,11 +4,18 @@ import { EventsOn, EventsOff } from '../wailsjs/runtime/runtime'
 import { api } from '../api.js'
 import { t } from '../i18n/index.js'
 import { Image, Trash2, X, Plus, Pencil, Check } from 'lucide-vue-next'
+import QueuePanel from './QueuePanel.vue'
 
 const emit = defineEmits(['navigate'])
 
 const expanded = ref(false)
 const panel = ref('session')
+const panelHeight = ref(40)
+const footerRef = ref(null)
+let dragging = false
+let dragStartY = 0
+let dragStartHeight = 0
+let saveTimer = null
 const logs = reactive([])
 const logContainer = ref(null)
 const filterLevel = ref('all')
@@ -17,7 +24,7 @@ const sessions = ref([])
 const activeSessionId = ref(0)
 const items = ref([])
 const thumbnails = ref({})
-const loadedThumbs = new Set()
+
 const itemContainer = ref(null)
 
 const newSessionName = ref('')
@@ -29,12 +36,14 @@ let confirmDeleteTimer = null
 
 const appVersion = ref('')
 
+const queuePendingCount = ref(0)
+let queueSubscribed = false
+
 let observer = null
 
 const services = reactive({
-  llm: { available: false, label: 'LLM', model: '', visionModel: '', tab: 'connection' },
-  sd: { available: false, label: 'SD', model: '', tab: 'connection' },
-  rembg: { available: false, label: 'Rembg', tab: 'connection' },
+  llm: { available: false, label: 'AI Assistant', model: '', visionModel: '', tab: 'connection' },
+  sd: { available: false, label: 'Image Engine', model: '', tab: 'connection' },
 })
 
 const activeSessions = computed(() => (sessions.value || []).find(s => s.id === activeSessionId.value))
@@ -80,6 +89,13 @@ function togglePanel(p) {
   }
   panel.value = p
   expanded.value = true
+  if (p === 'log') {
+    nextTick(() => {
+      if (logContainer.value) {
+        logContainer.value.scrollTop = logContainer.value.scrollHeight
+      }
+    })
+  }
   if (p === 'session') {
     loadSessions().then(() => {
       if (sessions.value.length > 0) {
@@ -116,6 +132,37 @@ function goToService(key) {
 
 async function checkServices() {
   try {
+    const settings = await api.getSettings()
+    if (settings.connection_mode === 'server') {
+      await checkServicesViaServer(settings)
+    } else {
+      await checkServicesDirect()
+    }
+  } catch {
+    await checkServicesDirect()
+  }
+}
+
+async function checkServicesViaServer(settings) {
+  try {
+    const status = await api.getServerStatus()
+    const health = status.health || {}
+    const models = status.models || {}
+    services.llm.available = health.ollama?.healthy || false
+    const genModel = settings.llm_generate_model || settings.sd_prompt_model || settings.llm_model || ''
+    services.llm.model = genModel && genModel !== 'default' ? genModel : ''
+    const visModel = settings.llm_analyze_model || settings.vision_model || ''
+    services.llm.visionModel = visModel && visModel !== 'default' ? visModel : ''
+    services.sd.available = health.sd?.healthy || false
+    services.sd.model = models.sd_checkpoint || ''
+  } catch {
+    services.llm.available = false
+    services.sd.available = false
+  }
+}
+
+async function checkServicesDirect() {
+  try {
     const status = await api.checkServices()
     services.llm.available = status.llm?.available || false
     services.llm.model = status.llm?.model || ''
@@ -126,12 +173,6 @@ async function checkServices() {
     services.llm.available = false
     services.sd.available = false
   }
-  try {
-    await api.checkRembg()
-    services.rembg.available = true
-  } catch {
-    services.rembg.available = false
-  }
 }
 
 function setupObserver() {
@@ -139,8 +180,7 @@ function setupObserver() {
     for (const entry of entries) {
       if (entry.isIntersecting) {
         const id = Number(entry.target.dataset.itemId)
-        if (id && !loadedThumbs.has(id)) {
-          loadedThumbs.add(id)
+        if (id) {
           loadThumb(id)
         }
         observer.unobserve(entry.target)
@@ -155,11 +195,9 @@ function observeItems() {
   els.forEach(el => observer.observe(el))
 }
 
-async function loadThumb(id) {
-  try {
-    const b64 = await api.getSessionThumb(id)
-    if (b64) thumbnails.value[id] = 'data:image/jpeg;base64,' + b64
-  } catch {}
+function loadThumb(id) {
+  if (thumbnails.value[id]) return
+  thumbnails.value[id] = api.sessionThumbUrl(id)
 }
 
 const footerError = ref('')
@@ -192,7 +230,6 @@ async function selectSession(id) {
     await api.switchSession(id)
     activeSessionId.value = id
     thumbnails.value = {}
-    loadedThumbs.clear()
     await loadSessions()
     await loadItems()
   } catch {}
@@ -207,7 +244,6 @@ async function doCreateSession() {
     showNewSession.value = false
     await loadSessions()
     thumbnails.value = {}
-    loadedThumbs.clear()
     await loadItems()
   } catch {}
 }
@@ -238,7 +274,6 @@ async function doDeleteSession() {
     await api.deleteSession(activeSessionId.value)
     await loadSessions()
     thumbnails.value = {}
-    loadedThumbs.clear()
     await loadItems()
     const s = sessions.value[0]
     if (s) activeSessionId.value = s.id
@@ -250,7 +285,6 @@ async function doClearSession() {
     await api.clearSession()
     items.value = []
     thumbnails.value = {}
-    loadedThumbs.clear()
     await loadSessions()
   } catch {}
 }
@@ -259,7 +293,7 @@ async function selectItem(item) {
   try {
     await api.setActiveSessionItem(item.id)
     items.value.forEach(i => { i.is_active = i.id === item.id })
-    emit('navigate', { page: 'generate', tab: 'from-image' })
+    emit('navigate', { page: 'remix' })
   } catch {}
 }
 
@@ -277,6 +311,13 @@ function formatTime(ts) {
   return ts.replace(/^.*?(\d{2}:\d{2}).*/, '$1')
 }
 
+async function refreshQueueCount() {
+  try {
+    const jobs = await api.getQueue()
+    queuePendingCount.value = (jobs || []).filter(j => j.status === 'pending' || j.status === 'running').length
+  } catch {}
+}
+
 onMounted(async () => {
   EventsOn('log:entry', addLog)
   checkServices()
@@ -288,7 +329,6 @@ onMounted(async () => {
   EventsOn('session:cleared', () => { loadItems(); loadSessions() })
   EventsOn('session:switched', () => {
     thumbnails.value = {}
-    loadedThumbs.clear()
     loadItems()
     loadSessions()
   })
@@ -298,6 +338,15 @@ onMounted(async () => {
   })
   EventsOn('session:deleted', () => { loadSessions(); loadItems() })
   EventsOn('session:created', () => { loadSessions(); loadItems() })
+
+  if (!queueSubscribed) {
+    queueSubscribed = true
+    EventsOn('queue:changed', refreshQueueCount)
+    EventsOn('queue:started', refreshQueueCount)
+    EventsOn('queue:completed', refreshQueueCount)
+    EventsOn('queue:failed', refreshQueueCount)
+    refreshQueueCount()
+  }
 
   await loadSessions()
   api.version().then(v => { appVersion.value = v }).catch(() => {})
@@ -324,23 +373,80 @@ onMounted(async () => {
     EventsOff('session:deleted')
     EventsOff('session:created')
     if (observer) observer.disconnect()
+    thumbnails.value = {}
   })
+})
+
+function onDragStart(e) {
+  dragging = true
+  dragStartY = e.clientY || (e.touches && e.touches[0].clientY) || 0
+  dragStartHeight = panelHeight.value
+  document.addEventListener('mousemove', onDragMove)
+  document.addEventListener('mouseup', onDragEnd)
+  document.addEventListener('touchmove', onDragMove, { passive: false })
+  document.addEventListener('touchend', onDragEnd)
+  document.body.style.cursor = 'ns-resize'
+  document.body.style.userSelect = 'none'
+}
+
+function onDragMove(e) {
+  if (!dragging) return
+  e.preventDefault()
+  const clientY = e.clientY || (e.touches && e.touches[0].clientY) || 0
+  const delta = dragStartY - clientY
+  const vh = window.innerHeight
+  let newVh = Math.round((dragStartHeight * vh / 100 + delta) / vh * 100)
+  newVh = Math.max(15, Math.min(85, newVh))
+  panelHeight.value = newVh
+}
+
+function onDragEnd() {
+  dragging = false
+  document.removeEventListener('mousemove', onDragMove)
+  document.removeEventListener('mouseup', onDragEnd)
+  document.removeEventListener('touchmove', onDragMove)
+  document.removeEventListener('touchend', onDragEnd)
+  document.body.style.cursor = ''
+  document.body.style.userSelect = ''
+  scheduleSave()
+}
+
+function scheduleSave() {
+  clearTimeout(saveTimer)
+  saveTimer = setTimeout(() => {
+    api.saveWindowLayout(panelHeight.value).catch(() => {})
+  }, 500)
+}
+
+function saveBeforeClose() {
+  api.saveWindowLayout(panelHeight.value).catch(() => {})
+}
+
+onMounted(async () => {
+  try {
+    const h = await api.getFooterHeight()
+    if (h > 0) panelHeight.value = h
+  } catch {}
+  window.addEventListener('beforeunload', saveBeforeClose)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('beforeunload', saveBeforeClose)
+  clearTimeout(saveTimer)
 })
 </script>
 
 <template>
-  <div class="app-footer" :class="{ expanded }">
+  <div class="app-footer" :class="{ expanded }" ref="footerRef" :style="expanded ? { flex: '0 0 ' + panelHeight + 'vh' } : {}">
+    <div v-if="expanded" class="footer-resize-handle" @mousedown="onDragStart" @touchstart="onDragStart"></div>
     <div class="footer-bar">
       <div class="footer-status">
         <span v-for="(svc, key) in services" :key="key"
               class="status-dot"
               :class="{ online: svc.available, offline: !svc.available }"
-              @click="goToService(key)" :title="'Go to ' + svc.label + ' settings'">
+              @click="goToService(key)" :title="(key === 'llm' ? (svc.model || svc.visionModel ? 'Models: ' + (svc.model || '') + (svc.visionModel ? ' / ' + svc.visionModel : '') : 'No model loaded') : (svc.model || 'No model loaded')) + '\nClick to open settings'">
           <span class="dot-indicator" :class="{ online: svc.available }"></span>
-          {{ svc.label }}<template v-if="key === 'llm' && (svc.model || svc.visionModel)">
-            <template v-if="svc.model"> Gen:{{ svc.model }}</template><template v-if="svc.visionModel"> Vis:{{ svc.visionModel }}</template>
-          </template>
-          <template v-else-if="svc.model">: {{ svc.model }}</template>
+          {{ svc.label }}
         </span>
       </div>
       <div class="footer-actions">
@@ -351,6 +457,9 @@ onMounted(async () => {
         </button>
         <button class="footer-tab-btn" :class="{ active: expanded && panel === 'log' }" @click="togglePanel('log')">
           {{ t('footer.log') }}
+        </button>
+        <button class="footer-tab-btn" :class="{ active: expanded && panel === 'queue' }" @click="togglePanel('queue')">
+          {{ t('footer.processing') }} {{ queuePendingCount > 0 ? `(${queuePendingCount})` : '' }}
         </button>
       </div>
     </div>
@@ -420,6 +529,10 @@ onMounted(async () => {
       <div v-else class="si-empty">{{ t('footer.no_images') }}</div>
     </div>
 
+    <div v-if="expanded && panel === 'queue'" class="footer-queue">
+      <QueuePanel />
+    </div>
+
     <div v-if="expanded && panel === 'log'" class="footer-log">
       <div class="log-toolbar">
         <div class="log-filters">
@@ -458,9 +571,37 @@ export default { name: 'AppFooter' }
 }
 
 .app-footer.expanded {
-  flex: 0 0 40vh;
   display: flex;
   flex-direction: column;
+}
+
+.footer-resize-handle {
+  height: 5px;
+  cursor: ns-resize;
+  background: transparent;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.footer-resize-handle:hover,
+.footer-resize-handle:active {
+  background: var(--accent-bg);
+}
+
+.footer-resize-handle::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 2px;
+  transform: translateX(-50%);
+  width: 32px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--border);
+}
+
+.footer-resize-handle:hover::after {
+  background: var(--accent);
 }
 
 .footer-bar {
@@ -690,7 +831,7 @@ export default { name: 'AppFooter' }
 }
 
 .si-card.si-active {
-  border-color: var(--primary, #7c5cfc);
+  border-color: var(--accent);
 }
 
 .si-thumb {
@@ -768,7 +909,7 @@ export default { name: 'AppFooter' }
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: var(--primary, #7c5cfc);
+  background: var(--accent);
 }
 
 .si-empty {
@@ -782,6 +923,15 @@ export default { name: 'AppFooter' }
 
 /* Log panel */
 .footer-log {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-top: 1px solid var(--border);
+}
+
+/* Queue panel */
+.footer-queue {
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -833,8 +983,7 @@ export default { name: 'AppFooter' }
 .log-entry {
   display: flex;
   gap: 8px;
-  padding: 0 12px;
-  white-space: nowrap;
+  padding: 2px 12px;
 }
 
 .log-entry:hover { background: var(--surface-2); }
@@ -849,7 +998,7 @@ export default { name: 'AppFooter' }
 .log-debug .log-level { color: var(--text-dim); }
 .log-debug { color: var(--text-dim); }
 
-.log-msg { overflow: hidden; text-overflow: ellipsis; }
+.log-msg { word-break: break-word; min-width: 0; }
 
 .log-empty {
   text-align: center;

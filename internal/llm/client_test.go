@@ -7,6 +7,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"go-sd/internal/promptutil"
 )
 
 func TestTruncateRepetitive(t *testing.T) {
@@ -56,7 +58,7 @@ func TestTruncateRepetitive(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := truncateRepetitive(tt.input, tt.maxLen)
+			got := promptutil.TruncateRepetitive(tt.input, tt.maxLen)
 			if got != tt.want {
 				t.Errorf("truncateRepetitive() = %q, want %q", got, tt.want)
 			}

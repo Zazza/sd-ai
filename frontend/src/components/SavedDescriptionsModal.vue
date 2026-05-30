@@ -107,7 +107,7 @@ function handleDelete(id) {
           <input class="form-input" v-model="newType" :placeholder="t('descriptions.placeholder_tag')" />
         </div>
         <div class="form-group" style="margin-top: 8px;">
-          <textarea class="form-textarea" v-model="newNegative" :placeholder="t('descriptions.placeholder_negative')" rows="2"></textarea>
+          <textarea class="form-textarea" v-model="newNegative" :placeholder="t('descriptions.placeholder_exclude')" rows="2"></textarea>
         </div>
         <button class="btn btn-primary btn-sm" @click="handleCreate" :disabled="!newText.trim()">{{ t('descriptions.btn_save') }}</button>
       </div>
@@ -124,7 +124,7 @@ function handleDelete(id) {
               <textarea class="form-textarea" v-model="editText" :placeholder="t('descriptions.placeholder_text')" rows="3"></textarea>
               <input class="form-input" v-model="editName" :placeholder="t('descriptions.placeholder_name_edit')" />
               <input class="form-input" v-model="editType" :placeholder="t('descriptions.placeholder_type_edit')" />
-              <textarea class="form-textarea" v-model="editNegative" :placeholder="t('descriptions.placeholder_negative_edit')" rows="2"></textarea>
+              <textarea class="form-textarea" v-model="editNegative" :placeholder="t('descriptions.placeholder_exclude_edit')" rows="2"></textarea>
               <div style="display: flex; gap: 6px;">
                 <button class="btn btn-primary btn-sm" @click.stop="saveEdit(desc)">{{ t('descriptions.btn_save') }}</button>
                 <button class="btn btn-secondary btn-sm" @click.stop="editingId = null">{{ t('descriptions.btn_cancel') }}</button>
