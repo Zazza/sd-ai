@@ -1222,8 +1222,8 @@ func TestHiresProfile_BuiltinDefaults(t *testing.T) {
 	assert.Equal(t, 0.45, items[1].DenoisingStrength)
 	assert.Equal(t, 2.5, items[2].Upscale)
 	assert.Equal(t, 0.55, items[2].DenoisingStrength)
-	assert.Equal(t, 4.0, items[3].Upscale)
-	assert.Equal(t, 0.4, items[3].DenoisingStrength)
+	assert.Equal(t, 3.0, items[3].Upscale)
+	assert.Equal(t, 0.6, items[3].DenoisingStrength)
 }
 
 func TestHiresProfile_CRUD(t *testing.T) {
