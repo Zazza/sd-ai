@@ -5,6 +5,7 @@ import { api } from '../api.js'
 import { t } from '../i18n/index.js'
 import { Image, Trash2, X, Plus, Pencil, Check } from 'lucide-vue-next'
 import QueuePanel from './QueuePanel.vue'
+import ImageViewer from './ImageViewer.vue'
 
 const emit = defineEmits(['navigate'])
 
@@ -35,6 +36,8 @@ const confirmDeleteSession = ref(false)
 let confirmDeleteTimer = null
 
 const appVersion = ref('')
+
+const viewerIndex = ref(-1)
 
 const queuePendingCount = ref(0)
 let queueSubscribed = false
@@ -306,6 +309,43 @@ async function deleteItem(id) {
   } catch {}
 }
 
+const viewerItem = computed(() => viewerIndex.value >= 0 ? items.value[viewerIndex.value] : null)
+const viewerImage = computed(() => viewerItem.value ? api.sessionImageUrl(viewerItem.value.id) : '')
+
+function openViewer(item) {
+  const idx = items.value.findIndex(i => i.id === item.id)
+  if (idx >= 0) viewerIndex.value = idx
+}
+
+function closeViewer() {
+  viewerIndex.value = -1
+}
+
+async function viewerRemix() {
+  const item = viewerItem.value
+  if (!item) return
+  closeViewer()
+  await selectItem(item)
+}
+
+async function viewerExport() {
+  const item = viewerItem.value
+  if (!item) return
+  try {
+    await api.setActiveSessionItem(item.id)
+    closeViewer()
+    emit('navigate', { page: 'export' })
+  } catch {}
+}
+
+function viewerPrev() {
+  if (viewerIndex.value > 0) viewerIndex.value--
+}
+
+function viewerNext() {
+  if (viewerIndex.value < items.value.length - 1) viewerIndex.value++
+}
+
 function formatTime(ts) {
   if (!ts) return ''
   return ts.replace(/^.*?(\d{2}:\d{2}).*/, '$1')
@@ -508,7 +548,7 @@ onUnmounted(() => {
           class="si-card"
           :class="{ 'si-active': item.is_active }"
           :data-item-id="item.id"
-          @click="selectItem(item)"
+          @click="openViewer(item)"
         >
           <div class="si-thumb">
             <img v-if="thumbnails[item.id]" :src="thumbnails[item.id]" />
@@ -553,6 +593,20 @@ onUnmounted(() => {
         <div v-if="logs.length === 0" class="log-empty">{{ t('footer.no_logs') }}</div>
       </div>
     </div>
+
+    <ImageViewer
+      v-if="viewerIndex >= 0"
+      :imageBase64="viewerImage"
+      :hasPrev="viewerIndex > 0"
+      :hasNext="viewerIndex < items.length - 1"
+      :item="viewerItem"
+      :showActions="true"
+      @close="closeViewer"
+      @prev="viewerPrev"
+      @next="viewerNext"
+      @remix="viewerRemix"
+      @export="viewerExport"
+    />
   </div>
 </template>
 

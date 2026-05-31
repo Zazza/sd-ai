@@ -586,6 +586,8 @@ export const en = {
 
   // ImageViewer.vue
   'viewer.full_size': 'Full size',
+  'viewer.remix': 'Remix',
+  'viewer.export': 'Export',
 
   // GenerationProgress.vue
   'progress.llm_thinking': 'Generating prompt...',

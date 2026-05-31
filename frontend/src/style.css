@@ -1046,6 +1046,60 @@ input, textarea, select {
   right: 16px;
 }
 
+.image-viewer-overlay img.with-bar {
+  max-height: 80vh;
+}
+
+.image-viewer-bar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(8px);
+  padding: 16px 24px;
+  cursor: default;
+}
+
+.viewer-bar-content {
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.viewer-prompt {
+  font-size: 13px;
+  color: var(--text);
+  line-height: 1.5;
+  max-height: 3em;
+  overflow: hidden;
+  cursor: pointer;
+  margin-bottom: 8px;
+}
+
+.viewer-prompt.expanded {
+  max-height: none;
+}
+
+.viewer-params {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-bottom: 10px;
+}
+
+.viewer-params span {
+  padding: 2px 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+}
+
+.viewer-actions {
+  display: flex;
+  gap: 8px;
+}
+
 /* Transitions */
 .form-input,
 .form-textarea,
