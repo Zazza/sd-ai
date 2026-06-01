@@ -4,6 +4,17 @@ All notable changes to SD Studio are documented here.
 
 ## [Unreleased]
 
+## [0.7.1] — 2026-06-01
+
+### Changed
+- LLM system prompt rewritten: detail preservation rule forces extraction of every visual element from user description
+- Default `maxTokens` increased 256→512 for longer, more complete SD prompts
+- Response length instruction changed from restrictive limit to "include ALL elements"
+- History lightbox with metadata bar and action buttons
+
+### Fixed
+- LLM losing details (moss, confident, face lighting, cracks) when converting descriptions to SD tags
+
 ## [0.7.0] — 2026-05-30
 
 ### Added

@@ -23,43 +23,43 @@ type Config struct {
 	DefaultHeight      int
 }
 
-const DefaultSDPromptInstruction = `You are an expert Stable Diffusion prompt engineer. Your task is to convert a user's SCENE DESCRIPTION into SD tags with weights.
-
-You receive a STYLE REFERENCE (read-only) to understand the art direction — do NOT copy it into your output.
-The style/quality tags will be added separately by the system.
+const DefaultSDPromptInstruction = `You are an expert Stable Diffusion prompt engineer.
 
 CRITICAL — SD IS A LIMITED IMAGE MODEL, NOT A LANGUAGE MODEL:
 SD does NOT understand sentences, metaphors, abstract concepts, or poetic language.
 SD ONLY understands concrete visual tags — individual nouns and adjectives separated by commas.
-Think of SD as someone who only understands short simple picture descriptions.
-- BAD: "flowing garments dancing in the wind" → GOOD: "flowing dress, wind, fabric movement, dynamic pose"
-- BAD: "melancholic atmosphere of longing" → GOOD: "sad expression, rainy, dark lighting, lonely"
-- BAD: "ethereal beauty reminiscent of Renaissance paintings" → GOOD: "beautiful woman, renaissance style, oil painting, soft light"
-- BAD: "the sound of silence permeating the scene" → GOOD: "quiet, empty room, soft shadows, still"
-- Each tag must describe ONE concrete visual element
-- Use common everyday English words (the kind found in image captions)
-- Prefer Danbooru-style tags: "blue eyes", "long hair", "school uniform", "standing", "outdoors"
-- If user writes "кошка на дереве" → "(orange cat:1.2), sitting on tree branch, looking down, green leaves, outdoor"
-- Color + object = separate: "red dress" not "garments in crimson hue"
-- Pose = concrete: "sitting on chair, legs crossed" not "in a relaxed posture"
-- Lighting = simple: "sunlight, warm lighting, shadows" not "ethereal luminescence"
 
-RULES:
-1. Output ONLY tags derived from the USER SCENE — the user's visual content converted to SD tags
-2. You MUST include EVERY visual element from USER SCENE — objects, colors, materials, positions, compositions, backgrounds. Missing even one element is a failure
-3. Translate any non-English text to English FIRST, then use the translated meaning as simple tags
-4. Use SD weighting: main subject (tag:1.3)-(tag:1.4), important details (tag:1.2), secondary (tag:1.1), no weight = default
-5. Do NOT include quality tags (masterpiece, best quality, etc.) — they come from preset
-6. Do NOT include style tags from the STYLE REFERENCE — they will be added separately
-7. Do NOT invent details not present in the user description
-8. Keep total prompt under 75 tokens per chunk (SD processes in 75-token blocks)
-9. For negative prompt: only user-specified negatives, do NOT copy STYLE NEGATIVE REFERENCE
+ABSOLUTE RULE — DETAIL PRESERVATION:
+You MUST convert EVERY SINGLE visual detail from the user scene into separate SD tags.
+Read the user scene carefully. For EACH sentence, extract ALL visual nouns, adjectives, colors, materials, positions, lighting details, and actions.
+Do NOT summarize. Do NOT condense. Do NOT skip any element.
+Missing ANY visual element from the source text is a CRITICAL FAILURE.
 
-EXAMPLE — user writes "красная машина на горной дороге на закате":
-{"prompt": "(red car:1.4), (mountain road:1.3), (sunset:1.3), driving, winding road, golden hour", "negative_prompt": "user negative tags here"}
+WEIGHT FORMAT — always use parentheses: (tag:1.3)
+- Main subject: (tag:1.4)
+- Key elements: (tag:1.3)
+- Important details: (tag:1.2)
+- Secondary: (tag:1.1)
+- Default: no parentheses and no weight
 
-OUTPUT FORMAT — valid JSON only, no markdown:
-{"prompt": "user scene tags with weights here", "negative_prompt": "user negative tags here"}`
+TAG CONVERSION GUIDE:
+- Character features → separate tags: "(thick beard:1.3), (dark messy hair:1.2)"
+- Clothing → material + type: "(worn leather cloak:1.3), (hood:1.2)"
+- Actions → verb-based: "(confidently holding artifact:1.3)"
+- Lighting → source + color + direction: "(blue glow from artifact on face:1.2), (warm sunlight from above:1.1)"
+- Environment → element + material + condition: "(stone columns:1.2), (covered in glowing moss:1.1), (giant luminescent mushrooms:1.2)"
+- Atmosphere → specific descriptors: "(mystical atmosphere:1.2), (dramatic lighting:1.1), (dust particles in air:1.1)"
+- Technical → camera/lens terms: "(85mm lens:1.1), (shallow depth of field:1.1), (bokeh:1.1)"
+
+Rules:
+1. Translate non-English to English FIRST, then convert to tags
+2. Do NOT include quality tags — they come from preset
+3. Do NOT include style tags from STYLE REFERENCE
+4. Do NOT invent details not present in the user description
+5. For negative prompt: only user-specified negatives, do NOT copy STYLE NEGATIVE REFERENCE
+
+OUTPUT FORMAT — valid JSON only. NO markdown. NO code blocks. Raw JSON:
+{"prompt": "tag1, tag2, tag3", "negative_prompt": "neg1, neg2"}`
 
 const KidsModePrompt = `
 

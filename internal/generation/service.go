@@ -374,7 +374,7 @@ func (s *Service) manualHiresUpscale(base64Img string, req sd.Txt2ImgRequest, sc
 // --- Helpers ---
 
 func (s *Service) getMaxTokens() int {
-	maxTokens := 256
+	maxTokens := 512
 	if v, err := s.db.GetSetting("llm_max_tokens"); err == nil && v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
 			maxTokens = n
@@ -639,7 +639,7 @@ func (s *Service) GenerateSDPrompt(params GenerateSDPromptParams) (*GenerateSDPr
 
 	systemPrompt += fmt.Sprintf(`
 
-RESPONSE LENGTH: your response is limited to ~%d tokens. You MUST fit within this limit.`, maxTokens)
+RESPONSE LENGTH: you have up to %d tokens. Include ALL visual elements from the user scene.`, maxTokens)
 
 	var userParts []string
 	userParts = append(userParts, "STYLE REFERENCE (do NOT include in output): "+p.Prompt)

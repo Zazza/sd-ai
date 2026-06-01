@@ -1413,15 +1413,15 @@ func TestGetMaxTokens(t *testing.T) {
 		t.Parallel()
 		db := openTestDB(t)
 		svc := newTestService(t, db, &mockLLM{}, &mockSD{})
-		assert.Equal(t, 256, svc.getMaxTokens())
+		assert.Equal(t, 512, svc.getMaxTokens())
 	})
 
 	t.Run("from setting", func(t *testing.T) {
 		t.Parallel()
 		db := openTestDB(t)
-		require.NoError(t, db.SetSetting("llm_max_tokens", "512"))
+		require.NoError(t, db.SetSetting("llm_max_tokens", "1024"))
 		svc := newTestService(t, db, &mockLLM{}, &mockSD{})
-		assert.Equal(t, 512, svc.getMaxTokens())
+		assert.Equal(t, 1024, svc.getMaxTokens())
 	})
 
 	t.Run("invalid setting uses default", func(t *testing.T) {
@@ -1429,7 +1429,7 @@ func TestGetMaxTokens(t *testing.T) {
 		db := openTestDB(t)
 		require.NoError(t, db.SetSetting("llm_max_tokens", "not-a-number"))
 		svc := newTestService(t, db, &mockLLM{}, &mockSD{})
-		assert.Equal(t, 256, svc.getMaxTokens())
+		assert.Equal(t, 512, svc.getMaxTokens())
 	})
 }
 
