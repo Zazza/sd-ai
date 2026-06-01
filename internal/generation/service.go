@@ -123,6 +123,7 @@ type TestGenerateParams struct {
 	Seed           *int64   `json:"seed"`
 	ResolutionID   *int64   `json:"resolution_id,omitempty"`
 	HiresProfileID *int64   `json:"hires_profile_id,omitempty"`
+	InitImage      string   `json:"init_image,omitempty"`
 }
 
 type TestGenerateResultItem struct {
@@ -1001,6 +1002,9 @@ func (s *Service) TestGenerate(params TestGenerateParams) ([]TestGenerateResultI
 	if params.Steps > 150 {
 		return nil, fmt.Errorf("maximum steps is 150")
 	}
+	if len(params.InitImage) > 22*1024*1024 {
+		return nil, fmt.Errorf("init image too large (max 16 MB)")
+	}
 
 	defaultPreset := &preset.Preset{
 		Sampler:  "Euler a",
@@ -1117,60 +1121,91 @@ func (s *Service) TestGenerate(params TestGenerateParams) ([]TestGenerateResultI
 		batchSize := 1
 		batchCount := 1
 
-		var hiresFix *bool
-		if hiresEnabled {
-			hiresFix = &hiresEnabled
-		}
+		var result *sd.Txt2ImgResponse
+		var err error
 
-		req := sd.Txt2ImgRequest{
-			Prompt:                 prompt,
-			NegativePrompt:         negPrompt,
-			SamplerName:            samplerName,
-			Scheduler:              scheduleType,
-			Steps:                  steps,
-			CfgScale:               cfgScale,
-			Width:                  width,
-			Height:                 height,
-			Seed:                   seed,
-			ClipSkip:               &clipSkip,
-			BatchSize:              &batchSize,
-			BatchCount:             &batchCount,
-			HiresFix:               hiresFix,
-			HiresUpscale:           hiresUpscale,
-			HiresDenoisingStrength: hiresDenoising,
-			HiresUpscaler:          hiresUpscaler,
-			DoNotSaveImages:        true,
-			DoNotSaveGrid:          true,
-		}
-		result, err := s.sd.Txt2Img(req)
-		if err != nil {
-			if ierr := s.checkSDInterrupted(); ierr != nil {
-				return nil, ierr
+		if params.InitImage != "" {
+			denoisingStrength := 0.5
+			img2imgReq := sd.Img2ImgRequest{
+				InitImages:        []string{"data:image/png;base64," + params.InitImage},
+				Prompt:            prompt,
+				NegativePrompt:    negPrompt,
+				SamplerName:       samplerName,
+				Scheduler:         scheduleType,
+				Steps:             steps,
+				CfgScale:          cfgScale,
+				Width:             width,
+				Height:            height,
+				Seed:              seed,
+				DenoisingStrength: &denoisingStrength,
+				ClipSkip:          &clipSkip,
+				BatchSize:         &batchSize,
+				BatchCount:        &batchCount,
+				DoNotSaveImages:   true,
+				DoNotSaveGrid:     true,
 			}
-			if hiresFix != nil {
-				s.log.Warn("compound step %d: SD error with hires fix, retrying without: %s", idx+1, err)
-				time.Sleep(3 * time.Second)
-				req.HiresFix = nil
-				req.HiresUpscale = nil
-				req.HiresDenoisingStrength = nil
-				req.HiresUpscaler = ""
-				req.HiresResizeX = 0
-				req.HiresResizeY = 0
-				req.HiresSecondPassSteps = 0
-				result, err = s.sd.Txt2Img(req)
-				if err == nil && len(result.Images) > 0 {
-					scale := 2.0
-					if hiresUpscale != nil {
-						scale = *hiresUpscale
-					}
-					ds := 0.5
-					if hiresDenoising != nil {
-						ds = *hiresDenoising
-					}
-					s.log.Info("compound step %d: manual hires upscale: %.1fx, denoise=%.2f, upscaler=%s", idx+1, scale, ds, hiresUpscaler)
-					hrResult, hrErr := s.manualHiresUpscale(result.Images[0], req, scale, ds, hiresUpscaler)
-					if hrErr == nil && len(hrResult.Images) > 0 {
-						result = hrResult
+			result, err = s.sd.Img2Img(img2imgReq)
+			if err != nil {
+				if ierr := s.checkSDInterrupted(); ierr != nil {
+					return nil, ierr
+				}
+			}
+		} else {
+			var hiresFix *bool
+			if hiresEnabled {
+				hiresFix = &hiresEnabled
+			}
+
+			req := sd.Txt2ImgRequest{
+				Prompt:                 prompt,
+				NegativePrompt:         negPrompt,
+				SamplerName:            samplerName,
+				Scheduler:              scheduleType,
+				Steps:                  steps,
+				CfgScale:               cfgScale,
+				Width:                  width,
+				Height:                 height,
+				Seed:                   seed,
+				ClipSkip:               &clipSkip,
+				BatchSize:              &batchSize,
+				BatchCount:             &batchCount,
+				HiresFix:               hiresFix,
+				HiresUpscale:           hiresUpscale,
+				HiresDenoisingStrength: hiresDenoising,
+				HiresUpscaler:          hiresUpscaler,
+				DoNotSaveImages:        true,
+				DoNotSaveGrid:          true,
+			}
+			result, err = s.sd.Txt2Img(req)
+			if err != nil {
+				if ierr := s.checkSDInterrupted(); ierr != nil {
+					return nil, ierr
+				}
+				if hiresFix != nil {
+					s.log.Warn("compound step %d: SD error with hires fix, retrying without: %s", idx+1, err)
+					time.Sleep(3 * time.Second)
+					req.HiresFix = nil
+					req.HiresUpscale = nil
+					req.HiresDenoisingStrength = nil
+					req.HiresUpscaler = ""
+					req.HiresResizeX = 0
+					req.HiresResizeY = 0
+					req.HiresSecondPassSteps = 0
+					result, err = s.sd.Txt2Img(req)
+					if err == nil && len(result.Images) > 0 {
+						scale := 2.0
+						if hiresUpscale != nil {
+							scale = *hiresUpscale
+						}
+						ds := 0.5
+						if hiresDenoising != nil {
+							ds = *hiresDenoising
+						}
+						s.log.Info("compound step %d: manual hires upscale: %.1fx, denoise=%.2f, upscaler=%s", idx+1, scale, ds, hiresUpscaler)
+						hrResult, hrErr := s.manualHiresUpscale(result.Images[0], req, scale, ds, hiresUpscaler)
+						if hrErr == nil && len(hrResult.Images) > 0 {
+							result = hrResult
+						}
 					}
 				}
 			}

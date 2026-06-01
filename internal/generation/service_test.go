@@ -1242,6 +1242,46 @@ func TestTestGenerate_PresetNotFound(t *testing.T) {
 	assert.Contains(t, results[0].Error, "preset not found")
 }
 
+func TestTestGenerate_WithInitImage_UsesImg2Img(t *testing.T) {
+	t.Parallel()
+	db := openTestDB(t)
+	makeTestPreset(t, db, nil)
+
+	var calledImg2Img bool
+	sdSvc := &mockSD{
+		img2img: func(req sd.Img2ImgRequest) (*sd.Txt2ImgResponse, error) {
+			calledImg2Img = true
+			assert.NotEmpty(t, req.InitImages)
+			assert.Contains(t, req.InitImages[0], "data:image/png;base64,")
+			assert.Contains(t, req.Prompt, "1girl, blue hair")
+			assert.NotNil(t, req.DenoisingStrength)
+			assert.InDelta(t, 0.5, *req.DenoisingStrength, 0.01)
+			return &sd.Txt2ImgResponse{
+				Images: []string{"img2img-result"},
+				Info:   json.RawMessage(`{"seed": 99}`),
+			}, nil
+		},
+		txt2img: func(req sd.Txt2ImgRequest) (*sd.Txt2ImgResponse, error) {
+			t.Fatal("Txt2Img should not be called when InitImage is set")
+			return nil, nil
+		},
+	}
+
+	svc := newTestService(t, db, &mockLLM{}, sdSvc)
+	svc.ctx = context.Background()
+
+	results, err := svc.TestGenerate(TestGenerateParams{
+		Mode:        "presets",
+		SelectedIDs: []int64{1},
+		Prompt:      "1girl, blue hair",
+		InitImage:   "iVBORw0KGgo=",
+	})
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	assert.Equal(t, "img2img-result", results[0].Image)
+	assert.True(t, calledImg2Img)
+}
+
 func TestBuildSamplerName(t *testing.T) {
 	t.Parallel()
 

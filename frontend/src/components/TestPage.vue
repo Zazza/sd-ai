@@ -12,6 +12,7 @@ const shared = inject('sharedGenState', null)
 const props = defineProps({
   externalPrompt: { type: String, default: '' },
   hidePromptInput: { type: Boolean, default: false },
+  initImage: { type: String, default: '' },
 })
 
 const effectivePrompt = computed(() => props.externalPrompt || prompt.value)
@@ -120,7 +121,25 @@ async function generate() {
     error.value = t('test.error_select_item')
     return
   }
-  if (!effectivePrompt.value.trim()) {
+
+  let genPrompt = effectivePrompt.value
+
+  if (props.initImage && !genPrompt.trim()) {
+    generating.value = true
+    error.value = ''
+    try {
+      genPrompt = await api.analyzeImage(props.initImage) || ''
+      if (!genPrompt.trim()) {
+        error.value = t('compare.error_analysis', { error: 'empty result' })
+        generating.value = false
+        return
+      }
+    } catch (e) {
+      error.value = t('compare.error_analysis', { error: String(e) })
+      generating.value = false
+      return
+    }
+  } else if (!genPrompt.trim()) {
     error.value = t('test.error_prompt_required')
     return
   }
@@ -140,7 +159,7 @@ async function generate() {
         mode: mode.value,
         selected_ids: mode.value === 'presets' ? [selectedPresetIds.value[i]] : mode.value === 'compounds' ? [selectedCompoundIds.value[i]] : [],
         selected_models: mode.value === 'models' ? [selectedModelNames.value[i]] : [],
-        prompt: effectivePrompt.value,
+        prompt: genPrompt,
         negative_prompt: negativePrompt.value,
         sampler: showAdvanced.value ? sampler.value : '',
         schedule_type: showAdvanced.value ? scheduleType.value : '',
@@ -150,6 +169,7 @@ async function generate() {
         height: showAdvanced.value ? height.value : 0,
         resolution_id: selectedResolutionId.value,
         hires_profile_id: selectedHiresProfileId.value,
+        init_image: props.initImage || '',
       }
       const jobId = await api.enqueueCompareItem(params, i)
       compareJobIds.value.add(jobId)
@@ -185,6 +205,7 @@ async function enqueueCompare() {
         cfg_scale: showAdvanced.value ? cfgScale.value : 0,
         width: showAdvanced.value ? width.value : 0,
         height: showAdvanced.value ? height.value : 0,
+        init_image: props.initImage || '',
       }
       await api.enqueueCompareItem(params, i)
     }
@@ -341,6 +362,7 @@ function saveTestState() {
       <div style="display: flex; gap: 8px; margin-bottom: 16px;">
         <button class="btn" :class="mode === 'presets' ? 'btn-primary' : 'btn-secondary'" @click="mode = 'presets'; results = []">{{ t('test.btn_presets') }}</button>
         <button class="btn" :class="mode === 'models' ? 'btn-primary' : 'btn-secondary'" @click="mode = 'models'; results = []">{{ t('test.btn_models') }}</button>
+        <button v-if="!initImage" class="btn" :class="mode === 'compounds' ? 'btn-primary' : 'btn-secondary'" @click="mode = 'compounds'; results = []">{{ t('test.btn_pipelines') }}</button>
         <button class="btn" :class="mode === 'compounds' ? 'btn-primary' : 'btn-secondary'" @click="mode = 'compounds'; results = []">{{ t('test.btn_pipelines') }}</button>
       </div>
 
@@ -435,7 +457,7 @@ function saveTestState() {
         </div>
       </div>
 
-      <button class="btn btn-primary" style="width: 100%; justify-content: center; padding: 12px;" @click="generate" :disabled="selectedItems.length === 0 || !effectivePrompt.trim()">
+      <button class="btn btn-primary" style="width: 100%; justify-content: center; padding: 12px;" @click="generate" :disabled="selectedItems.length === 0 || (!effectivePrompt.trim() && !initImage)">
 
         <span v-if="generating" style="display: inline-flex; align-items: center; gap: 6px;">
           <span class="spinner" style="width: 14px; height: 14px; border-width: 2px;"></span>

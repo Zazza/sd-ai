@@ -6,8 +6,6 @@ import TestPage from './TestPage.vue'
 
 const tab = ref('prompt')
 const uploadedImage = ref('')
-const analyzing = ref(false)
-const analyzedPrompt = ref('')
 const error = ref('')
 
 async function uploadImage() {
@@ -55,7 +53,6 @@ async function pasteFromClipboard() {
 
 function clearImage() {
   uploadedImage.value = ''
-  analyzedPrompt.value = ''
   error.value = ''
 }
 
@@ -80,23 +77,6 @@ function handlePaste(e) {
       reader.readAsDataURL(file)
       return
     }
-  }
-}
-
-async function analyzeImage() {
-  if (!uploadedImage.value) {
-    error.value = t('compare.error_upload_first')
-    return
-  }
-  analyzing.value = true
-  error.value = ''
-  try {
-    const result = await api.analyzeImage(uploadedImage.value)
-    analyzedPrompt.value = result || ''
-  } catch (e) {
-    error.value = t('compare.error_analysis', { error: String(e) })
-  } finally {
-    analyzing.value = false
   }
 }
 
@@ -155,22 +135,10 @@ onUnmounted(() => {
         <button class="btn btn-secondary btn-sm" @click="pasteFromClipboard">{{ t('fi.btn_paste') }}</button>
         <button class="btn btn-secondary btn-sm" @click="clearImage">{{ t('fi.btn_clear') }}</button>
       </div>
-
-      <button class="btn btn-primary" style="width: 100%; margin-bottom: 12px;" @click="analyzeImage" :disabled="analyzing || !uploadedImage">
-        <span v-if="analyzing" style="display: inline-flex; align-items: center; gap: 6px;">
-          <span class="spinner" style="width: 14px; height: 14px; border-width: 2px;"></span>
-          {{ t('compare.analyzing') }}
-        </span>
-        <span v-else>{{ t('compare.btn_analyze') }}</span>
-      </button>
-
-      <div v-if="analyzedPrompt" class="form-group">
-        <textarea class="form-textarea" v-model="analyzedPrompt" rows="4" :placeholder="t('compare.placeholder_analyzed')"></textarea>
-      </div>
     </div>
 
     <TestPage
-      :external-prompt="tab === 'image' ? analyzedPrompt : ''"
+      :init-image="tab === 'image' ? uploadedImage : ''"
       :hide-prompt-input="tab === 'image'"
     />
   </div>
