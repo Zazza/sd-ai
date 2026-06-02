@@ -396,6 +396,7 @@ export namespace generation {
 	    seed?: number;
 	    resolution_id?: number;
 	    hires_profile_id?: number;
+	    init_image?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new TestGenerateParams(source);
@@ -417,6 +418,7 @@ export namespace generation {
 	        this.seed = source["seed"];
 	        this.resolution_id = source["resolution_id"];
 	        this.hires_profile_id = source["hires_profile_id"];
+	        this.init_image = source["init_image"];
 	    }
 	}
 	export class TestGenerateResultItem {

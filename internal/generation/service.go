@@ -1072,9 +1072,25 @@ func (s *Service) TestGenerate(params TestGenerateParams) ([]TestGenerateResultI
 		if filterErr != nil {
 			return nil, fmt.Errorf("generating image: %w", filterErr)
 		}
-		bp := s.buildPrompts(p.Prompt, p.NegativePrompt, p.Loras, filteredPrompt, params.NegativePrompt)
-		prompt := bp.Prompt
-		negPrompt := bp.NegativePrompt
+
+		var prompt, negPrompt string
+		if params.Mode == "presets" && params.InitImage == "" && filteredPrompt != "" {
+			promptResult, llmErr := s.generateLLMPromptFromTags(p, filteredPrompt, "", params.NegativePrompt)
+			if llmErr != nil {
+				s.log.Warn("LLM prompt generation failed, using raw prompt: %s", llmErr)
+				bp := s.buildPrompts(p.Prompt, p.NegativePrompt, p.Loras, filteredPrompt, params.NegativePrompt)
+				prompt = bp.Prompt
+				negPrompt = bp.NegativePrompt
+			} else {
+				prompt = promptResult.Prompt
+				prompt = appendLorasToPrompt(prompt, p.Loras)
+				negPrompt = s.buildPrompts("", promptResult.NegativePrompt, "", "", params.NegativePrompt).NegativePrompt
+			}
+		} else {
+			bp := s.buildPrompts(p.Prompt, p.NegativePrompt, p.Loras, filteredPrompt, params.NegativePrompt)
+			prompt = bp.Prompt
+			negPrompt = bp.NegativePrompt
+		}
 
 		sampler := p.Sampler
 		scheduleType := p.ScheduleType
