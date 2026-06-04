@@ -814,7 +814,6 @@ function onKeydown(e) {
   <div>
     <div class="page-header">
       <h1 class="page-title">{{ t('fi.title') }}</h1>
-      <button class="btn btn-primary" @click="loadPresets">{{ t('fi.btn_refresh') }}</button>
     </div>
 
     <div v-if="kidsModeActive" class="service-status">

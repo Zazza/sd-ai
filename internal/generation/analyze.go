@@ -869,12 +869,6 @@ func (s *Service) GenerateCompoundImage(params GenerateCompoundImageParams) (*Ge
 	isLastStep := false
 	lastStepIdx := len(cp.Steps) - 1
 
-	var lastPrompt, lastNegativePrompt string
-	var lastSamplerName string
-	var lastWidth, lastHeight int
-	var lastClipSkip int
-	var lastBatchSize, lastBatchCount int
-
 	var userScenePrompt, userSceneNeg string
 	if strings.TrimSpace(params.ExtraPrompt) != "" {
 		firstPreset, err := s.db.Get(cp.Steps[0].PresetID)
@@ -944,10 +938,18 @@ func (s *Service) GenerateCompoundImage(params GenerateCompoundImageParams) (*Ge
 		if stepIdx == 0 {
 			batchSize := 1
 			batchCount := 1
-			hiresEnabled, hiresUpscale, hiresDenoising, hiresUpscaler := s.resolveHires(p, params.HiresProfileID)
 			var hiresFix *bool
-			if hiresEnabled {
-				hiresFix = &hiresEnabled
+			var hiresUpscale *float64
+			var hiresDenoising *float64
+			var hiresUpscaler string
+			if isLastStep {
+				hiresEnabled, hu, hd, hup := s.resolveHires(p, params.HiresProfileID)
+				if hiresEnabled {
+					hiresFix = &hiresEnabled
+					hiresUpscale = hu
+					hiresDenoising = hd
+					hiresUpscaler = hup
+				}
 			}
 			req := sd.Txt2ImgRequest{
 				Prompt:                 prompt,
@@ -1014,17 +1016,6 @@ func (s *Service) GenerateCompoundImage(params GenerateCompoundImageParams) (*Ge
 			}
 			lastImage = result.Images[0]
 			lastInfo = result.Info
-
-			if isLastStep {
-				lastPrompt = prompt
-				lastNegativePrompt = negativePrompt
-				lastSamplerName = samplerName
-				lastWidth = width
-				lastHeight = height
-				lastClipSkip = clipSkip
-				lastBatchSize = batchSize
-				lastBatchCount = batchCount
-			}
 		} else {
 			denoising := step.DenoisingStrength
 			if denoising <= 0 {
@@ -1066,50 +1057,39 @@ func (s *Service) GenerateCompoundImage(params GenerateCompoundImageParams) (*Ge
 			lastInfo = result.Info
 
 			if isLastStep {
-				lastPrompt = prompt
-				lastNegativePrompt = negativePrompt
-				lastSamplerName = samplerName
-				lastWidth = width
-				lastHeight = height
-				lastClipSkip = clipSkip
-				lastBatchSize = batchSize
-				lastBatchCount = batchCount
+				hiresEnabled, hiresUpscale, hiresDenoising, hiresUpscaler := s.resolveHires(p, params.HiresProfileID)
+				if hiresEnabled {
+					scale := 2.0
+					if hiresUpscale != nil {
+						scale = *hiresUpscale
+					}
+					ds := 0.5
+					if hiresDenoising != nil {
+						ds = *hiresDenoising
+					}
+					s.log.Info("compound last step: hires upscale %.1fx, denoise=%.2f, upscaler=%s", scale, ds, hiresUpscaler)
+					hrResult, hrErr := s.manualHiresUpscale(lastImage, sd.Txt2ImgRequest{
+						Prompt:         prompt,
+						NegativePrompt: negativePrompt,
+						SamplerName:    samplerName,
+						Scheduler:      p.ScheduleType,
+						Steps:          p.Steps,
+						CfgScale:       p.CfgScale,
+						Width:          width,
+						Height:         height,
+						Seed:           p.Seed,
+						ClipSkip:       &clipSkip,
+						BatchSize:      &batchSize,
+						BatchCount:     &batchCount,
+					}, scale, ds, hiresUpscaler)
+					if hrErr != nil {
+						s.log.Warn("compound last step: hires upscale failed, using base image: %s", hrErr)
+					} else if len(hrResult.Images) > 0 {
+						lastImage = hrResult.Images[0]
+						lastInfo = hrResult.Info
+					}
+				}
 			}
-		}
-	}
-
-	hiresEnabled, hiresUpscale, hiresDenoising, hiresUpscaler := s.resolveHires(&preset.Preset{}, params.HiresProfileID)
-	if hiresEnabled && lastImage != "" {
-		scale := 2.0
-		if hiresUpscale != nil {
-			scale = *hiresUpscale
-		}
-		ds := 0.45
-		if hiresDenoising != nil {
-			ds = *hiresDenoising
-		}
-		s.log.Info("compound: applying hires upscale on final step: %.1fx, denoise=%.2f, upscaler=%s", scale, ds, hiresUpscaler)
-
-		hiresReq := sd.Txt2ImgRequest{
-			Prompt:          lastPrompt,
-			NegativePrompt:  lastNegativePrompt,
-			SamplerName:     lastSamplerName,
-			Steps:           20,
-			CfgScale:        7.0,
-			Width:           lastWidth,
-			Height:          lastHeight,
-			ClipSkip:        &lastClipSkip,
-			BatchSize:       &lastBatchSize,
-			BatchCount:      &lastBatchCount,
-			DoNotSaveImages: true,
-			DoNotSaveGrid:   true,
-		}
-		hrResult, hrErr := s.manualHiresUpscale(lastImage, hiresReq, scale, ds, hiresUpscaler)
-		if hrErr != nil {
-			s.log.Warn("compound: hires upscale failed, using base image: %s", hrErr)
-		} else if len(hrResult.Images) > 0 {
-			lastImage = hrResult.Images[0]
-			lastInfo = hrResult.Info
 		}
 	}
 

@@ -706,7 +706,6 @@ function onKeydown(e) {
   <div>
     <div class="page-header">
       <h1 class="page-title">{{ t('generate.title') }}</h1>
-      <button class="btn btn-primary" @click="loadPresets">{{ t('generate.btn_refresh') }}</button>
     </div>
 
     <div v-if="kidsModeActive" class="service-status">

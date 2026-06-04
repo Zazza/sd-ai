@@ -4,6 +4,16 @@ All notable changes to SD Studio are documented here.
 
 ## [Unreleased]
 
+## [0.7.3] — 2026-06-04
+
+### Changed
+- Hires profile now applied on the last workflow step instead of the first, preventing upscale degradation through intermediate img2img passes
+- History panel auto-scrolls to bottom on open
+- Preset lists auto-refresh on tab navigation, removed Refresh buttons from Generate and Remix pages
+
+### Added
+- Delete button in history lightbox with confirmation (button + Del key)
+
 ## [0.7.1] — 2026-06-01
 
 ### Changed

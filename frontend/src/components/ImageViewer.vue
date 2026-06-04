@@ -8,8 +8,9 @@ const props = defineProps({
   hasNext: { type: Boolean, default: false },
   item: { type: Object, default: null },
   showActions: { type: Boolean, default: false },
+  confirmDelete: { type: Boolean, default: false },
 })
-const emit = defineEmits(['close', 'prev', 'next', 'remix', 'export'])
+const emit = defineEmits(['close', 'prev', 'next', 'remix', 'export', 'delete'])
 
 const promptExpanded = ref(false)
 
@@ -22,6 +23,7 @@ function onKeydown(e) {
   if (e.key === 'Escape') emit('close')
   if (e.key === 'ArrowLeft' && props.hasPrev) emit('prev')
   if (e.key === 'ArrowRight' && props.hasNext) emit('next')
+  if (e.key === 'Delete') emit('delete')
 }
 
 onMounted(() => document.addEventListener('keydown', onKeydown))
@@ -50,6 +52,7 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown))
         <div v-if="showActions" class="viewer-actions">
           <button class="btn btn-primary btn-sm" @click="$emit('remix')">{{ t('viewer.remix') }}</button>
           <button class="btn btn-secondary btn-sm" @click="$emit('export')">{{ t('viewer.export') }}</button>
+          <button class="btn btn-danger btn-sm" @click="$emit('delete')">{{ confirmDelete ? t('viewer.confirm_delete') : t('viewer.delete') }}</button>
         </div>
       </div>
     </div>

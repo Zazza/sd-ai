@@ -33,6 +33,7 @@ const showNewSession = ref(false)
 const renamingId = ref(0)
 const renameName = ref('')
 const confirmDeleteSession = ref(false)
+const confirmDeleteViewer = ref(false)
 let confirmDeleteTimer = null
 
 const appVersion = ref('')
@@ -107,7 +108,12 @@ function togglePanel(p) {
       }
       return loadItems()
     }).then(() => {
-      nextTick(() => observeItems())
+      nextTick(() => {
+        observeItems()
+        if (itemContainer.value) {
+          itemContainer.value.scrollTop = itemContainer.value.scrollHeight
+        }
+      })
     }).catch(() => {})
   }
 }
@@ -344,6 +350,23 @@ function viewerPrev() {
 
 function viewerNext() {
   if (viewerIndex.value < items.value.length - 1) viewerIndex.value++
+}
+
+async function viewerDelete() {
+  const item = viewerItem.value
+  if (!item) return
+  if (!confirmDeleteViewer.value) {
+    confirmDeleteViewer.value = true
+    setTimeout(() => { confirmDeleteViewer.value = false }, 3000)
+    return
+  }
+  confirmDeleteViewer.value = false
+  await deleteItem(item.id)
+  if (items.value.length === 0) {
+    closeViewer()
+  } else if (viewerIndex.value >= items.value.length) {
+    viewerIndex.value = items.value.length - 1
+  }
 }
 
 function formatTime(ts) {
@@ -601,11 +624,13 @@ onUnmounted(() => {
       :hasNext="viewerIndex < items.length - 1"
       :item="viewerItem"
       :showActions="true"
+      :confirmDelete="confirmDeleteViewer"
       @close="closeViewer"
       @prev="viewerPrev"
       @next="viewerNext"
       @remix="viewerRemix"
       @export="viewerExport"
+      @delete="viewerDelete"
     />
   </div>
 </template>

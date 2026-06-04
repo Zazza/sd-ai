@@ -588,6 +588,8 @@ export const en = {
   'viewer.full_size': 'Full size',
   'viewer.remix': 'Remix',
   'viewer.export': 'Export',
+  'viewer.delete': 'Delete',
+  'viewer.confirm_delete': 'Confirm Delete',
 
   // GenerationProgress.vue
   'progress.llm_thinking': 'Generating prompt...',
