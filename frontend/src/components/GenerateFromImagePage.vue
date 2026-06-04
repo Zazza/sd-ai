@@ -2,8 +2,11 @@
 import { ref, computed, nextTick, watch, onMounted, onUnmounted, inject } from 'vue'
 import { api } from '../api.js'
 import { t } from '../i18n/index.js'
+import { MAX_IMAGE_SIZE } from '../constants.js'
 import { EventsOn, EventsOff } from '../wailsjs/runtime/runtime'
 import { useGenerationProgress } from '../composables/useGenerationProgress.js'
+import { useKidsMode } from '../composables/useKidsMode.js'
+import { usePresets } from '../composables/usePresets.js'
 import ImageViewer from './ImageViewer.vue'
 
 const props = defineProps({
@@ -27,9 +30,7 @@ watch(() => props.droppedImage, (val) => {
 const uploadedImage = ref('')
 const uploadedImageMime = ref('image/png')
 const tags = ref('')
-const presets = ref([])
-const presetTypes = ref([])
-const compoundPresets = ref([])
+const { presets, presetTypes, compoundPresets, loadPresets } = usePresets()
 const selectedTypeId = ref(null)
 const selectedPresetId = ref(null)
 const selectedCompoundPresetId = ref(null)
@@ -59,7 +60,7 @@ let analyzeTimer = null
 const recommending = ref(false)
 const recommendation = ref(null)
 
-const kidsModeActive = ref(false)
+const { kidsModeActive, loadKidsMode } = useKidsMode()
 const showViewer = ref(false)
 
 const shared = inject('sharedGenState', null)
@@ -106,23 +107,6 @@ const formattedGenInfo = computed(() => {
 })
 
 const hasMask = computed(() => maskHistory.value.length > 0)
-
-async function loadKidsMode() {
-  try {
-    kidsModeActive.value = await api.isKidsModeActive()
-  } catch {}
-}
-
-async function loadPresets() {
-  try {
-    const [p, t, c] = await Promise.all([api.listPresets(), api.listPresetTypes(), api.listCompoundPresets()])
-    presets.value = p || []
-    presetTypes.value = t || []
-    compoundPresets.value = c || []
-  } catch (e) {
-    console.error(e)
-  }
-}
 
 async function uploadImage() {
   try {
@@ -187,7 +171,7 @@ function handlePaste(e) {
       e.preventDefault()
       const file = item.getAsFile()
       if (!file) continue
-      if (file.size > 16 * 1024 * 1024) {
+      if (file.size > MAX_IMAGE_SIZE) {
         error.value = t('fi.error_image_too_large')
         return
       }
@@ -218,7 +202,7 @@ function onDrop(e) {
     error.value = t('fi.error_drop_image')
     return
   }
-  if (file.size > 16 * 1024 * 1024) {
+  if (file.size > MAX_IMAGE_SIZE) {
     error.value = t('fi.error_image_too_large')
     return
   }

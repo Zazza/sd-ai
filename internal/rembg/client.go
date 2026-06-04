@@ -10,6 +10,8 @@ import (
 	"time"
 )
 
+const maxRembgResponseBodySize = 50 * 1024 * 1024
+
 type Client struct {
 	baseURL    string
 	httpClient *http.Client
@@ -75,11 +77,11 @@ func (c *Client) RemoveBackground(imageData []byte) ([]byte, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, maxRembgResponseBodySize))
 		return nil, fmt.Errorf("rembg error %d: %s", resp.StatusCode, string(body))
 	}
 
-	result, err := io.ReadAll(resp.Body)
+	result, err := io.ReadAll(io.LimitReader(resp.Body, maxRembgResponseBodySize))
 	if err != nil {
 		return nil, fmt.Errorf("read rembg response: %w", err)
 	}

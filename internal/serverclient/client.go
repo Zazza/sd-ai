@@ -10,6 +10,8 @@ import (
 	"time"
 )
 
+const maxServerResponseBodySize = 10 * 1024 * 1024
+
 type Client struct {
 	baseURL    string
 	httpClient *http.Client
@@ -75,6 +77,13 @@ type LLMModelInfo struct {
 type BackendInfo struct {
 	Key  string `json:"key"`
 	Name string `json:"name"`
+}
+
+func sanitizePathSegment(s string) error {
+	if strings.Contains(s, "/") || strings.Contains(s, "\\") || strings.Contains(s, "..") {
+		return fmt.Errorf("invalid path segment: %q", s)
+	}
+	return nil
 }
 
 func NewClient() *Client {
@@ -154,6 +163,9 @@ func (c *Client) GetLLMModels() ([]LLMModelInfo, error) {
 }
 
 func (c *Client) DownloadModel(modelType, url, filename string) error {
+	if err := sanitizePathSegment(filename); err != nil {
+		return err
+	}
 	body, _ := json.Marshal(map[string]string{"url": url, "filename": filename})
 	resp, err := c.httpClient.Post(c.baseURL+"/api/server/models/"+modelType, "application/json", bytes.NewReader(body))
 	if err != nil {
@@ -172,6 +184,9 @@ func (c *Client) DownloadModel(modelType, url, filename string) error {
 }
 
 func (c *Client) DeleteModel(modelType, filename string) error {
+	if err := sanitizePathSegment(filename); err != nil {
+		return err
+	}
 	req, err := http.NewRequest(http.MethodDelete, c.baseURL+"/api/server/models/delete/"+modelType+"/"+filename, nil)
 	if err != nil {
 		return err
@@ -184,7 +199,7 @@ func (c *Client) DeleteModel(modelType, filename string) error {
 
 	if resp.StatusCode != http.StatusOK {
 		var errResp map[string]string
-		body, _ := io.ReadAll(resp.Body)
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, maxServerResponseBodySize))
 		if err := json.Unmarshal(body, &errResp); err == nil {
 			return fmt.Errorf("delete failed: %s", errResp["error"])
 		}
@@ -212,6 +227,9 @@ func (c *Client) PullLLMModel(name string) error {
 }
 
 func (c *Client) DeleteLLMModel(name string) error {
+	if err := sanitizePathSegment(name); err != nil {
+		return err
+	}
 	req, err := http.NewRequest(http.MethodDelete, c.baseURL+"/api/server/models/delete/llm/"+name, nil)
 	if err != nil {
 		return err
@@ -224,7 +242,7 @@ func (c *Client) DeleteLLMModel(name string) error {
 
 	if resp.StatusCode != http.StatusOK {
 		var errResp map[string]string
-		body, _ := io.ReadAll(resp.Body)
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, maxServerResponseBodySize))
 		if err := json.Unmarshal(body, &errResp); err == nil {
 			return fmt.Errorf("delete failed: %s", errResp["error"])
 		}
@@ -234,6 +252,9 @@ func (c *Client) DeleteLLMModel(name string) error {
 }
 
 func (c *Client) StartProcess(name string) error {
+	if err := sanitizePathSegment(name); err != nil {
+		return err
+	}
 	resp, err := c.httpClient.Post(c.baseURL+"/api/server/start/"+name, "", nil)
 	if err != nil {
 		return err
@@ -250,6 +271,9 @@ func (c *Client) StartProcess(name string) error {
 }
 
 func (c *Client) StopProcess(name string) error {
+	if err := sanitizePathSegment(name); err != nil {
+		return err
+	}
 	resp, err := c.httpClient.Post(c.baseURL+"/api/server/stop/"+name, "", nil)
 	if err != nil {
 		return err

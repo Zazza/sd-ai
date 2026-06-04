@@ -288,9 +288,9 @@ export namespace generation {
 	    }
 	}
 	export class GenerateImageResult {
-	    image: any;
-	    parameters: any;
-	    info: any;
+	    image: string;
+	    parameters: number[];
+	    info: number[];
 	    is_preview: boolean;
 	    hires_fix_skipped: boolean;
 	    hires_fix_manual: boolean;

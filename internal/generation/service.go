@@ -32,6 +32,11 @@ import (
 	xdraw "golang.org/x/image/draw"
 )
 
+const (
+	MaxImageBase64Len = 22 * 1024 * 1024 // ~16 MB decoded (base64 overhead)
+	MaxImageBytes     = 16 * 1024 * 1024 // 16 MB
+)
+
 // --- Interfaces ---
 
 type EventEmitter interface {
@@ -92,9 +97,9 @@ type GenerateImageParams struct {
 }
 
 type GenerateImageResult struct {
-	Image                   any    `json:"image"`
-	Parameters              any    `json:"parameters"`
-	Info                    any    `json:"info"`
+	Image                   string          `json:"image"`
+	Parameters              json.RawMessage `json:"parameters"`
+	Info                    json.RawMessage `json:"info"`
 	IsPreview               bool   `json:"is_preview"`
 	HiresFixSkipped         bool   `json:"hires_fix_skipped"`
 	HiresFixManual          bool   `json:"hires_fix_manual"`
@@ -582,7 +587,7 @@ func (s *Service) resolveResolution(p *preset.Preset, resolutionID *int64) (widt
 	return r.Width, r.Height
 }
 
-func (s *Service) resolveHires(_ *preset.Preset, hiresProfileID *int64) (enabled bool, upscale *float64, denoising *float64, upscaler string) {
+func (s *Service) resolveHires(hiresProfileID *int64) (enabled bool, upscale *float64, denoising *float64, upscaler string) {
 	if hiresProfileID == nil || *hiresProfileID <= 0 {
 		return false, nil, nil, ""
 	}
@@ -596,6 +601,70 @@ func (s *Service) resolveHires(_ *preset.Preset, hiresProfileID *int64) (enabled
 		upscaler = "R-ESRGAN 4x+"
 	}
 	return true, &h.Upscale, &h.DenoisingStrength, upscaler
+}
+
+func (s *Service) prepareSDContext(p *preset.Preset, logPrefix string) {
+	if p.ModelName != "" {
+		if err := s.sd.SetModel(p.ModelName); err != nil {
+			s.log.Warn("%s: set model %q: %s", logPrefix, p.ModelName, err)
+		}
+	}
+	if p.VAE != "" {
+		if err := s.sd.SetVAE(p.VAE); err != nil {
+			s.log.Warn("%s: set vae %q: %s", logPrefix, p.VAE, err)
+		}
+	} else {
+		if err := s.sd.SetVAE("Automatic"); err != nil {
+			s.log.Warn("%s: set vae automatic: %s", logPrefix, err)
+		}
+	}
+}
+
+type hiresFallbackResult struct {
+	Result        *sd.Txt2ImgResponse
+	Err           error
+	HiresSkipped  bool
+	HiresManual   bool
+}
+
+func (s *Service) doHiresFallback(req sd.Txt2ImgRequest, originalErr error, hiresUpscale *float64, hiresDenoising *float64, hiresUpscaler string, logPrefix string) hiresFallbackResult {
+	if req.HiresFix == nil {
+		return hiresFallbackResult{Err: originalErr}
+	}
+	s.log.Warn("%s: SD error with hires fix enabled, retrying with manual upscale: %s", logPrefix, originalErr)
+	time.Sleep(3 * time.Second)
+	req.HiresFix = nil
+	req.HiresUpscale = nil
+	req.HiresDenoisingStrength = nil
+	req.HiresUpscaler = ""
+	req.HiresResizeX = 0
+	req.HiresResizeY = 0
+	req.HiresSecondPassSteps = 0
+	retryResult, retryErr := s.sd.Txt2Img(req)
+	if retryErr != nil {
+		return hiresFallbackResult{Err: retryErr, HiresSkipped: true}
+	}
+	if len(retryResult.Images) == 0 {
+		return hiresFallbackResult{Result: retryResult, HiresSkipped: true}
+	}
+	scale := 2.0
+	if hiresUpscale != nil {
+		scale = *hiresUpscale
+	}
+	ds := 0.5
+	if hiresDenoising != nil {
+		ds = *hiresDenoising
+	}
+	s.log.Info("%s: manual hires upscale: %.1fx, denoise=%.2f, upscaler=%s", logPrefix, scale, ds, hiresUpscaler)
+	hrResult, hrErr := s.manualHiresUpscale(retryResult.Images[0], req, scale, ds, hiresUpscaler)
+	if hrErr != nil {
+		s.log.Warn("%s: manual hires upscale failed, using base image: %s", logPrefix, hrErr)
+		return hiresFallbackResult{Result: retryResult, HiresSkipped: true}
+	}
+	if len(hrResult.Images) > 0 {
+		return hiresFallbackResult{Result: hrResult, HiresManual: true}
+	}
+	return hiresFallbackResult{Result: retryResult, HiresSkipped: true}
 }
 
 // --- GenerateSDPrompt ---
@@ -815,21 +884,7 @@ func (s *Service) GenerateImage(params GenerateImageParams) (*GenerateImageResul
 	prompt := bp.Prompt
 	negativePrompt := bp.NegativePrompt
 
-	if p.ModelName != "" {
-		if err := s.sd.SetModel(p.ModelName); err != nil {
-			s.log.Warn("set model %q: %s", p.ModelName, err)
-		}
-	}
-
-	if p.VAE != "" {
-		if err := s.sd.SetVAE(p.VAE); err != nil {
-			s.log.Warn("set vae %q: %s", p.VAE, err)
-		}
-	} else {
-		if err := s.sd.SetVAE("Automatic"); err != nil {
-			s.log.Warn("set vae automatic: %s", err)
-		}
-	}
+	s.prepareSDContext(p, "generate")
 
 	samplerName := promptutil.BuildSamplerName(p.Sampler, p.ScheduleType)
 
@@ -847,7 +902,7 @@ func (s *Service) GenerateImage(params GenerateImageParams) (*GenerateImageResul
 	}
 
 	denoisingStrength := p.DenoisingStrength
-	hiresEnabled, hiresUpscale, hiresDenoising, hiresUpscaler := s.resolveHires(p, params.HiresProfileID)
+	hiresEnabled, hiresUpscale, hiresDenoising, hiresUpscaler := s.resolveHires(params.HiresProfileID)
 	var hiresFix *bool
 	if hiresEnabled {
 		hiresFix = &hiresEnabled
@@ -899,41 +954,11 @@ func (s *Service) GenerateImage(params GenerateImageParams) (*GenerateImageResul
 		if ierr := s.checkSDInterrupted(); ierr != nil {
 			return nil, ierr
 		}
-		if hiresFix != nil {
-			s.log.Warn("SD error with hires fix enabled, retrying with manual upscale: %s", err)
-			time.Sleep(3 * time.Second)
-			req.HiresFix = nil
-			req.HiresUpscale = nil
-			req.HiresDenoisingStrength = nil
-			req.HiresUpscaler = ""
-			req.HiresResizeX = 0
-			req.HiresResizeY = 0
-			req.HiresSecondPassSteps = 0
-			result, err = s.sd.Txt2Img(req)
-			if err == nil && len(result.Images) > 0 {
-				scale := 2.0
-				if hiresUpscale != nil {
-					scale = *hiresUpscale
-				}
-				ds := 0.5
-				if hiresDenoising != nil {
-					ds = *hiresDenoising
-				}
-				s.log.Info("Manual hires upscale: %.1fx, denoise=%.2f, upscaler=%s", scale, ds, hiresUpscaler)
-				hrResult, hrErr := s.manualHiresUpscale(result.Images[0], req, scale, ds, hiresUpscaler)
-				if hrErr != nil {
-					s.log.Warn("Manual hires upscale failed, using base image: %s", hrErr)
-					hiresSkipped = true
-				} else if len(hrResult.Images) > 0 {
-					result = hrResult
-					hiresManual = true
-				} else {
-					hiresSkipped = true
-				}
-			} else {
-				hiresSkipped = true
-			}
-		}
+		fb := s.doHiresFallback(req, err, hiresUpscale, hiresDenoising, hiresUpscaler, "generate")
+		result = fb.Result
+		err = fb.Err
+		hiresSkipped = fb.HiresSkipped
+		hiresManual = fb.HiresManual
 		if err != nil {
 			return nil, err
 		}
@@ -1002,7 +1027,7 @@ func (s *Service) TestGenerate(params TestGenerateParams) ([]TestGenerateResultI
 	if params.Steps > 150 {
 		return nil, fmt.Errorf("maximum steps is 150")
 	}
-	if len(params.InitImage) > 22*1024*1024 {
+	if len(params.InitImage) > MaxImageBase64Len {
 		return nil, fmt.Errorf("init image too large (max 16 MB)")
 	}
 
@@ -1036,20 +1061,7 @@ func (s *Service) TestGenerate(params TestGenerateParams) ([]TestGenerateResultI
 			}
 			p = loaded
 			item.Name = p.Name
-			if p.ModelName != "" {
-				if err := s.sd.SetModel(p.ModelName); err != nil {
-					s.log.Warn("set model %q: %s", p.ModelName, err)
-				}
-			}
-			if p.VAE != "" {
-				if err := s.sd.SetVAE(p.VAE); err != nil {
-					s.log.Warn("set vae %q: %s", p.VAE, err)
-				}
-			} else {
-				if err := s.sd.SetVAE("Automatic"); err != nil {
-					s.log.Warn("set vae automatic: %s", err)
-				}
-			}
+			s.prepareSDContext(p, fmt.Sprintf("test preset #%d", idx+1))
 		} else {
 			modelTitle := params.SelectedModels[idx]
 			if err := s.sd.SetModel(modelTitle); err != nil {
@@ -1104,7 +1116,7 @@ func (s *Service) TestGenerate(params TestGenerateParams) ([]TestGenerateResultI
 		width = rw
 		height = rh
 
-		hiresEnabled, hiresUpscale, hiresDenoising, hiresUpscaler := s.resolveHires(p, params.HiresProfileID)
+		hiresEnabled, hiresUpscale, hiresDenoising, hiresUpscaler := s.resolveHires(params.HiresProfileID)
 
 		if params.Sampler != "" {
 			sampler = params.Sampler
@@ -1197,32 +1209,11 @@ func (s *Service) TestGenerate(params TestGenerateParams) ([]TestGenerateResultI
 				if ierr := s.checkSDInterrupted(); ierr != nil {
 					return nil, ierr
 				}
-				if hiresFix != nil {
-					s.log.Warn("compound step %d: SD error with hires fix, retrying without: %s", idx+1, err)
-					time.Sleep(3 * time.Second)
-					req.HiresFix = nil
-					req.HiresUpscale = nil
-					req.HiresDenoisingStrength = nil
-					req.HiresUpscaler = ""
-					req.HiresResizeX = 0
-					req.HiresResizeY = 0
-					req.HiresSecondPassSteps = 0
-					result, err = s.sd.Txt2Img(req)
-					if err == nil && len(result.Images) > 0 {
-						scale := 2.0
-						if hiresUpscale != nil {
-							scale = *hiresUpscale
-						}
-						ds := 0.5
-						if hiresDenoising != nil {
-							ds = *hiresDenoising
-						}
-						s.log.Info("compound step %d: manual hires upscale: %.1fx, denoise=%.2f, upscaler=%s", idx+1, scale, ds, hiresUpscaler)
-						hrResult, hrErr := s.manualHiresUpscale(result.Images[0], req, scale, ds, hiresUpscaler)
-						if hrErr == nil && len(hrResult.Images) > 0 {
-							result = hrResult
-						}
-					}
+				fb := s.doHiresFallback(req, err, hiresUpscale, hiresDenoising, hiresUpscaler, fmt.Sprintf("test preset #%d", idx+1))
+				result = fb.Result
+				err = fb.Err
+				if err != nil {
+					item.Error = err.Error()
 				}
 			}
 		}
@@ -1369,20 +1360,7 @@ func (s *Service) UpscaleImage(params UpscaleImageParams) (*GenerateImageResult,
 		if p.ClipSkip != nil {
 			clipSkip = *p.ClipSkip
 		}
-		if p.ModelName != "" {
-			if err := s.sd.SetModel(p.ModelName); err != nil {
-				s.log.Warn("set model %q: %s", p.ModelName, err)
-			}
-		}
-		if p.VAE != "" {
-			if err := s.sd.SetVAE(p.VAE); err != nil {
-				s.log.Warn("set vae %q: %s", p.VAE, err)
-			}
-		} else {
-			if err := s.sd.SetVAE("Automatic"); err != nil {
-				s.log.Warn("set vae automatic: %s", err)
-			}
-		}
+		s.prepareSDContext(p, "upscale")
 	}
 
 	denoisingStrength := 0.4
@@ -1450,21 +1428,7 @@ func (s *Service) UpscalePreview(params UpscalePreviewParams) (*GenerateImageRes
 
 	negativePrompt = s.kids.ApplyNegative(negativePrompt)
 
-	if p.ModelName != "" {
-		if err := s.sd.SetModel(p.ModelName); err != nil {
-			s.log.Warn("set model %q: %s", p.ModelName, err)
-		}
-	}
-
-	if p.VAE != "" {
-		if err := s.sd.SetVAE(p.VAE); err != nil {
-			s.log.Warn("set vae %q: %s", p.VAE, err)
-		}
-	} else {
-		if err := s.sd.SetVAE("Automatic"); err != nil {
-			s.log.Warn("set vae automatic: %s", err)
-		}
-	}
+	s.prepareSDContext(p, "upscale-preview")
 
 	samplerName := promptutil.BuildSamplerName(p.Sampler, p.ScheduleType)
 

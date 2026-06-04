@@ -4,6 +4,23 @@ All notable changes to SD Studio are documented here.
 
 ## [Unreleased]
 
+## [0.7.4] — 2026-06-04
+
+### Changed
+- Replaced `any` types with concrete types (`string`, `json.RawMessage`) in `GenerateImageResult`
+- Extracted `prepareSDContext` and `doHiresFallback` helpers — eliminates 8+ duplicated SD call patterns
+- Extracted `processGeneration` in queue processor — 3 identical methods reduced to thin wrappers
+- Extracted compound generation helpers — `GenerateCompoundImage` 220→90 lines, `generateFromImageCompound` 180→92 lines
+- Extracted clipboard logic into `internal/clipboard/` package
+- Extracted `usePresets` and `useKidsMode` frontend composables — shared preset state between pages
+- Replaced magic numbers with named constants (`MaxImageBase64Len`, `MaxImageBytes`, `MAX_IMAGE_SIZE`)
+- Removed dead parameter from `resolveHires`
+
+### Fixed
+- Added `io.LimitReader` to all HTTP clients (sd, llm, serverclient, rembg) to prevent OOM
+- Added path traversal protection in serverclient API calls
+- Added URL scheme validation (`http`/`https` only) in SD and LLM `SetURL` methods
+
 ## [0.7.3] — 2026-06-04
 
 ### Changed

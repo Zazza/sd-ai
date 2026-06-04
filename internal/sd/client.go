@@ -18,6 +18,7 @@ const (
 	retryMaxAttempts   = 3
 	retryInitialDelay  = 2 * time.Second
 	generationTimeout  = 600 * time.Second
+	maxResponseBodySize = 50 * 1024 * 1024
 )
 
 type Client struct {
@@ -86,6 +87,9 @@ func (c *Client) GetOptions() (map[string]interface{}, error) {
 }
 
 func (c *Client) SetURL(baseURL string) {
+	if baseURL != "" && !strings.HasPrefix(baseURL, "http://") && !strings.HasPrefix(baseURL, "https://") {
+		return
+	}
 	c.baseURL = baseURL
 }
 
@@ -239,14 +243,14 @@ func (c *Client) doPost(url string, body []byte) (*Txt2ImgResponse, error) {
 	}
 	if err != nil {
 		if resp != nil {
-			if respBody, readErr := io.ReadAll(resp.Body); readErr == nil && len(respBody) > 0 {
+			if respBody, readErr := io.ReadAll(io.LimitReader(resp.Body, maxResponseBodySize)); readErr == nil && len(respBody) > 0 {
 				return nil, fmt.Errorf("%w\nSD response: %s", err, string(respBody))
 			}
 		}
 		return nil, err
 	}
 
-	respBody, err := io.ReadAll(resp.Body)
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBodySize))
 	if err != nil {
 		return nil, fmt.Errorf("read response: %w", err)
 	}

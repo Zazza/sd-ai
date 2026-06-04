@@ -2,6 +2,7 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { api } from '../api.js'
 import { t } from '../i18n/index.js'
+import { MAX_IMAGE_SIZE } from '../constants.js'
 import TestPage from './TestPage.vue'
 
 const tab = ref('prompt')
@@ -64,7 +65,7 @@ function handlePaste(e) {
       e.preventDefault()
       const file = item.getAsFile()
       if (!file) continue
-      if (file.size > 16 * 1024 * 1024) {
+      if (file.size > MAX_IMAGE_SIZE) {
         error.value = t('fi.error_image_too_large')
         return
       }

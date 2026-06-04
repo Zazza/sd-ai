@@ -15,6 +15,8 @@ import (
 	"go-sd/internal/promptutil"
 )
 
+const maxLLMResponseBodySize = 10 * 1024 * 1024
+
 type Client struct {
 	baseURL    string
 	backend    string
@@ -294,7 +296,7 @@ func (c *Client) doChatRequest(reqBody ChatRequest, logMsg string) (string, erro
 	}
 	defer resp.Body.Close()
 
-	respBody, err := io.ReadAll(resp.Body)
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, maxLLMResponseBodySize))
 	if err != nil {
 		log.Printf("[LLM] read error: %v", err)
 		return "", fmt.Errorf("read response: %w", err)
@@ -344,6 +346,9 @@ func (c *Client) HealthCheck() error {
 }
 
 func (c *Client) SetURL(baseURL string) {
+	if baseURL != "" && !strings.HasPrefix(baseURL, "http://") && !strings.HasPrefix(baseURL, "https://") {
+		return
+	}
 	c.baseURL = baseURL
 }
 

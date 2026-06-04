@@ -36,11 +36,11 @@ func NewProcessor(gen *generation.Service, store *Store, dataDir string, emit Ev
 func (p *processor) ProcessJob(ctx context.Context, job *Job) (*JobResult, error) {
 	switch job.Type {
 	case JobTxt2Img:
-		return p.processTxt2Img(ctx, job)
+		return p.processTxt2Img(job)
 	case JobFromImage:
-		return p.processFromImage(ctx, job)
+		return p.processFromImage(job)
 	case JobCompound:
-		return p.processCompound(ctx, job)
+		return p.processCompound(job)
 	case JobCompareItem:
 		return p.processCompareItem(ctx, job)
 	default:
@@ -48,82 +48,47 @@ func (p *processor) ProcessJob(ctx context.Context, job *Job) (*JobResult, error
 	}
 }
 
-func (p *processor) processTxt2Img(ctx context.Context, job *Job) (*JobResult, error) {
-	var params generation.GenerateImageParams
-	if err := json.Unmarshal([]byte(job.Params), &params); err != nil {
-		return nil, fmt.Errorf("invalid params: %w", err)
-	}
-
+func (p *processor) processGeneration(job *Job, gen func() (*generation.GenerateImageResult, error)) (*JobResult, error) {
 	p.emit.Emit("sd:progress:start")
-	result, err := p.gen.GenerateImage(params)
+	result, err := gen()
 	p.emit.Emit("sd:progress:stop")
-
 	if err != nil {
 		return nil, err
 	}
-
-	var imageBase64 string
-	if img, ok := result.Image.(string); ok {
-		imageBase64 = img
-	}
-	infoJSON, _ := json.Marshal(result.Info)
-
 	return &JobResult{
-		ImageBase64: imageBase64,
-		Info:        string(infoJSON),
+		ImageBase64: result.Image,
+		Info:        string(result.Info),
 	}, nil
 }
 
-func (p *processor) processFromImage(ctx context.Context, job *Job) (*JobResult, error) {
-	var params generation.GenerateFromImageParams
-	if err := json.Unmarshal([]byte(job.Params), &params); err != nil {
-		return nil, fmt.Errorf("invalid params: %w", err)
-	}
-
-	p.emit.Emit("sd:progress:start")
-	result, err := p.gen.GenerateFromImage(params)
-	p.emit.Emit("sd:progress:stop")
-
-	if err != nil {
-		return nil, err
-	}
-
-	var imageBase64 string
-	if img, ok := result.Image.(string); ok {
-		imageBase64 = img
-	}
-	infoJSON, _ := json.Marshal(result.Info)
-
-	return &JobResult{
-		ImageBase64: imageBase64,
-		Info:        string(infoJSON),
-	}, nil
+func (p *processor) processTxt2Img(job *Job) (*JobResult, error) {
+	return p.processGeneration(job, func() (*generation.GenerateImageResult, error) {
+		var params generation.GenerateImageParams
+		if err := json.Unmarshal([]byte(job.Params), &params); err != nil {
+			return nil, fmt.Errorf("invalid params: %w", err)
+		}
+		return p.gen.GenerateImage(params)
+	})
 }
 
-func (p *processor) processCompound(ctx context.Context, job *Job) (*JobResult, error) {
-	var params generation.GenerateCompoundImageParams
-	if err := json.Unmarshal([]byte(job.Params), &params); err != nil {
-		return nil, fmt.Errorf("invalid params: %w", err)
-	}
+func (p *processor) processFromImage(job *Job) (*JobResult, error) {
+	return p.processGeneration(job, func() (*generation.GenerateImageResult, error) {
+		var params generation.GenerateFromImageParams
+		if err := json.Unmarshal([]byte(job.Params), &params); err != nil {
+			return nil, fmt.Errorf("invalid params: %w", err)
+		}
+		return p.gen.GenerateFromImage(params)
+	})
+}
 
-	p.emit.Emit("sd:progress:start")
-	result, err := p.gen.GenerateCompoundImage(params)
-	p.emit.Emit("sd:progress:stop")
-
-	if err != nil {
-		return nil, err
-	}
-
-	var imageBase64 string
-	if img, ok := result.Image.(string); ok {
-		imageBase64 = img
-	}
-	infoJSON, _ := json.Marshal(result.Info)
-
-	return &JobResult{
-		ImageBase64: imageBase64,
-		Info:        string(infoJSON),
-	}, nil
+func (p *processor) processCompound(job *Job) (*JobResult, error) {
+	return p.processGeneration(job, func() (*generation.GenerateImageResult, error) {
+		var params generation.GenerateCompoundImageParams
+		if err := json.Unmarshal([]byte(job.Params), &params); err != nil {
+			return nil, fmt.Errorf("invalid params: %w", err)
+		}
+		return p.gen.GenerateCompoundImage(params)
+	})
 }
 
 func (p *processor) processCompareItem(ctx context.Context, job *Job) (*JobResult, error) {

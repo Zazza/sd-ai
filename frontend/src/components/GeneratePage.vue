@@ -4,18 +4,18 @@ import { EventsOn, EventsOff } from '../wailsjs/runtime/runtime'
 import { api } from '../api.js'
 import { t } from '../i18n/index.js'
 import { useGenerationProgress } from '../composables/useGenerationProgress.js'
+import { useKidsMode } from '../composables/useKidsMode.js'
+import { usePresets } from '../composables/usePresets.js'
 import SavedDescriptionsModal from './SavedDescriptionsModal.vue'
 import ImageViewer from './ImageViewer.vue'
 import ResolutionSelector from './ResolutionSelector.vue'
 import HiresProfileSelector from './HiresProfileSelector.vue'
 
-const presets = ref([])
+const { presets, presetTypes, compoundPresets, loadPresets } = usePresets()
 
 const props = defineProps({
   resetting: { type: Boolean, default: false },
 })
-const presetTypes = ref([])
-const compoundPresets = ref([])
 const selectedTypeId = ref(null)
 const selectedPresetId = ref(null)
 const selectedCompoundPresetId = ref(null)
@@ -48,7 +48,7 @@ const generationStage = ref('')
 const error = ref('')
 let promptDirty = true
 
-const kidsModeActive = ref(false)
+const { kidsModeActive, loadKidsMode } = useKidsMode()
 
 const selectedResolutionId = ref(null)
 const selectedHiresProfileId = ref(null)
@@ -116,23 +116,6 @@ watch([selectedResolutionId, selectedHiresProfileId], () => {
 
 function onResize() {
   isDesktop.value = window.innerWidth > 1024
-}
-
-async function loadKidsMode() {
-  try {
-    kidsModeActive.value = await api.isKidsModeActive()
-  } catch {}
-}
-
-async function loadPresets() {
-  try {
-    const [p, t, c] = await Promise.all([api.listPresets(), api.listPresetTypes(), api.listCompoundPresets()])
-    presets.value = p || []
-    presetTypes.value = t || []
-    compoundPresets.value = c || []
-  } catch (e) {
-    console.error(e)
-  }
 }
 
 function saveGenState() {

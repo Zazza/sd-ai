@@ -10,7 +10,6 @@ import (
 	"image/jpeg"
 	_ "image/png"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -18,6 +17,7 @@ import (
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 
+	"go-sd/internal/clipboard"
 	"go-sd/internal/compositor"
 	"go-sd/internal/config"
 	"go-sd/internal/filebrowser"
@@ -394,7 +394,7 @@ func (a *App) ReadImageFile() (string, error) {
 		return "", fmt.Errorf("failed to read file: %w", err)
 	}
 
-	if len(data) > 16*1024*1024 {
+	if len(data) > generation.MaxImageBytes {
 		return "", fmt.Errorf("image too large (max 16 MB)")
 	}
 
@@ -402,31 +402,7 @@ func (a *App) ReadImageFile() (string, error) {
 }
 
 func (a *App) ReadClipboardImage() (string, error) {
-	var data []byte
-	var err error
-
-	if os.Getenv("WAYLAND_DISPLAY") != "" {
-		data, err = exec.Command("wl-paste", "-t", "image/png").Output()
-	} else {
-		data, err = exec.Command("xclip", "-selection", "clipboard", "-t", "image/png", "-o").Output()
-	}
-
-	if err != nil {
-		if os.Getenv("WAYLAND_DISPLAY") != "" {
-			return "", fmt.Errorf("failed to read clipboard (install wl-clipboard)")
-		}
-		return "", fmt.Errorf("failed to read clipboard (install xclip)")
-	}
-
-	if len(data) == 0 {
-		return "", fmt.Errorf("no image in clipboard")
-	}
-
-	if len(data) > 16*1024*1024 {
-		return "", fmt.Errorf("image too large (max 16 MB)")
-	}
-
-	return base64.StdEncoding.EncodeToString(data), nil
+	return clipboard.ReadImage()
 }
 
 func (a *App) SaveImage(base64Data, defaultName string) (string, error) {
@@ -913,7 +889,7 @@ func (a *App) SetLastImage(base64Data string) error {
 	if base64Data == "" {
 		return nil
 	}
-	if len(base64Data) > 22*1024*1024 {
+	if len(base64Data) > generation.MaxImageBase64Len {
 		return fmt.Errorf("image too large (max 16 MB)")
 	}
 	a.sessions.AddToSession(base64Data, nil, "file-browser", false, nil)
