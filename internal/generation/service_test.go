@@ -1160,9 +1160,9 @@ func TestTestGenerate_NoPrompt(t *testing.T) {
 	svc := newTestService(t, db, &mockLLM{}, &mockSD{})
 	svc.ctx = context.Background()
 
-	_, err := svc.TestGenerate(TestGenerateParams{Mode: "presets", SelectedIDs: []int64{1}})
+	_, err := svc.TestGenerate(TestGenerateParams{Mode: "presets"})
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "prompt is required")
+	assert.Contains(t, err.Error(), "select at least one item")
 }
 
 func TestTestGenerate_DimensionsTooLarge(t *testing.T) {
@@ -1747,7 +1747,7 @@ func TestTestCompoundGenerate_Validation(t *testing.T) {
 	}{
 		{"no ids", TestCompoundGenerateParams{Prompt: "test"}, "select at least one"},
 		{"too many ids", TestCompoundGenerateParams{SelectedIDs: make([]int64, 21), Prompt: "test"}, "maximum 20"},
-		{"no prompt", TestCompoundGenerateParams{SelectedIDs: []int64{1}}, "prompt is required"},
+		{"no prompt no preset", TestCompoundGenerateParams{}, "select at least one compound preset"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
