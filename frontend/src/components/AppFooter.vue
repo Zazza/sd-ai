@@ -248,9 +248,10 @@ async function doCreateSession() {
   const name = newSessionName.value.trim()
   if (!name) return
   try {
-    await api.createSession(name)
+    const si = await api.createSession(name)
     newSessionName.value = ''
     showNewSession.value = false
+    if (si?.id) activeSessionId.value = si.id
     await loadSessions()
     thumbnails.value = {}
     await loadItems()
@@ -387,10 +388,21 @@ onMounted(async () => {
   const interval = setInterval(checkServices, 30000)
   setupObserver()
 
-  EventsOn('session:added', () => { loadItems(); loadSessions() })
+  EventsOn('session:added', () => {
+    loadSessions()
+    loadItems().then(() => {
+      nextTick(() => {
+        if (expanded.value && panel.value === 'session' && itemContainer.value) {
+          itemContainer.value.scrollTop = itemContainer.value.scrollHeight
+        }
+      })
+    })
+  })
   EventsOn('session:removed', () => { loadItems(); loadSessions() })
   EventsOn('session:cleared', () => { loadItems(); loadSessions() })
-  EventsOn('session:switched', () => {
+  EventsOn('session:switched', (data) => {
+    const id = data?.session_id
+    if (id) activeSessionId.value = id
     thumbnails.value = {}
     loadItems()
     loadSessions()

@@ -1,5 +1,5 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { EventsOn, EventsOff } from '../wailsjs/runtime/runtime'
+import { EventsOn } from '../wailsjs/runtime/runtime'
 import { api } from '../api.js'
 
 const jobs = ref([])
@@ -17,6 +17,7 @@ const hasActiveJobs = computed(() => jobs.value.some(j => j.status === 'pending'
 const hasPausedJobs = computed(() => pausedJobs.value.length > 0)
 
 let subscribers = 0
+let offChanged, offStarted, offProgress, offCompleted, offFailed, offPaused
 
 async function refresh() {
   try {
@@ -31,16 +32,29 @@ async function refresh() {
   }
 }
 
+function subscribe() {
+  offChanged = EventsOn('queue:changed', refresh)
+  offStarted = EventsOn('queue:started', refresh)
+  offProgress = EventsOn('queue:progress', refresh)
+  offCompleted = EventsOn('queue:completed', refresh)
+  offFailed = EventsOn('queue:failed', refresh)
+  offPaused = EventsOn('queue:paused', refresh)
+}
+
+function unsubscribe() {
+  offChanged?.()
+  offStarted?.()
+  offProgress?.()
+  offCompleted?.()
+  offFailed?.()
+  offPaused?.()
+}
+
 export function useQueue() {
   onMounted(async () => {
     subscribers++
     if (subscribers === 1) {
-      EventsOn('queue:changed', refresh)
-      EventsOn('queue:started', refresh)
-      EventsOn('queue:progress', refresh)
-      EventsOn('queue:completed', refresh)
-      EventsOn('queue:failed', refresh)
-      EventsOn('queue:paused', refresh)
+      subscribe()
       await refresh()
     }
   })
@@ -49,12 +63,7 @@ export function useQueue() {
     subscribers--
     if (subscribers <= 0) {
       subscribers = 0
-      EventsOff('queue:changed')
-      EventsOff('queue:started')
-      EventsOff('queue:progress')
-      EventsOff('queue:completed')
-      EventsOff('queue:failed')
-      EventsOff('queue:paused')
+      unsubscribe()
     }
   })
 

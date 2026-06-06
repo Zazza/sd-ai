@@ -832,8 +832,8 @@ func (s *Service) TestCompoundGenerate(params TestCompoundGenerateParams) ([]Tes
 	if len(params.SelectedIDs) > 20 {
 		return nil, fmt.Errorf("maximum 20 compound presets at once")
 	}
-	if params.Prompt == "" {
-		return nil, fmt.Errorf("prompt is required")
+	if params.Prompt == "" && len(params.SelectedIDs) == 0 {
+		return nil, fmt.Errorf("prompt is required when no preset is selected")
 	}
 
 	totalItems := len(params.SelectedIDs)

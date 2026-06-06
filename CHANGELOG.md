@@ -4,6 +4,21 @@ All notable changes to SD Studio are documented here.
 
 ## [Unreleased]
 
+## [0.7.5] — 2026-06-06
+
+### Changed
+- Compare page preserves state across navigation (v-show instead of v-if)
+- Compare preset list refreshes on navigation to the page
+- Compare allows generating without text prompt (presets have their own prompts)
+- Added preset type filter in Compare mode
+- Removed duplicate Workflow button in Compare
+
+### Fixed
+- **Critical: Wails EventsOff global bug** — replaced all `EventsOff()` calls with cancel functions from `EventsOn()` across 8 files. `EventsOff('name')` was killing ALL subscribers for that event globally, causing History to stop updating and Compare to lose results
+- History panel now auto-scrolls to show new images when already open
+- Session select updates correctly when creating a new group
+- `selectAll()` in Compare respects active preset type filter
+
 ## [0.7.4] — 2026-06-04
 
 ### Changed

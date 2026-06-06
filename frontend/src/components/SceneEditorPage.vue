@@ -174,7 +174,7 @@ async function generate() {
   batchCurrent.value = 0
   resetProgress()
 
-  EventsOn('multipass:progress', (p) => {
+  const offProgress = EventsOn('multipass:progress', (p) => {
     progress.value = p
   })
 
@@ -194,7 +194,7 @@ async function generate() {
   }
 
   generating.value = false
-  EventsOff('multipass:progress')
+  offProgress()
 }
 
 function progressLabel() {

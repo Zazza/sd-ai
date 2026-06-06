@@ -622,14 +622,14 @@ onMounted(async () => {
     chainStep.value = step
     chainTotal.value = total
   })
-  EventsOn("remove:stage", (stage) => {
+  const offRemoveStage = EventsOn("remove:stage", (stage) => {
     removeStage.value = stage
   })
-  EventsOn("session:added", () => {
+  const offSessionAdded = EventsOn("session:added", () => {
     // Don't auto-load — user picks when to load via Last Generated
   })
-  EventsOn('queue:completed', onQueueCompleted)
-  EventsOn('queue:failed', onQueueFailed)
+  const offCompleted = EventsOn('queue:completed', onQueueCompleted)
+  const offFailed = EventsOn('queue:failed', onQueueFailed)
   try {
     const s = await api.getSettings()
     if (s.fi_mode) mode.value = s.fi_mode
@@ -666,10 +666,10 @@ onUnmounted(() => {
   document.removeEventListener('paste', handlePaste)
   document.removeEventListener('keydown', onKeydown)
   EventsOff("analyze:step")
-  EventsOff("remove:stage")
-  EventsOff("session:added")
-  EventsOff('queue:completed')
-  EventsOff('queue:failed')
+  offRemoveStage()
+  offSessionAdded()
+  offCompleted()
+  offFailed()
   saveFIState()
   if (shared) {
     shared.selectedPresetId = selectedPresetId.value

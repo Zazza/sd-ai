@@ -1018,8 +1018,8 @@ func (s *Service) TestGenerate(params TestGenerateParams) ([]TestGenerateResultI
 	if totalItems > 50 {
 		return nil, fmt.Errorf("maximum 50 items at once")
 	}
-	if params.Prompt == "" {
-		return nil, fmt.Errorf("prompt is required")
+	if params.Prompt == "" && len(params.SelectedIDs) == 0 && len(params.SelectedModels) == 0 {
+		return nil, fmt.Errorf("prompt is required when no preset is selected")
 	}
 	if params.Width > 2048 || params.Height > 2048 {
 		return nil, fmt.Errorf("maximum dimension is 2048")

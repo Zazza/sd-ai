@@ -640,37 +640,29 @@ onMounted(async () => {
     }
   } catch {}
 
-  EventsOn('queue:completed', onQueueCompleted)
-  EventsOn('queue:failed', onQueueFailed)
-  EventsOn('session:added', onSessionAdded)
+  const offCompleted = EventsOn('queue:completed', onQueueCompleted)
+  const offFailed = EventsOn('queue:failed', onQueueFailed)
+  const offSessionAdded = EventsOn('session:added', onSessionAdded)
   document.addEventListener('keydown', onKeydown)
   window.addEventListener('resize', onResize)
-})
 
-onUnmounted(() => {
-  if (props.resetting) {
-    EventsOff('queue:completed')
-    EventsOff('queue:failed')
-    EventsOff('session:added')
+  onUnmounted(() => {
+    offCompleted()
+    offFailed()
+    offSessionAdded()
     document.removeEventListener('keydown', onKeydown)
     window.removeEventListener('resize', onResize)
-    return
-  }
-  EventsOff('queue:completed')
-  EventsOff('queue:failed')
-  EventsOff('session:added')
-  document.removeEventListener('keydown', onKeydown)
-  window.removeEventListener('resize', onResize)
-  saveGenState()
-  if (shared) {
-    shared.selectedPresetId = selectedPresetId.value
-    shared.selectedCompoundPresetId = selectedCompoundPresetId.value
-    shared.genMode = genMode.value
-    shared.description = description.value
-    shared.negative = negative.value
-    shared.selectedResolutionId = selectedResolutionId.value
-    shared.selectedHiresProfileId = selectedHiresProfileId.value
-  }
+    saveGenState()
+    if (shared) {
+      shared.selectedPresetId = selectedPresetId.value
+      shared.selectedCompoundPresetId = selectedCompoundPresetId.value
+      shared.genMode = genMode.value
+      shared.description = description.value
+      shared.negative = negative.value
+      shared.selectedResolutionId = selectedResolutionId.value
+      shared.selectedHiresProfileId = selectedHiresProfileId.value
+    }
+  })
 })
 
 function onKeydown(e) {

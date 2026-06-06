@@ -220,13 +220,13 @@ function openSavePreset() {
 onMounted(async () => {
   await loadPresets()
   await loadLastImage()
-  EventsOn('session:active', () => {
+  const offSessionActive = EventsOn('session:active', () => {
     loadLastImage()
   })
 })
 
 onUnmounted(() => {
-  EventsOff('session:active')
+  offSessionActive()
 })
 </script>
 

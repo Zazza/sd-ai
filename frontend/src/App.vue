@@ -194,11 +194,11 @@ onUnmounted(() => {
       <template v-if="page !== 'settings'">
         <UnifiedGeneratePage v-if="page === 'generate'" :key="resetKey + '-' + generateKey" :initial-tab="generateTab" :resetting="isResetting" />
         <GenerateFromImagePage v-else-if="page === 'remix'" />
-        <ComparePage v-else-if="page === 'compare'" />
         <ExportPage v-else-if="page === 'export'" />
         <FileBrowserPage v-else-if="page === 'browser'" @navigate="onNavigate" />
-        <component v-else :is="currentPage" />
+        <component v-else-if="page !== 'compare'" :is="currentPage" />
       </template>
+      <ComparePage v-show="page === 'compare'" :active="page === 'compare'" />
     </main>
     </div>
     <AppFooter @navigate="onNavigate" />

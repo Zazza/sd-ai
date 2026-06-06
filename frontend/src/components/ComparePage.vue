@@ -5,6 +5,10 @@ import { t } from '../i18n/index.js'
 import { MAX_IMAGE_SIZE } from '../constants.js'
 import TestPage from './TestPage.vue'
 
+const props = defineProps({
+  active: { type: Boolean, default: false }
+})
+
 const tab = ref('prompt')
 const uploadedImage = ref('')
 const error = ref('')
@@ -141,6 +145,7 @@ onUnmounted(() => {
     <TestPage
       :init-image="tab === 'image' ? uploadedImage : ''"
       :hide-prompt-input="tab === 'image'"
+      :active="active"
     />
   </div>
 </template>

@@ -13,12 +13,15 @@ const props = defineProps({
   externalPrompt: { type: String, default: '' },
   hidePromptInput: { type: Boolean, default: false },
   initImage: { type: String, default: '' },
+  active: { type: Boolean, default: true },
 })
 
 const effectivePrompt = computed(() => props.externalPrompt || prompt.value)
 
 const mode = ref('presets')
 const presets = ref([])
+const presetTypes = ref([])
+const filterPresetType = ref('')
 const models = ref([])
 const compoundPresets = ref([])
 const samplers = ref([])
@@ -46,11 +49,20 @@ const results = ref([])
 const selectedResolutionId = ref(null)
 const selectedHiresProfileId = ref(null)
 
+watch(() => props.active, (val) => {
+  if (val) loadData()
+})
+
 watch([selectedResolutionId, selectedHiresProfileId], () => {
   api.updateSettings({
     test_resolution_id: String(selectedResolutionId.value || ''),
     test_hires_profile_id: String(selectedHiresProfileId.value || ''),
   }).catch(() => {})
+})
+
+const filteredPresets = computed(() => {
+  if (!filterPresetType.value) return presets.value
+  return presets.value.filter(p => p.preset_type === filterPresetType.value)
 })
 
 const selectedItems = computed(() => {
@@ -79,7 +91,7 @@ function toggleCompound(id) {
 
 function selectAll() {
   if (mode.value === 'presets') {
-    selectedPresetIds.value = presets.value.map(p => p.id)
+    selectedPresetIds.value = filteredPresets.value.map(p => p.id)
   } else if (mode.value === 'compounds') {
     selectedCompoundIds.value = compoundPresets.value.map(c => c.id)
   } else {
@@ -99,14 +111,16 @@ function deselectAll() {
 
 async function loadData() {
   try {
-    const [p, m, s, sch, c] = await Promise.all([
+    const [p, pt, m, s, sch, c] = await Promise.all([
       api.listPresets(),
+      api.listPresetTypes(),
       api.getModels(),
       api.getSamplers(),
       api.getSchedulers(),
       api.listCompoundPresets(),
     ])
     presets.value = p || []
+    presetTypes.value = pt || []
     models.value = m || []
     samplers.value = s || []
     schedulers.value = sch || []
@@ -139,9 +153,6 @@ async function generate() {
       generating.value = false
       return
     }
-  } else if (!genPrompt.trim()) {
-    error.value = t('test.error_prompt_required')
-    return
   }
 
   generating.value = true
@@ -279,12 +290,11 @@ function onQueueFailed(data) {
     return
   }
 }
-
 onMounted(async () => {
   loadData()
-  EventsOn('queue:started', onQueueStarted)
-  EventsOn('queue:completed', onQueueCompleted)
-  EventsOn('queue:failed', onQueueFailed)
+  const offStarted = EventsOn('queue:started', onQueueStarted)
+  const offCompleted = EventsOn('queue:completed', onQueueCompleted)
+  const offFailed = EventsOn('queue:failed', onQueueFailed)
   if (shared) {
     if (!prompt.value) prompt.value = shared.description || ''
     if (!negativePrompt.value) negativePrompt.value = shared.negative || ''
@@ -310,9 +320,9 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
-  EventsOff('queue:started')
-  EventsOff('queue:completed')
-  EventsOff('queue:failed')
+  offStarted()
+  offCompleted()
+  offFailed()
   saveTestState()
   if (shared) {
     if (prompt.value) shared.description = prompt.value
@@ -363,7 +373,6 @@ function saveTestState() {
         <button class="btn" :class="mode === 'presets' ? 'btn-primary' : 'btn-secondary'" @click="mode = 'presets'; results = []">{{ t('test.btn_presets') }}</button>
         <button class="btn" :class="mode === 'models' ? 'btn-primary' : 'btn-secondary'" @click="mode = 'models'; results = []">{{ t('test.btn_models') }}</button>
         <button v-if="!initImage" class="btn" :class="mode === 'compounds' ? 'btn-primary' : 'btn-secondary'" @click="mode = 'compounds'; results = []">{{ t('test.btn_pipelines') }}</button>
-        <button class="btn" :class="mode === 'compounds' ? 'btn-primary' : 'btn-secondary'" @click="mode = 'compounds'; results = []">{{ t('test.btn_pipelines') }}</button>
       </div>
 
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
@@ -372,6 +381,10 @@ function saveTestState() {
           {{ t('test.selected_count', { count: selectedItems.length }) }}
         </label>
         <div style="display: flex; gap: 6px;">
+          <select v-if="mode === 'presets' && presetTypes.length" v-model="filterPresetType" class="form-input" style="width: auto; padding: 2px 6px; font-size: 12px;">
+            <option value="">All types</option>
+            <option v-for="pt in presetTypes" :key="pt.id" :value="pt.name">{{ pt.name }}</option>
+          </select>
           <button class="btn btn-sm btn-secondary" @click="selectAll">{{ t('test.btn_all') }}</button>
           <button class="btn btn-sm btn-secondary" @click="deselectAll">{{ t('test.btn_none') }}</button>
         </div>
@@ -379,12 +392,12 @@ function saveTestState() {
 
       <div class="test-select-list">
         <template v-if="mode === 'presets'">
-          <div v-for="p in presets" :key="p.id" class="test-select-item" :class="{ active: selectedPresetIds.includes(p.id) }" @click="!generating && togglePreset(p.id)">
+          <div v-for="p in filteredPresets" :key="p.id" class="test-select-item" :class="{ active: selectedPresetIds.includes(p.id) }" @click="!generating && togglePreset(p.id)">
             <input type="checkbox" :checked="selectedPresetIds.includes(p.id)" @click.prevent />
             <span>{{ p.name }}</span>
             <span v-if="p.model_name" style="color: var(--text-dim); font-size: 11px; margin-left: auto;">{{ p.model_name }}</span>
           </div>
-          <div v-if="!presets.length" style="color: var(--text-dim); padding: 12px; text-align: center;">{{ t('test.no_presets') }}</div>
+          <div v-if="!filteredPresets.length" style="color: var(--text-dim); padding: 12px; text-align: center;">{{ t('test.no_presets') }}</div>
         </template>
         <template v-else-if="mode === 'compounds'">
           <div v-for="c in compoundPresets" :key="c.id" class="test-select-item" :class="{ active: selectedCompoundIds.includes(c.id) }" @click="!generating && toggleCompound(c.id)">
@@ -457,7 +470,7 @@ function saveTestState() {
         </div>
       </div>
 
-      <button class="btn btn-primary" style="width: 100%; justify-content: center; padding: 12px;" @click="generate" :disabled="selectedItems.length === 0 || (!effectivePrompt.trim() && !initImage)">
+      <button class="btn btn-primary" style="width: 100%; justify-content: center; padding: 12px;" @click="generate" :disabled="selectedItems.length === 0">
 
         <span v-if="generating" style="display: inline-flex; align-items: center; gap: 6px;">
           <span class="spinner" style="width: 14px; height: 14px; border-width: 2px;"></span>

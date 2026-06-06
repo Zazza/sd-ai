@@ -1,5 +1,5 @@
 import { ref, onMounted, onUnmounted } from 'vue'
-import { EventsOn, EventsOff } from '../wailsjs/runtime/runtime'
+import { EventsOn } from '../wailsjs/runtime/runtime'
 import { api } from '../api.js'
 
 export function useGenerationProgress() {
@@ -32,14 +32,15 @@ export function useGenerationProgress() {
 
   const isGenerating = () => llmStatus.value === 'thinking' || (sdProgress.value && sdProgress.value.progress > 0)
 
+  let offLLM, offSD
   onMounted(() => {
-    EventsOn('llm:status', onLLMStatus)
-    EventsOn('sd:progress', onSDProgress)
+    offLLM = EventsOn('llm:status', onLLMStatus)
+    offSD = EventsOn('sd:progress', onSDProgress)
   })
 
   onUnmounted(() => {
-    EventsOff('llm:status')
-    EventsOff('sd:progress')
+    offLLM?.()
+    offSD?.()
   })
 
   return { llmStatus, sdProgress, preview, interrupt, reset, isGenerating }
