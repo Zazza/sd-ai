@@ -1499,35 +1499,6 @@ func (s *Service) UpscalePreview(params UpscalePreviewParams) (*GenerateImageRes
 
 // --- Last Image Persistence ---
 
-func (s *Service) saveLastImage(imageBase64 string, info json.RawMessage, isPreview bool) {
-	if imageBase64 == "" {
-		return
-	}
-
-	pngData, err := base64.StdEncoding.DecodeString(imageBase64)
-	if err != nil {
-		return
-	}
-
-	if err := os.MkdirAll(s.dataDir, 0o755); err != nil {
-		return
-	}
-
-	pngPath := filepath.Join(s.dataDir, "last_image.png")
-	if err := os.WriteFile(pngPath, pngData, 0o644); err != nil {
-		return
-	}
-
-	meta := lastImageMeta{IsPreview: isPreview, Info: info}
-	metaBytes, err := json.Marshal(meta)
-	if err != nil {
-		return
-	}
-
-	metaPath := filepath.Join(s.dataDir, "last_image.json")
-	_ = os.WriteFile(metaPath, metaBytes, 0o644)
-}
-
 func (s *Service) GetLastImage() (*GenerateImageResult, error) {
 	pngPath := filepath.Join(s.dataDir, "last_image.png")
 	pngData, err := os.ReadFile(pngPath)

@@ -1569,32 +1569,6 @@ func TestIntPtr(t *testing.T) {
 	assert.Equal(t, 5, *result)
 }
 
-func TestSaveLastImage(t *testing.T) {
-	t.Parallel()
-	tmpDir := t.TempDir()
-	db := openTestDB(t)
-	svc := newTestService(t, db, &mockLLM{}, &mockSD{})
-	svc.dataDir = tmpDir
-
-	t.Run("saves png and meta", func(t *testing.T) {
-		pngData := makePNGBase64(t, 8, 8)
-		svc.saveLastImage(pngData, json.RawMessage(`{"seed": 42}`), false)
-
-		_, err := os.Stat(filepath.Join(tmpDir, "last_image.png"))
-		assert.NoError(t, err)
-		_, err = os.Stat(filepath.Join(tmpDir, "last_image.json"))
-		assert.NoError(t, err)
-	})
-
-	t.Run("empty image does nothing", func(t *testing.T) {
-		svc.saveLastImage("", nil, false)
-	})
-
-	t.Run("invalid base64 does nothing", func(t *testing.T) {
-		svc.saveLastImage("!!!invalid!!!", nil, false)
-	})
-}
-
 func TestGetAnalyzeChainPrompts(t *testing.T) {
 	t.Parallel()
 

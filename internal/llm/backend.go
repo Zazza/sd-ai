@@ -15,17 +15,6 @@ type BackendConfig struct {
 	TopP       float64
 }
 
-func DefaultURL(backend string) string {
-	switch backend {
-	case BackendOllama:
-		return "http://localhost:11434"
-	case BackendLlamaCpp:
-		return "http://localhost:8081"
-	default:
-		return "http://localhost:1234"
-	}
-}
-
 var BackendLabels = map[string]string{
 	BackendLMStudio: "LM Studio",
 	BackendOllama:   "Ollama",

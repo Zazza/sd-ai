@@ -138,7 +138,9 @@ async function generate() {
 
   let genPrompt = effectivePrompt.value
 
-  if (props.initImage && !genPrompt.trim()) {
+  // prompt input is hidden on the image tab, so prompt.value is a stale leaked value —
+  // always derive the prompt from the actual pasted image, never from the hidden field
+  if (props.initImage) {
     generating.value = true
     error.value = ''
     try {
@@ -189,40 +191,6 @@ async function generate() {
   } catch (e) {
     error.value = String(e)
     generating.value = false
-  }
-}
-
-async function enqueueCompare() {
-  if (selectedItems.value.length === 0) {
-    error.value = t('test.error_select_item')
-    return
-  }
-  if (!effectivePrompt.value.trim()) {
-    error.value = t('test.error_prompt_required')
-    return
-  }
-
-  try {
-    for (let i = 0; i < selectedItems.value.length; i++) {
-      const params = {
-        mode: mode.value,
-        selected_ids: mode.value === 'presets' ? [selectedPresetIds.value[i]] : mode.value === 'compounds' ? [selectedCompoundIds.value[i]] : [],
-        selected_models: mode.value === 'models' ? [selectedModelNames.value[i]] : [],
-        prompt: effectivePrompt.value,
-        negative_prompt: negativePrompt.value,
-        sampler: showAdvanced.value ? sampler.value : '',
-        schedule_type: showAdvanced.value ? scheduleType.value : '',
-        steps: showAdvanced.value ? steps.value : 0,
-        cfg_scale: showAdvanced.value ? cfgScale.value : 0,
-        width: showAdvanced.value ? width.value : 0,
-        height: showAdvanced.value ? height.value : 0,
-        init_image: props.initImage || '',
-      }
-      await api.enqueueCompareItem(params, i)
-    }
-    error.value = ''
-  } catch (e) {
-    error.value = String(e)
   }
 }
 

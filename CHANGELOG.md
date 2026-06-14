@@ -4,6 +4,14 @@ All notable changes to SD Studio are documented here.
 
 ## [Unreleased]
 
+## [0.7.6] — 2026-06-14
+
+### Fixed
+- **Compare By Image → txt2img instead of img2img**: a stale prompt persisted in settings (`test_prompt`) leaked into the hidden prompt field on the Image tab, so `analyzeImage` was skipped. Generation then ran img2img on the unrelated stale text instead of the pasted image — results looked like txt2img from a description. Reproduced only when `test_prompt` was non-empty. Now always analyzes the actual pasted image when an init image is present (`TestPage.generate()`).
+
+### Removed
+- Dead code cleanup: orphaned `internal/api/` package (`handler.go` + `handler_test.go`, ~44 KB — HTTP server extracted to sd-ai-server, zero imports), `enqueueCompare()` in `TestPage.vue` (never called), `llm.DefaultURL`, `queue.decodeBase64Image`, `generation.saveLastImage` + its test (superseded by session storage). Verified with `go build`, `go vet`, `go test ./...`, and `deadcode` (zero unreachable funcs remaining).
+
 ## [0.7.5] — 2026-06-06
 
 ### Changed

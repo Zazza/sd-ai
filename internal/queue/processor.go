@@ -2,7 +2,6 @@ package queue
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 
@@ -129,8 +128,4 @@ func (p *processor) processCompareItem(ctx context.Context, job *Job) (*JobResul
 		ImageBase64: imageBase64,
 		Info:        string(resultJSON),
 	}, nil
-}
-
-func decodeBase64Image(b64 string) ([]byte, error) {
-	return base64.StdEncoding.DecodeString(b64)
 }
