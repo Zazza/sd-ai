@@ -156,32 +156,44 @@ func (s *Service) applyHiresOnLastStep(p *preset.Preset, lastImage, prompt, negP
 	return lastImage, nil, false
 }
 
-func (s *Service) runFromImageCompoundFirstStep(p *preset.Preset, initImage, prompt, negPrompt, samplerName string, width, height, clipSkip int, mode string, denoisingStrength float64, stepNum int) (image string, info json.RawMessage, err error) {
+func (s *Service) runFromImageCompoundFirstStep(p *preset.Preset, initImage, prompt, negPrompt, samplerName string, width, height, clipSkip int, mode string, denoisingStrength float64, mask string, maskBlur, inpaintFill int, inpaintFullRes bool, stepNum int) (image string, info json.RawMessage, err error) {
 	batchSize := 1
 	batchCount := 1
-	if mode == "img2img" {
+	if mode == "img2img" || mode == "inpaint" {
 		denoising := denoisingStrength
 		if denoising <= 0 {
 			denoising = 0.5
 		}
-		result, err := s.sd.Img2Img(sd.Img2ImgRequest{
-			InitImages:      []string{initImage},
-			Prompt:          prompt,
-			NegativePrompt:  negPrompt,
-			SamplerName:     samplerName,
-			Scheduler:       p.ScheduleType,
-			Steps:           p.Steps,
-			CfgScale:        p.CfgScale,
-			Width:           width,
-			Height:          height,
-			Seed:            p.Seed,
+		req := sd.Img2ImgRequest{
+			InitImages:        []string{initImage},
+			Prompt:            prompt,
+			NegativePrompt:    negPrompt,
+			SamplerName:       samplerName,
+			Scheduler:         p.ScheduleType,
+			Steps:             p.Steps,
+			CfgScale:          p.CfgScale,
+			Width:             width,
+			Height:            height,
+			Seed:              p.Seed,
 			DenoisingStrength: &denoising,
-			ClipSkip:        &clipSkip,
-			BatchSize:       &batchSize,
-			BatchCount:      &batchCount,
-			DoNotSaveImages: true,
-			DoNotSaveGrid:   true,
-		})
+			ClipSkip:          &clipSkip,
+			BatchSize:         &batchSize,
+			BatchCount:        &batchCount,
+			DoNotSaveImages:   true,
+			DoNotSaveGrid:     true,
+		}
+		if mode == "inpaint" {
+			mb := maskBlur
+			if mb <= 0 {
+				mb = 4
+			}
+			req.Mask = mask
+			req.MaskBlur = mb
+			req.InpaintingFill = inpaintFill
+			req.InpaintFullRes = inpaintFullRes
+			req.InpaintFullResPadding = 32
+		}
+		result, err := s.sd.Img2Img(req)
 		if err != nil {
 			if ierr := s.checkSDInterrupted(); ierr != nil {
 				return "", nil, ierr

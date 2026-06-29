@@ -147,7 +147,7 @@ async function sendToFromImage(entry) {
     const b64 = await api.readFileAsBase64(entry.path)
     if (!b64) return
     await api.setLastImage(b64)
-    emit('navigate', { page: 'generate', tab: 'from-image' })
+    emit('navigate', { page: 'remix' })
   } catch (e) {
     error.value = String(e)
   }

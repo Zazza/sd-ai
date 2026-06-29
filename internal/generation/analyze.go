@@ -696,7 +696,7 @@ func (s *Service) generateFromImageCompound(params GenerateFromImageParams, tags
 			if w == 0 || h == 0 {
 				w, h = width, height
 			}
-			lastImage, lastInfo, err = s.runFromImageCompoundFirstStep(p, params.ImageBase64, prompt, negativePrompt, samplerName, w, h, clipSkip, params.Mode, params.DenoisingStrength, stepIdx+1)
+			lastImage, lastInfo, err = s.runFromImageCompoundFirstStep(p, params.ImageBase64, prompt, negativePrompt, samplerName, w, h, clipSkip, params.Mode, params.DenoisingStrength, params.MaskBase64, params.MaskBlur, params.InpaintFill, params.InpaintFullRes, stepIdx+1)
 			if err != nil {
 				return nil, err
 			}

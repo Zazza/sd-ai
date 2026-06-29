@@ -4,6 +4,12 @@ All notable changes to SD Studio are documented here.
 
 ## [Unreleased]
 
+## [0.7.7] — 2026-06-29
+
+### Fixed
+- **"My images" → Remix landed on Generate page stuck in Remix view**: the File Browser's "Send to Remix" navigated to `{ page: 'generate', tab: 'from-image' }`, which both opened the wrong page (Generate, not Remix) and left `generateTab` pinned to `from-image`. Since `UnifiedGeneratePage` has no tab-switch UI and initializes its active tab from `initialTab` once, the Generate page stayed on the from-image/Remix sub-view forever — switching Generate/Remix in the sidebar always showed Remix. Now it navigates to `{ page: 'remix' }`, consistent with the session panel's Remix and the sidebar link (`FileBrowserPage.sendToFromImage()`). The image still loads via `setLastImage → AddToSession → SetActiveItem`, picked up by the Remix page's `useLastImage()`.
+- **Remix (From Image) → inpaint with Workflow gave a brand-new image**: in compound/workflow mode the first step dispatched `txt2img` for any `mode != "img2img"`, so `inpaint` silently fell through to txt2img — the init image and mask were ignored and SD generated an unrelated image from the prompt. Now the compound first step runs `img2img` with the mask for `inpaint` mode (`runFromImageCompoundFirstStep`), matching the single-preset inpaint path.
+
 ## [0.7.6] — 2026-06-14
 
 ### Fixed
