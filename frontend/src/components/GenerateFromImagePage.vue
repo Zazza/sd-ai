@@ -50,6 +50,9 @@ const { llmStatus, sdProgress, preview, interrupt: interruptGeneration, reset: r
 const generationStage = ref('')
 const error = ref('')
 const enqueuedJobIds = ref(new Set())
+const genCount = ref(1)
+const batchTotal = ref(0)
+const batchDone = ref(0)
 
 const analyzeMode = ref('quick')
 const chainStep = ref(0)
@@ -490,8 +493,11 @@ async function generate() {
   error.value = ''
   resetProgress()
   enqueuedJobIds.value = new Set()
+  batchTotal.value = 0
+  batchDone.value = 0
 
   try {
+    const maskB64 = (mode.value === 'inpaint' || mode.value === 'remove') ? getMaskBase64() : ''
     const params = {
       image_base64: uploadedImage.value,
       mode: mode.value === 'remove' ? 'inpaint' : mode.value,
@@ -504,19 +510,25 @@ async function generate() {
       remove_object: mode.value === 'remove',
     }
     if (mode.value === 'inpaint' || mode.value === 'remove') {
-      params.mask_base64 = getMaskBase64()
+      params.mask_base64 = maskB64
       params.mask_blur = maskBlur.value
       params.inpaint_fill = inpaintFill.value
       params.inpaint_full_res = inpaintFullRes.value
     }
-    const jobId = await api.enqueueFromImage(params)
-    if (jobId) enqueuedJobIds.value.add(jobId)
+    const count = Math.max(1, Math.min(100, genCount.value || 1))
+    batchTotal.value = count
+    for (let i = 0; i < count; i++) {
+      const jobId = await api.enqueueFromImage(params)
+      if (jobId) enqueuedJobIds.value.add(jobId)
+    }
     error.value = ''
   } catch (e) {
     error.value = String(e)
-    generatingImage.value = false
-    generationStage.value = ''
-    removeStage.value = ''
+    if (enqueuedJobIds.value.size === 0) {
+      generatingImage.value = false
+      generationStage.value = ''
+      removeStage.value = ''
+    }
   }
 }
 
@@ -565,6 +577,7 @@ async function onQueueCompleted(data) {
 
   if (data.job_id && enqueuedJobIds.value.has(data.job_id)) {
     enqueuedJobIds.value.delete(data.job_id)
+    batchDone.value++
   }
 
   if (data.result) {
@@ -602,6 +615,7 @@ function onQueueFailed(data) {
 
   if (data.job_id && enqueuedJobIds.value.has(data.job_id)) {
     enqueuedJobIds.value.delete(data.job_id)
+    batchDone.value++
   }
 
   if (data.error) error.value = data.error
@@ -641,6 +655,7 @@ onMounted(async () => {
     if (s.fi_analyze_mode) analyzeMode.value = s.fi_analyze_mode
     if (s.fi_mask_padding) maskPadding.value = Number(s.fi_mask_padding)
     if (s.fi_mask_feather) maskFeather.value = Number(s.fi_mask_feather)
+    if (s.fi_count) genCount.value = Math.max(1, Math.min(100, Number(s.fi_count) || 1))
   } catch {}
   if (shared) {
     if (shared.selectedPresetId) selectedPresetId.value = shared.selectedPresetId
@@ -658,6 +673,8 @@ onMounted(async () => {
       generatingImage.value = true
       generationStage.value = 'generating'
       enqueuedJobIds.value = new Set(activeJobs.map(j => j.id))
+      batchTotal.value = activeJobs.length
+      batchDone.value = 0
     }
   } catch {}
 })
@@ -689,6 +706,7 @@ function saveFIState() {
     fi_analyze_mode: analyzeMode.value || '',
     fi_mask_padding: String(maskPadding.value || ''),
     fi_mask_feather: String(maskFeather.value || ''),
+    fi_count: String(genCount.value || 1),
   }).catch(() => {})
 }
 
@@ -1011,13 +1029,16 @@ function onKeydown(e) {
             <textarea class="form-textarea" v-model="extraNegativePrompt" rows="2" :placeholder="t('fi.placeholder_extra_exclude')"></textarea>
           </div>
 
-          <button class="btn btn-primary" :class="{ 'btn-generating': generatingImage }" style="width: 100%; justify-content: center; padding: 12px;" @click="generate" :disabled="!uploadedImage || ((mode === 'inpaint' || mode === 'remove') && !hasMask) || (mode !== 'remove' && (genMode === 'preset' ? !selectedPresetId : !selectedCompoundPresetId))">
-            <span v-if="generatingImage" style="display: inline-flex; align-items: center; gap: 6px;">
-              <span class="spinner" style="width: 14px; height: 14px; border-width: 2px;"></span>
-              {{ removeStage === 'analyzing' ? t('fi.analyzing_context') : generationStage === 'analyzing' ? t('fi.analyzing_image') : t('generate.generating_image') }}
-            </span>
-            <span v-else>{{ t('fi.btn_generate') }}</span>
-          </button>
+          <div style="display: flex; gap: 8px; width: 100%;">
+            <button class="btn btn-primary" :class="{ 'btn-generating': generatingImage }" style="flex: 1; justify-content: center; padding: 12px;" @click="generate" :disabled="!uploadedImage || ((mode === 'inpaint' || mode === 'remove') && !hasMask) || (mode !== 'remove' && (genMode === 'preset' ? !selectedPresetId : !selectedCompoundPresetId))">
+              <span v-if="generatingImage" style="display: inline-flex; align-items: center; gap: 6px;">
+                <span class="spinner" style="width: 14px; height: 14px; border-width: 2px;"></span>
+                {{ removeStage === 'analyzing' ? t('fi.analyzing_context') : generationStage === 'analyzing' ? t('fi.analyzing_image') : t('generate.generating_image') }}
+              </span>
+              <span v-else>{{ genCount <= 1 ? t('fi.btn_generate') : t('fi.btn_generate_n', { count: genCount }) }}</span>
+            </button>
+            <input class="form-input" type="number" v-model.number="genCount" min="1" max="100" style="width: 70px; text-align: center;" @change="genCount = Math.max(1, Math.min(100, genCount || 1))" />
+          </div>
         </div>
       </div>
 
@@ -1026,7 +1047,7 @@ function onKeydown(e) {
           <div v-if="generatingImage && !generatedImage" style="text-align: center; padding: 24px;">
             <img v-if="preview && sdProgress && sdProgress.progress > 0 && sdProgress.progress < 1" :src="preview" alt="preview" style="max-width: 100%; border-radius: var(--radius-sm); opacity: 0.6; image-rendering: pixelated;" />
             <span v-else class="spinner" style="width: 32px; height: 32px; border-width: 3px;"></span>
-            <p style="margin-top: 12px; color: var(--text-dim);">{{ llmStatus === 'thinking' ? t('progress.llm_thinking') : removeStage === 'analyzing' ? t('fi.analyzing_context') : generationStage === 'analyzing' ? t('fi.analyzing_image') : t('generate.generating_image') }}</p>
+            <p style="margin-top: 12px; color: var(--text-dim);">{{ batchTotal > 1 ? (batchDone + 1) + ' / ' + batchTotal + ' — ' : '' }}{{ llmStatus === 'thinking' ? t('progress.llm_thinking') : removeStage === 'analyzing' ? t('fi.analyzing_context') : generationStage === 'analyzing' ? t('fi.analyzing_image') : t('generate.generating_image') }}</p>
             <div v-if="sdProgress && sdProgress.progress > 0" style="margin-top: 12px; max-width: 300px; margin-left: auto; margin-right: auto;">
               <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
                 <span style="color: var(--text-dim); font-size: 12px;">{{ Math.round(sdProgress.progress * 100) }}%</span>

@@ -147,6 +147,7 @@ export const en = {
   'fi.analyzing_context': 'Analyzing context...',
   'fi.analyzing_image': 'Analyzing image...',
   'fi.btn_generate': 'Generate',
+  'fi.btn_generate_n': 'Generate {count}',
   'fi.btn_download': 'Download',
   'fi.btn_copy': 'Copy',
   'fi.btn_regenerate': 'Regenerate',

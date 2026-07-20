@@ -4,6 +4,9 @@ All notable changes to SD Studio are documented here.
 
 ## [Unreleased]
 
+### Added
+- **Remix (From Image) batch generation**: the From Image page now generates multiple variants in one run, matching Generate's batch UX. A count input (1–100) sits next to the Generate button; on submit the page enqueues N jobs through the existing `EnqueueFromImage` queue, so all N variants land in the active session as separate items with their own progress. No backend change — count is purely client-side and the queue already produces one session item per job. For inpaint/remove modes the mask is captured once before the loop so every variant uses the identical mask. Interrupt behavior is unchanged (aborts only the current job, like Generate); the batch count is persisted in settings (`fi_count`).
+
 ## [0.7.7] — 2026-06-29
 
 ### Fixed
