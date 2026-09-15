@@ -144,7 +144,7 @@ async function generate() {
     generating.value = true
     error.value = ''
     try {
-      genPrompt = await api.analyzeImage(props.initImage) || ''
+      genPrompt = await api.analyzeImage(props.initImage, 'quick') || ''
       if (!genPrompt.trim()) {
         error.value = t('compare.error_analysis', { error: 'empty result' })
         generating.value = false

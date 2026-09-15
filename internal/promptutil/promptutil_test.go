@@ -213,3 +213,78 @@ func TestTruncate_TruncatesWithEllipsis(t *testing.T) {
 		})
 	}
 }
+
+func TestDedupeTags(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{name: "empty", input: "", want: ""},
+		{name: "no dupes", input: "rain, bridge, night", want: "rain, bridge, night"},
+		{name: "exact dupes", input: "rain, bridge, rain, night, bridge, rain", want: "rain, bridge, night"},
+		{
+			name:  "case-insensitive",
+			input: "Neon Lights, neon lights, bridge",
+			want:  "Neon Lights, bridge",
+		},
+		{
+			name:  "weight-aware",
+			input: "(bridge:1.3), bridge, night",
+			want:  "(bridge:1.3), night",
+		},
+		{
+			name:  "real degenerate loop",
+			input: "rain, neon lights, bridge, wet pavement, neon lights in the rain, neon lights on bridge, neon lights reflecting on wet ground, neon lights in the rain, neon lights on bridge, neon lights reflecting on wet ground, neon lights in the rain, neon lights on bridge",
+			want:  "rain, neon lights, bridge, wet pavement, neon lights in the rain, neon lights on bridge, neon lights reflecting on wet ground",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, DedupeTags(tt.input))
+		})
+	}
+}
+
+func TestRemoveTags(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		input    string
+		subtract string
+		want     string
+	}{
+		{name: "empty input", input: "", subtract: "a, b", want: ""},
+		{name: "empty subtract", input: "a, b", subtract: "", want: "a, b"},
+		{
+			name:     "style leak removal",
+			input:    "night city after snowfall, wet snow, gold accents, vintage illustration style, warm yellow light",
+			subtract: "dark abstract wallpaper, gold accents, vintage illustration style, moody",
+			want:     "night city after snowfall, wet snow, warm yellow light",
+		},
+		{
+			name:     "weight-aware subtract",
+			input:    "(arched bridge:1.3), wet snow, night",
+			subtract: "arched bridge, fog",
+			want:     "wet snow, night",
+		},
+		{
+			name:     "no overlap",
+			input:    "winter night, snow",
+			subtract: "gold accents, vintage style",
+			want:     "winter night, snow",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, RemoveTags(tt.input, tt.subtract))
+		})
+	}
+}

@@ -7,6 +7,7 @@ type Service interface {
 	ChatWithMessages(model string, messages []Message, temperature float64, maxTokens int) (string, error)
 	GenerateSDPrompt(systemPrompt, description, presetType, model string, maxTokens int) (string, error)
 	AnalyzeImage(model, systemPrompt, imageBase64 string, maxTokens int) (string, error)
+	AnalyzeImageDescribe(model, prompt, imageBase64 string, maxTokens int) (string, error)
 	GetModels() ([]LLMModel, error)
 	HealthCheck() error
 	SetURL(baseURL string)

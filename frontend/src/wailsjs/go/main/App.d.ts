@@ -12,7 +12,7 @@ import {llm} from '../models';
 import {queue} from '../models';
 import {sd} from '../models';
 
-export function AnalyzeImage(arg1:string):Promise<string>;
+export function AnalyzeImage(arg1:string,arg2:string):Promise<string>;
 
 export function BrowseDirectory(arg1:string):Promise<Array<filebrowser.FileEntry>>;
 

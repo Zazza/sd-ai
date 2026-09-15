@@ -64,14 +64,16 @@ type ResponseFormat struct {
 }
 
 type ChatRequest struct {
-	Model         string         `json:"model"`
-	Messages      []Message      `json:"messages"`
-	Temperature   float64        `json:"temperature"`
-	MaxTokens     int            `json:"max_tokens"`
-	Stream        bool           `json:"stream"`
-	KeepAlive     string         `json:"keep_alive,omitempty"`
-	Options       *ChatOptions   `json:"options,omitempty"`
-	ResponseFormat *ResponseFormat `json:"response_format,omitempty"`
+	Model           string          `json:"model"`
+	Messages        []Message       `json:"messages"`
+	Temperature     float64         `json:"temperature"`
+	MaxTokens       int             `json:"max_tokens"`
+	FrequencyPenalty float64        `json:"frequency_penalty,omitempty"`
+	PresencePenalty  float64        `json:"presence_penalty,omitempty"`
+	Stream          bool            `json:"stream"`
+	KeepAlive       string          `json:"keep_alive,omitempty"`
+	Options         *ChatOptions    `json:"options,omitempty"`
+	ResponseFormat  *ResponseFormat `json:"response_format,omitempty"`
 }
 
 type ChatResponse struct {
@@ -137,17 +139,19 @@ func (c *Client) ChatJSON(model, systemPrompt, userMessage string, temperature f
 
 func (c *Client) ChatVision(model, systemPrompt, userText, imageBase64 string, temperature float64, maxTokens int) (string, error) {
 	reqBody := ChatRequest{
-		Model: model,
-		Messages: []Message{
+		Model:            model,
+		Messages:         []Message{
 			{Role: "system", Content: systemPrompt},
 			{Role: "user", Content: []ContentPart{
 				{Type: "text", Text: userText},
 				{Type: "image_url", ImageURL: &ImageURLPart{URL: "data:image/png;base64," + imageBase64}},
 			}},
 		},
-		Temperature: temperature,
-		MaxTokens:   maxTokens,
-		Stream:      false,
+		Temperature:      temperature,
+		MaxTokens:        maxTokens,
+		FrequencyPenalty: 0.3,
+		PresencePenalty:  0.2,
+		Stream:           false,
 	}
 
 	if c.backend == BackendOllama {
@@ -172,7 +176,12 @@ func (c *Client) AnalyzeImage(model, systemPrompt, imageBase64 string, maxTokens
 	}
 	result = strings.TrimSpace(extractTags(result))
 	result = promptutil.TruncateRepetitive(result, 1000)
+	result = promptutil.DedupeTags(result)
 	return result, nil
+}
+
+func (c *Client) AnalyzeImageDescribe(model, prompt, imageBase64 string, maxTokens int) (string, error) {
+	return c.ChatVision(model, "", prompt, imageBase64, 0.4, maxTokens)
 }
 
 var thinkRe = regexp.MustCompile(`(?s)<think\s*>.*?</think\s*>`)

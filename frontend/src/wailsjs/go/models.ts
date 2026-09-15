@@ -180,7 +180,7 @@ export namespace generation {
 	export class AnalyzePrompts {
 	    system_prompt: string;
 	    single_prompt: string;
-	    chain_prompts: string[];
+	    describe_prompt: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new AnalyzePrompts(source);
@@ -190,7 +190,7 @@ export namespace generation {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.system_prompt = source["system_prompt"];
 	        this.single_prompt = source["single_prompt"];
-	        this.chain_prompts = source["chain_prompts"];
+	        this.describe_prompt = source["describe_prompt"];
 	    }
 	}
 	export class DecomposeSceneParams {

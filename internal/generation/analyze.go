@@ -10,7 +10,6 @@ import (
 	"image/draw"
 	"image/png"
 	"math"
-	"strconv"
 	"strings"
 
 	xdraw "golang.org/x/image/draw"
@@ -25,20 +24,7 @@ import (
 
 // --- AnalyzeImage ---
 
-func (s *Service) getAnalyzeChainPrompts() []string {
-	prompts := make([]string, 4)
-	for i := range prompts {
-		key := "analyze_chain_" + strconv.Itoa(i+1)
-		if v, err := s.db.GetSetting(key); err == nil && v != "" {
-			prompts[i] = v
-		} else if i < len(config.DefaultAnalyzeChainPrompts) {
-			prompts[i] = config.DefaultAnalyzeChainPrompts[i]
-		}
-	}
-	return prompts
-}
-
-func (s *Service) AnalyzeImage(imageBase64 string) (string, error) {
+func (s *Service) AnalyzeImage(imageBase64, mode string) (string, error) {
 	if imageBase64 == "" {
 		return "", fmt.Errorf("image is required")
 	}
@@ -49,87 +35,49 @@ func (s *Service) AnalyzeImage(imageBase64 string) (string, error) {
 	model := s.getAnalyzeModel()
 	s.settings.ApplyLLMConfig("analyze")
 
-	systemPrompt, _ := s.db.GetSetting("analyze_system_prompt")
-	if systemPrompt == "" {
-		systemPrompt = config.DefaultAnalyzeSystemPrompt
-	}
-
 	maxTokens := s.getMaxTokens()
 
-	useChain := true
-	if v, err := s.db.GetSetting("analyze_use_chain"); err == nil {
-		useChain = v != "false"
-	}
-
-	if !useChain {
-		prompt, _ := s.db.GetSetting("analyze_prompt")
+	if mode == "describe" {
+		prompt, _ := s.db.GetSetting("analyze_describe_prompt")
 		if prompt == "" {
-			prompt = config.DefaultAnalyzePrompt
+			prompt = config.DefaultAnalyzeDescribePrompt
 		}
 		s.emitter.Emit("llm:status", map[string]string{"status": "thinking"})
-		tags, err := s.llm.AnalyzeImage(model, systemPrompt+"\n\n"+prompt, imageBase64, maxTokens)
+		text, err := s.llm.AnalyzeImageDescribe(model, prompt, imageBase64, maxTokens)
 		if err != nil {
 			s.emitter.Emit("llm:status", map[string]string{"status": "done"})
 			return "", err
 		}
 		s.emitter.Emit("llm:status", map[string]string{"status": "done"})
-		tags = s.kids.FilterOutput(tags)
-		return tags, nil
+		text = strings.TrimSpace(text)
+		text = s.kids.FilterOutput(text)
+		return text, nil
 	}
 
-	chainPrompts := s.getAnalyzeChainPrompts()
-	messages := []llm.Message{
-		{Role: "system", Content: systemPrompt},
-		{Role: "user", Content: []llm.ContentPart{
-			{Type: "text", Text: chainPrompts[0]},
-			{Type: "image_url", ImageURL: &llm.ImageURLPart{URL: "data:image/png;base64," + imageBase64}},
-		}},
+	systemPrompt, _ := s.db.GetSetting("analyze_system_prompt")
+	if systemPrompt == "" {
+		systemPrompt = config.DefaultAnalyzeSystemPrompt
 	}
-
-	for i := 0; i < len(chainPrompts); i++ {
-		s.emitter.Emit("llm:status", map[string]string{"status": "thinking"})
-		resp, err := s.llm.ChatWithMessages(model, messages, 0.4, maxTokens)
-		if err != nil {
-			s.emitter.Emit("llm:status", map[string]string{"status": "done"})
-			if i == 0 {
-				return "", err
-			}
-			break
-		}
-
-		messages = append(messages, llm.Message{Role: "assistant", Content: resp})
+	prompt, _ := s.db.GetSetting("analyze_prompt")
+	if prompt == "" {
+		prompt = config.DefaultAnalyzePrompt
+	}
+	s.emitter.Emit("llm:status", map[string]string{"status": "thinking"})
+	tags, err := s.llm.AnalyzeImage(model, systemPrompt+"\n\n"+prompt, imageBase64, maxTokens)
+	if err != nil {
 		s.emitter.Emit("llm:status", map[string]string{"status": "done"})
-
-		if i+1 < len(chainPrompts) {
-			messages = append(messages, llm.Message{
-				Role:    "user",
-				Content: chainPrompts[i+1],
-			})
-		}
-
-		s.emitter.Emit("analyze:step", i+1, len(chainPrompts))
+		return "", err
 	}
-
-	lastResp := ""
-	for j := len(messages) - 1; j >= 0; j-- {
-		if messages[j].Role == "assistant" {
-			if str, ok := messages[j].Content.(string); ok {
-				lastResp = str
-			}
-			break
-		}
-	}
-
-	tags := llm.CleanTags(lastResp)
+	s.emitter.Emit("llm:status", map[string]string{"status": "done"})
 	tags = s.kids.FilterOutput(tags)
 	return tags, nil
 }
 
 func (s *Service) GetDefaultAnalyzePrompts() *AnalyzePrompts {
 	return &AnalyzePrompts{
-		SystemPrompt: config.DefaultAnalyzeSystemPrompt,
-		SinglePrompt: config.DefaultAnalyzePrompt,
-		ChainPrompts: config.DefaultAnalyzeChainPrompts,
+		SystemPrompt:   config.DefaultAnalyzeSystemPrompt,
+		SinglePrompt:   config.DefaultAnalyzePrompt,
+		DescribePrompt: config.DefaultAnalyzeDescribePrompt,
 	}
 }
 
@@ -419,6 +367,8 @@ RESPONSE LENGTH: your response is limited to ~%d tokens. You MUST fit within thi
 	extractEmbeddedNegative(&promptResult)
 	promptResult.Prompt = promptutil.StripJunk(promptResult.Prompt)
 	promptResult.Prompt = promptutil.TruncateRepetitive(promptResult.Prompt, 1000)
+	promptResult.Prompt = promptutil.DedupeTags(promptResult.Prompt)
+	promptResult.Prompt = promptutil.RemoveTags(promptResult.Prompt, p.Prompt)
 	promptResult.NegativePrompt = promptutil.StripJunk(promptResult.NegativePrompt)
 	promptResult.NegativePrompt = promptutil.TruncateRepetitive(promptResult.NegativePrompt, 500)
 

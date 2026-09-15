@@ -83,9 +83,9 @@ type RecommendPresetResult struct {
 }
 
 type AnalyzePrompts struct {
-	SystemPrompt string   `json:"system_prompt"`
-	SinglePrompt string   `json:"single_prompt"`
-	ChainPrompts []string `json:"chain_prompts"`
+	SystemPrompt   string `json:"system_prompt"`
+	SinglePrompt   string `json:"single_prompt"`
+	DescribePrompt string `json:"describe_prompt"`
 }
 
 type GenerateImageParams struct {

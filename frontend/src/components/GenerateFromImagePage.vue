@@ -3,7 +3,7 @@ import { ref, computed, nextTick, watch, onMounted, onUnmounted, inject } from '
 import { api } from '../api.js'
 import { t } from '../i18n/index.js'
 import { MAX_IMAGE_SIZE } from '../constants.js'
-import { EventsOn, EventsOff } from '../wailsjs/runtime/runtime'
+import { EventsOn } from '../wailsjs/runtime/runtime'
 import { useGenerationProgress } from '../composables/useGenerationProgress.js'
 import { useKidsMode } from '../composables/useKidsMode.js'
 import { usePresets } from '../composables/usePresets.js'
@@ -55,8 +55,6 @@ const batchTotal = ref(0)
 const batchDone = ref(0)
 
 const analyzeMode = ref('quick')
-const chainStep = ref(0)
-const chainTotal = ref(0)
 const analyzeElapsed = ref(0)
 let analyzeTimer = null
 
@@ -243,18 +241,13 @@ async function analyzeImage() {
   if (!uploadedImage.value) return
   analyzing.value = true
   error.value = ''
-  chainStep.value = 0
-  chainTotal.value = 0
   analyzeElapsed.value = 0
-
-  if (analyzeMode.value === 'deep') {
-    analyzeTimer = setInterval(() => { analyzeElapsed.value++ }, 1000)
-  }
+  analyzeTimer = setInterval(() => { analyzeElapsed.value++ }, 1000)
 
   try {
-    const result = await api.analyzeImage(uploadedImage.value)
+    const result = await api.analyzeImage(uploadedImage.value, analyzeMode.value)
     tags.value = result || ''
-    if (analyzeMode.value === 'deep' && tags.value.trim()) {
+    if (analyzeMode.value === 'quick' && tags.value.trim()) {
       recommendPreset(tags.value)
     }
   } catch (e) {
@@ -632,10 +625,6 @@ onMounted(async () => {
   loadKidsMode()
   document.addEventListener('paste', handlePaste)
   document.addEventListener('keydown', onKeydown)
-  EventsOn("analyze:step", (step, total) => {
-    chainStep.value = step
-    chainTotal.value = total
-  })
   const offRemoveStage = EventsOn("remove:stage", (stage) => {
     removeStage.value = stage
   })
@@ -652,7 +641,7 @@ onMounted(async () => {
     if (s.fi_gen_mode) genMode.value = s.fi_gen_mode
     if (s.fi_denoising) denoisingStrength.value = Number(s.fi_denoising)
     if (s.fi_extra_negative) extraNegativePrompt.value = s.fi_extra_negative
-    if (s.fi_analyze_mode) analyzeMode.value = s.fi_analyze_mode
+    if (s.fi_analyze_mode) analyzeMode.value = s.fi_analyze_mode === 'describe' ? 'describe' : 'quick'
     if (s.fi_mask_padding) maskPadding.value = Number(s.fi_mask_padding)
     if (s.fi_mask_feather) maskFeather.value = Number(s.fi_mask_feather)
     if (s.fi_count) genCount.value = Math.max(1, Math.min(100, Number(s.fi_count) || 1))
@@ -682,7 +671,6 @@ onMounted(async () => {
 onUnmounted(() => {
   document.removeEventListener('paste', handlePaste)
   document.removeEventListener('keydown', onKeydown)
-  EventsOff("analyze:step")
   offRemoveStage()
   offSessionAdded()
   offCompleted()
@@ -984,15 +972,14 @@ function onKeydown(e) {
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
               <label class="form-label" style="margin-bottom: 0;">{{ t('fi.extracted_tags') }}</label>
               <div style="display: flex; gap: 6px;">
-                <button class="btn btn-sm" :class="analyzeMode === 'quick' ? 'btn-primary' : 'btn-secondary'" @click="analyzeMode = 'quick'" style="font-size: 11px; padding: 2px 8px;">{{ t('fi.quick') }}</button>
-                <button class="btn btn-sm" :class="analyzeMode === 'deep' ? 'btn-primary' : 'btn-secondary'" @click="analyzeMode = 'deep'" style="font-size: 11px; padding: 2px 8px;">{{ t('fi.deep') }}</button>
+                <button class="btn btn-sm" :class="analyzeMode === 'quick' ? 'btn-primary' : 'btn-secondary'" @click="analyzeMode = 'quick'" style="font-size: 11px; padding: 2px 8px;">{{ t('fi.tags') }}</button>
+                <button class="btn btn-sm" :class="analyzeMode === 'describe' ? 'btn-primary' : 'btn-secondary'" @click="analyzeMode = 'describe'" style="font-size: 11px; padding: 2px 8px;">{{ t('fi.describe') }}</button>
               </div>
             </div>
             <div style="display: flex; gap: 8px; margin-bottom: 6px;">
               <button class="btn btn-sm btn-secondary" @click="analyzeImage" :disabled="analyzing || !uploadedImage">
                 <template v-if="analyzing">
-                  <span v-if="analyzeMode === 'deep' && chainStep > 0">Step {{ chainStep }}/{{ chainTotal }} &mdash; {{ analyzeElapsed }}s</span>
-                  <span v-else>{{ t('fi.analyzing') }}</span>
+                  <span>{{ t('fi.analyzing') }} ({{ analyzeElapsed }}s)</span>
                 </template>
                 <span v-else>{{ t('fi.btn_analyze') }}</span>
               </button>

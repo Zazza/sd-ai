@@ -321,8 +321,8 @@ func (a *App) RecommendPreset(description string) (*RecommendPresetResult, error
 	return a.gen.RecommendPreset(description)
 }
 
-func (a *App) AnalyzeImage(imageBase64 string) (string, error) {
-	return a.gen.AnalyzeImage(imageBase64)
+func (a *App) AnalyzeImage(imageBase64, mode string) (string, error) {
+	return a.gen.AnalyzeImage(imageBase64, mode)
 }
 
 func (a *App) GetDefaultAnalyzePrompts() *AnalyzePrompts {

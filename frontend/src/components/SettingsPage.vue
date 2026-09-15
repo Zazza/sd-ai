@@ -118,8 +118,7 @@ const defaultPromptInstruction = ref('')
 
 const analyzeSystemPrompt = ref('')
 const analyzeSinglePrompt = ref('')
-const analyzeChainPrompts = reactive(['', '', '', ''])
-const analyzeUseChain = ref(true)
+const analyzeDescribePrompt = ref('')
 const analyzeSaved = ref(false)
 const analyzeError = ref('')
 const defaultAnalyzePrompts = ref(null)
@@ -191,10 +190,7 @@ async function loadSettings() {
     const settings = await api.getSettings()
     analyzeSystemPrompt.value = settings.analyze_system_prompt || ''
     analyzeSinglePrompt.value = settings.analyze_prompt || ''
-    analyzeUseChain.value = settings.analyze_use_chain !== 'false'
-    for (let i = 0; i < 4; i++) {
-      analyzeChainPrompts[i] = settings['analyze_chain_' + (i + 1)] || ''
-    }
+    analyzeDescribePrompt.value = settings.analyze_describe_prompt || ''
   } catch (e) {
     console.error('loadAnalyzeSettings:', e)
   }
@@ -211,10 +207,8 @@ async function loadSettings() {
   if (!analyzeSinglePrompt.value && defaultAnalyzePrompts.value) {
     analyzeSinglePrompt.value = defaultAnalyzePrompts.value.single_prompt
   }
-  for (let i = 0; i < 4; i++) {
-    if (!analyzeChainPrompts[i] && defaultAnalyzePrompts.value) {
-      analyzeChainPrompts[i] = defaultAnalyzePrompts.value.chain_prompts[i] || ''
-    }
+  if (!analyzeDescribePrompt.value && defaultAnalyzePrompts.value) {
+    analyzeDescribePrompt.value = defaultAnalyzePrompts.value.describe_prompt || ''
   }
 
   // Load model catalog
@@ -626,10 +620,7 @@ async function saveAnalyzePrompts() {
     const data = {
       analyze_system_prompt: analyzeSystemPrompt.value,
       analyze_prompt: analyzeSinglePrompt.value,
-      analyze_use_chain: analyzeUseChain.value ? 'true' : 'false',
-    }
-    for (let i = 0; i < 4; i++) {
-      data['analyze_chain_' + (i + 1)] = analyzeChainPrompts[i]
+      analyze_describe_prompt: analyzeDescribePrompt.value,
     }
     await api.updateSettings(data)
     analyzeSaved.value = true
@@ -642,9 +633,7 @@ function resetAnalyzePrompts() {
   if (!defaultAnalyzePrompts.value) return
   analyzeSystemPrompt.value = defaultAnalyzePrompts.value.system_prompt
   analyzeSinglePrompt.value = defaultAnalyzePrompts.value.single_prompt
-  for (let i = 0; i < 4; i++) {
-    analyzeChainPrompts[i] = defaultAnalyzePrompts.value.chain_prompts[i] || ''
-  }
+  analyzeDescribePrompt.value = defaultAnalyzePrompts.value.describe_prompt || ''
 }
 
 async function saveRembg() {
@@ -1071,46 +1060,20 @@ onMounted(loadSettings)
       <div v-if="analyzeSaved" class="status status-success" style="margin-bottom: 16px;">{{ t('settings.prompts_saved') }}</div>
       <div v-if="analyzeError" class="status status-error" style="margin-bottom: 16px;">{{ analyzeError }}</div>
 
-      <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 16px;">
-        <ToggleSwitch v-model="analyzeUseChain" />
-        <div>
-          <div style="color: var(--text-bright); font-weight: 500;">{{ analyzeUseChain ? t('settings.chain_mode') : t('settings.single_prompt') }}</div>
-          <div style="color: var(--text-dim); font-size: 12px; margin-top: 2px;">
-            {{ t('settings.chain_description') }}
-          </div>
-        </div>
-      </div>
-
       <div class="form-group">
         <label class="form-label">{{ t('settings.label_system_prompt') }}</label>
         <textarea class="form-textarea" v-model="analyzeSystemPrompt" rows="3" style="font-family: monospace; font-size: 12px; line-height: 1.5;"></textarea>
       </div>
 
-      <template v-if="!analyzeUseChain">
-        <div class="form-group">
-          <label class="form-label">{{ t('settings.label_single_analysis') }}</label>
-          <textarea class="form-textarea" v-model="analyzeSinglePrompt" rows="10" style="font-family: monospace; font-size: 12px; line-height: 1.5;"></textarea>
-        </div>
-      </template>
+      <div class="form-group">
+        <label class="form-label">{{ t('settings.label_single_analysis') }}</label>
+        <textarea class="form-textarea" v-model="analyzeSinglePrompt" rows="10" style="font-family: monospace; font-size: 12px; line-height: 1.5;"></textarea>
+      </div>
 
-      <template v-if="analyzeUseChain">
-        <div class="form-group">
-          <label class="form-label">{{ t('settings.step_main_subject') }}</label>
-          <textarea class="form-textarea" v-model="analyzeChainPrompts[0]" rows="3" style="font-family: monospace; font-size: 12px; line-height: 1.5;"></textarea>
-        </div>
-        <div class="form-group">
-          <label class="form-label">{{ t('settings.step_background') }}</label>
-          <textarea class="form-textarea" v-model="analyzeChainPrompts[1]" rows="3" style="font-family: monospace; font-size: 12px; line-height: 1.5;"></textarea>
-        </div>
-        <div class="form-group">
-          <label class="form-label">{{ t('settings.step_colors') }}</label>
-          <textarea class="form-textarea" v-model="analyzeChainPrompts[2]" rows="3" style="font-family: monospace; font-size: 12px; line-height: 1.5;"></textarea>
-        </div>
-        <div class="form-group">
-          <label class="form-label">{{ t('settings.step_details') }}</label>
-          <textarea class="form-textarea" v-model="analyzeChainPrompts[3]" rows="3" style="font-family: monospace; font-size: 12px; line-height: 1.5;"></textarea>
-        </div>
-      </template>
+      <div class="form-group">
+        <label class="form-label">{{ t('settings.label_describe_analysis') }}</label>
+        <textarea class="form-textarea" v-model="analyzeDescribePrompt" rows="6" style="font-family: monospace; font-size: 12px; line-height: 1.5;"></textarea>
+      </div>
 
       <div style="display: flex; gap: 8px;">
         <button class="btn btn-primary" @click="saveAnalyzePrompts">{{ t('settings.btn_save_prompts') }}</button>

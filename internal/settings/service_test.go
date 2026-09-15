@@ -44,6 +44,9 @@ func (m *mockLLMService) GenerateSDPrompt(string, string, string, string, int) (
 func (m *mockLLMService) AnalyzeImage(string, string, string, int) (string, error) {
 	return "", nil
 }
+func (m *mockLLMService) AnalyzeImageDescribe(string, string, string, int) (string, error) {
+	return "", nil
+}
 func (m *mockLLMService) GetModels() ([]llm.LLMModel, error) {
 	return nil, nil
 }

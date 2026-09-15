@@ -118,27 +118,15 @@ OUTPUT — valid JSON only, no markdown, no explanation:
   "height": 512
 }`
 
-const DefaultAnalyzePrompt = `Describe this image in extreme detail. Include:
-- Main subjects and their attributes (appearance, pose, expression)
-- Background elements, setting, and environment
-- Colors, lighting, shadows, and composition
-- Text visible in the image (if any)
-- Style, mood, and artistic technique
-- Any unusual or noteworthy details
+const DefaultAnalyzePrompt = `List everything visible in this image as comma-separated SD tags. Tags only, no sentences.
+Cover: main subject (appearance, pose, expression), clothing, background and setting, colors, lighting, composition, style, notable details.
+Use concrete visual terms only. BAD: "a sense of mystery" → GOOD: "dark shadows, fog, silhouette". BAD: "elegant pose" → GOOD: "standing, hand on hip, straight posture".
+Start with quality tags (masterpiece, best quality, highly detailed). Use (keyword:1.2) for emphasis.
+Each tag must appear at most once. Output ONLY tags, nothing else.`
 
-Be thorough and specific. Avoid vague terms like "something" or "some objects".
-Then convert your description into comma-separated SD tags using ONLY concrete visual terms.
-SD does NOT understand sentences or abstract concepts — use simple tags only.
-BAD: "a sense of mystery" → GOOD: "dark shadows, fog, silhouette"
-BAD: "elegant pose" → GOOD: "standing, hand on hip, straight posture"
-Start with quality tags (masterpiece, best quality, highly detailed). Use (keyword:1.2) for emphasis. Output ONLY tags.`
-
-var DefaultAnalyzeChainPrompts = []string{
-	`What is the main subject of this image? Describe in extreme detail: facial features, hair, clothing (fabric, color, style), accessories, pose, expression, lighting on the figure. Use concrete visual terms only.`,
-	`Now describe the background and setting in detail. Include environment, objects, spatial relationships, time of day, weather, architectural style, human activity. Use simple concrete words.`,
-	`What colors, lighting, shadows, and artistic style are used? Describe composition, mood, camera angle, and visual techniques. Use simple terms: "warm lighting" not "ethereal glow".`,
-	`List any small details that might be easy to miss: textures, patterns, text, reflections, subtle elements. Now based on ALL your analysis above, convert everything into comma-separated Stable Diffusion tags. SD does NOT understand sentences — use ONLY concrete visual tags. BAD: "flowing garments" → GOOD: "flowing dress, fabric movement". Start with quality tags (masterpiece, best quality, highly detailed). Use (keyword:1.2) for emphasis. Output ONLY tags, nothing else.`,
-}
+const DefaultAnalyzeDescribePrompt = `Опиши это изображение связным литературным текстом на русском языке, 4–6 предложений.
+Расскажи, что на нём происходит: главные объекты и их детали, обстановка, свет и цвета, атмосфера, заметные мелочи.
+Пиши живым текстом для человека, а не списком тегов. Не выдумывай того, чего нет на изображении.`
 
 func Load() *Config {
 	exe, _ := os.Executable()

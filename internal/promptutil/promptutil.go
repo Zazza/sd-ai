@@ -121,6 +121,56 @@ func TruncateRepetitive(s string, maxLen int) string {
 	return s
 }
 
+var reTagWeight = regexp.MustCompile(`(?i)^(\(?)\s*([^:()]+?)\s*:\s*\d+(\.\d+)?\s*\)?$`)
+
+func normalizeTagKey(s string) string {
+	s = strings.TrimSpace(strings.ToLower(s))
+	if m := reTagWeight.FindStringSubmatch(s); m != nil {
+		s = strings.TrimSpace(m[2])
+	}
+	return s
+}
+
+func DedupeTags(s string) string {
+	if s == "" {
+		return s
+	}
+	parts := strings.Split(s, ", ")
+	seen := make(map[string]bool, len(parts))
+	result := make([]string, 0, len(parts))
+	for _, part := range parts {
+		key := normalizeTagKey(part)
+		if key == "" || seen[key] {
+			continue
+		}
+		seen[key] = true
+		result = append(result, part)
+	}
+	return strings.Join(result, ", ")
+}
+
+func RemoveTags(s, subtract string) string {
+	if s == "" || subtract == "" {
+		return s
+	}
+	subs := strings.Split(subtract, ",")
+	subKeys := make(map[string]bool, len(subs))
+	for _, sub := range subs {
+		if key := normalizeTagKey(sub); key != "" {
+			subKeys[key] = true
+		}
+	}
+	parts := strings.Split(s, ", ")
+	result := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if subKeys[normalizeTagKey(part)] {
+			continue
+		}
+		result = append(result, part)
+	}
+	return strings.Join(result, ", ")
+}
+
 func SplitCompositeSampler(sampler, scheduleType string) (string, string) {
 	if scheduleType != "" {
 		return sampler, scheduleType

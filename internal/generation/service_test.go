@@ -33,6 +33,7 @@ type mockLLM struct {
 	chatMsgFn      func(model string, messages []llm.Message, temperature float64, maxTokens int) (string, error)
 	genSDPromptFn  func(systemPrompt, userMessage, presetType, model string, maxTokens int) (string, error)
 	analyzeImageFn func(model, systemPrompt, imageBase64 string, maxTokens int) (string, error)
+	describeFn     func(model, prompt, imageBase64 string, maxTokens int) (string, error)
 }
 
 func (m *mockLLM) Chat(model, systemPrompt, userMessage string, temperature float64, maxTokens int) (string, error) {
@@ -85,6 +86,16 @@ func (m *mockLLM) AnalyzeImage(model, systemPrompt, imageBase64 string, maxToken
 	m.mu.Unlock()
 	if fn != nil {
 		return fn(model, systemPrompt, imageBase64, maxTokens)
+	}
+	return "", fmt.Errorf("not implemented")
+}
+
+func (m *mockLLM) AnalyzeImageDescribe(model, prompt, imageBase64 string, maxTokens int) (string, error) {
+	m.mu.Lock()
+	fn := m.describeFn
+	m.mu.Unlock()
+	if fn != nil {
+		return fn(model, prompt, imageBase64, maxTokens)
 	}
 	return "", fmt.Errorf("not implemented")
 }
@@ -1044,7 +1055,7 @@ func TestAnalyzeImage_EmptyImage(t *testing.T) {
 	db := openTestDB(t)
 	svc := newTestService(t, db, &mockLLM{}, &mockSD{})
 
-	_, err := svc.AnalyzeImage("")
+	_, err := svc.AnalyzeImage("", "quick")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "image is required")
 }
@@ -1057,57 +1068,96 @@ func TestAnalyzeImage_TooLarge(t *testing.T) {
 	bigData := make([]byte, 23*1024*1024)
 	encoded := base64.StdEncoding.EncodeToString(bigData)
 
-	_, err := svc.AnalyzeImage(encoded)
+	_, err := svc.AnalyzeImage(encoded, "quick")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "image too large")
 }
 
-func TestAnalyzeImage_SingleMode(t *testing.T) {
+func TestAnalyzeImage_QuickMode(t *testing.T) {
 	t.Parallel()
 	db := openTestDB(t)
-	require.NoError(t, db.SetSetting("analyze_use_chain", "false"))
 
 	llmSvc := &mockLLM{
 		analyzeImageFn: func(model, systemPrompt, imageBase64 string, maxTokens int) (string, error) {
-			return "1girl, blue eyes, long hair", nil
+			assert.Contains(t, systemPrompt, "image analyst")
+			return "masterpiece, 1girl, blue eyes, long hair", nil
 		},
 	}
 
 	svc := newTestService(t, db, llmSvc, &mockSD{})
 	img := makePNGBase64(t, 64, 64)
 
-	result, err := svc.AnalyzeImage(img)
+	result, err := svc.AnalyzeImage(img, "quick")
 	require.NoError(t, err)
 	assert.Contains(t, result, "1girl")
 }
 
-func TestAnalyzeImage_ChainMode(t *testing.T) {
+func TestAnalyzeImage_QuickMode_CustomPrompt(t *testing.T) {
 	t.Parallel()
 	db := openTestDB(t)
+	require.NoError(t, db.SetSetting("analyze_prompt", "custom quick prompt"))
 
-	callCount := 0
 	llmSvc := &mockLLM{
-		chatMsgFn: func(model string, messages []llm.Message, temperature float64, maxTokens int) (string, error) {
-			callCount++
-			return fmt.Sprintf("response for step %d", callCount), nil
+		analyzeImageFn: func(model, systemPrompt, imageBase64 string, maxTokens int) (string, error) {
+			assert.Contains(t, systemPrompt, "custom quick prompt")
+			return "masterpiece, tag", nil
 		},
 	}
 
 	svc := newTestService(t, db, llmSvc, &mockSD{})
 	img := makePNGBase64(t, 64, 64)
 
-	result, err := svc.AnalyzeImage(img)
+	result, err := svc.AnalyzeImage(img, "quick")
 	require.NoError(t, err)
 	assert.NotEmpty(t, result)
-	assert.Equal(t, 4, callCount)
 }
 
-func TestAnalyzeImage_ChainMode_LLMError(t *testing.T) {
+func TestAnalyzeImage_DescribeMode(t *testing.T) {
+	t.Parallel()
+	db := openTestDB(t)
+
+	prose := "Ночной город после дождя, мост отражается в мокром асфальте."
+	llmSvc := &mockLLM{
+		describeFn: func(model, prompt, imageBase64 string, maxTokens int) (string, error) {
+			assert.Contains(t, prompt, "литературным текстом")
+			return "  " + prose + "  ", nil
+		},
+	}
+
+	svc := newTestService(t, db, llmSvc, &mockSD{})
+	img := makePNGBase64(t, 64, 64)
+
+	result, err := svc.AnalyzeImage(img, "describe")
+	require.NoError(t, err)
+	assert.Equal(t, prose, result)
+}
+
+func TestAnalyzeImage_DescribeMode_CustomPrompt(t *testing.T) {
+	t.Parallel()
+	db := openTestDB(t)
+	require.NoError(t, db.SetSetting("analyze_describe_prompt", "custom describe prompt"))
+
+	llmSvc := &mockLLM{
+		describeFn: func(model, prompt, imageBase64 string, maxTokens int) (string, error) {
+			assert.Equal(t, "custom describe prompt", prompt)
+			return "текст описания", nil
+		},
+	}
+
+	svc := newTestService(t, db, llmSvc, &mockSD{})
+	img := makePNGBase64(t, 64, 64)
+
+	result, err := svc.AnalyzeImage(img, "describe")
+	require.NoError(t, err)
+	assert.NotEmpty(t, result)
+}
+
+func TestAnalyzeImage_QuickMode_LLMError(t *testing.T) {
 	t.Parallel()
 	db := openTestDB(t)
 
 	llmSvc := &mockLLM{
-		chatMsgFn: func(model string, messages []llm.Message, temperature float64, maxTokens int) (string, error) {
+		analyzeImageFn: func(model, systemPrompt, imageBase64 string, maxTokens int) (string, error) {
 			return "", fmt.Errorf("vision model error")
 		},
 	}
@@ -1115,7 +1165,7 @@ func TestAnalyzeImage_ChainMode_LLMError(t *testing.T) {
 	svc := newTestService(t, db, llmSvc, &mockSD{})
 	img := makePNGBase64(t, 64, 64)
 
-	_, err := svc.AnalyzeImage(img)
+	_, err := svc.AnalyzeImage(img, "quick")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "vision model error")
 }
@@ -1129,7 +1179,7 @@ func TestGetDefaultAnalyzePrompts(t *testing.T) {
 	require.NotNil(t, prompts)
 	assert.NotEmpty(t, prompts.SystemPrompt)
 	assert.NotEmpty(t, prompts.SinglePrompt)
-	assert.Len(t, prompts.ChainPrompts, 4)
+	assert.NotEmpty(t, prompts.DescribePrompt)
 }
 
 func TestTestGenerate_InvalidMode(t *testing.T) {
@@ -1567,31 +1617,6 @@ func TestIntPtr(t *testing.T) {
 	result := intPtr(5)
 	require.NotNil(t, result)
 	assert.Equal(t, 5, *result)
-}
-
-func TestGetAnalyzeChainPrompts(t *testing.T) {
-	t.Parallel()
-
-	t.Run("default prompts", func(t *testing.T) {
-		t.Parallel()
-		db := openTestDB(t)
-		svc := newTestService(t, db, &mockLLM{}, &mockSD{})
-		prompts := svc.getAnalyzeChainPrompts()
-		assert.Len(t, prompts, 4)
-		assert.NotEmpty(t, prompts[0])
-	})
-
-	t.Run("custom prompts from settings", func(t *testing.T) {
-		t.Parallel()
-		db := openTestDB(t)
-		require.NoError(t, db.SetSetting("analyze_chain_1", "custom prompt 1"))
-		require.NoError(t, db.SetSetting("analyze_chain_3", "custom prompt 3"))
-		svc := newTestService(t, db, &mockLLM{}, &mockSD{})
-		prompts := svc.getAnalyzeChainPrompts()
-		assert.Len(t, prompts, 4)
-		assert.Equal(t, "custom prompt 1", prompts[0])
-		assert.Equal(t, "custom prompt 3", prompts[2])
-	})
 }
 
 func TestGenerateFromImage_Validation(t *testing.T) {
