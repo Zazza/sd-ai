@@ -171,6 +171,26 @@ func RemoveTags(s, subtract string) string {
 	return strings.Join(result, ", ")
 }
 
+var reWeightedTag = regexp.MustCompile(`\(([^():]+):\s*(-?\d+(?:\.\d+)?)\s*\)`)
+
+func ExtractExampleTags(instruction string) string {
+	if instruction == "" {
+		return ""
+	}
+	seen := make(map[string]bool)
+	result := make([]string, 0)
+	for _, m := range reWeightedTag.FindAllStringSubmatch(instruction, -1) {
+		tag := strings.TrimSpace(m[1])
+		key := normalizeTagKey(tag)
+		if key == "" || seen[key] {
+			continue
+		}
+		seen[key] = true
+		result = append(result, tag)
+	}
+	return strings.Join(result, ", ")
+}
+
 func SplitCompositeSampler(sampler, scheduleType string) (string, string) {
 	if scheduleType != "" {
 		return sampler, scheduleType

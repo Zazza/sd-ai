@@ -250,6 +250,66 @@ func TestDedupeTags(t *testing.T) {
 	}
 }
 
+func TestExtractExampleTags(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		instruction string
+		want        string
+	}{
+		{name: "empty string", instruction: "", want: ""},
+		{
+			name:        "multiple weighted examples without weights and parens",
+			instruction: "WEIGHT FORMAT: (thick beard:1.3), (glowing moss:1.2), plain text",
+			want:        "thick beard, glowing moss",
+		},
+		{
+			name:        "same tag different weights deduped",
+			instruction: "(thick beard:1.3) then (thick beard:1.4)",
+			want:        "thick beard",
+		},
+		{
+			name:        "case-insensitive dedup keeps first form",
+			instruction: "(Thick Beard:1.3), (thick beard:1.1)",
+			want:        "Thick Beard",
+		},
+		{
+			name:        "weight format placeholder",
+			instruction: "WEIGHT FORMAT — always use parentheses: (tag:1.3)",
+			want:        "tag",
+		},
+		{name: "no weighted patterns", instruction: "just plain text without examples", want: ""},
+		{
+			name:        "unweighted parens and non-numeric weights not extracted",
+			instruction: "(parenthetical remark), (non numeric: weight), (x:y)",
+			want:        "",
+		},
+		{
+			name:        "integer weight extracted",
+			instruction: "(integer weight:2)",
+			want:        "integer weight",
+		},
+		{
+			name:        "space before closing paren",
+			instruction: "WEIGHT FORMAT: (tag:1.3 )",
+			want:        "tag",
+		},
+		{
+			name:        "negative weight extracted",
+			instruction: "Examples: (x:-0.5)",
+			want:        "x",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, ExtractExampleTags(tt.instruction))
+		})
+	}
+}
+
 func TestRemoveTags(t *testing.T) {
 	t.Parallel()
 

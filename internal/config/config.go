@@ -43,13 +43,13 @@ WEIGHT FORMAT — always use parentheses: (tag:1.3)
 - Default: no parentheses and no weight
 
 TAG CONVERSION GUIDE:
-- Character features → separate tags: "(thick beard:1.3), (dark messy hair:1.2)"
-- Clothing → material + type: "(worn leather cloak:1.3), (hood:1.2)"
-- Actions → verb-based: "(confidently holding artifact:1.3)"
-- Lighting → source + color + direction: "(blue glow from artifact on face:1.2), (warm sunlight from above:1.1)"
-- Environment → element + material + condition: "(stone columns:1.2), (covered in glowing moss:1.1), (giant luminescent mushrooms:1.2)"
-- Atmosphere → specific descriptors: "(mystical atmosphere:1.2), (dramatic lighting:1.1), (dust particles in air:1.1)"
-- Technical → camera/lens terms: "(85mm lens:1.1), (shallow depth of field:1.1), (bokeh:1.1)"
+- Character features → separate tags: "(character trait:1.3), (second character trait:1.2)"
+- Clothing → material + type: "(clothing material and type:1.3), (clothing part:1.2)"
+- Actions → verb-based: "(character action verb:1.3)"
+- Lighting → source + color + direction: "(light source and color and direction:1.2), (secondary light effect:1.1)"
+- Environment → element + material + condition: "(environment element and material:1.2), (environment condition:1.1), (third environment detail:1.2)"
+- Atmosphere → specific descriptors: "(atmosphere descriptor:1.2), (lighting mood:1.1), (air detail:1.1)"
+- Technical → camera/lens terms: "(camera or lens term:1.1), (depth of field term:1.1), (background blur term:1.1)"
 
 Rules:
 1. Translate non-English to English FIRST, then convert to tags
@@ -57,6 +57,7 @@ Rules:
 3. Do NOT include style tags from STYLE REFERENCE
 4. Do NOT invent details not present in the user description
 5. For negative prompt: only user-specified negatives, do NOT copy STYLE NEGATIVE REFERENCE
+6. NEVER copy guide examples/placeholders into the output — examples illustrate FORMAT only; every output tag must derive from the user scene
 
 OUTPUT FORMAT — valid JSON only. NO markdown. NO code blocks. Raw JSON:
 {"prompt": "tag1, tag2, tag3", "negative_prompt": "neg1, neg2"}`

@@ -11,6 +11,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 
@@ -463,6 +464,251 @@ func TestGetDefaultPromptInstruction(t *testing.T) {
 	result := svc.GetDefaultPromptInstruction()
 	assert.Contains(t, result, "Stable Diffusion")
 	assert.Contains(t, result, "prompt")
+}
+
+func TestGetDefaultPromptInstruction_NoVividExamples(t *testing.T) {
+	t.Parallel()
+	db := openTestDB(t)
+	svc := newTestService(t, db, &mockLLM{}, &mockSD{})
+
+	instruction := strings.ToLower(svc.GetDefaultPromptInstruction())
+	for _, banned := range []string{"beard", "mushroom", "cloak", "artifact", "moss", "85mm", "bokeh"} {
+		assert.NotContains(t, instruction, banned)
+	}
+}
+
+func TestGenerateSDPrompt_FiltersInstructionExampleLeak(t *testing.T) {
+	t.Parallel()
+	db := openTestDB(t)
+	makeTestPreset(t, db, nil)
+
+	instruction := "Convert the scene to SD tags. Examples: (thick beard:1.3), (giant luminescent mushrooms:1.2), (blue glow from artifact on face:1.2), (worn leather cloak:1.1)"
+	require.NoError(t, db.SetSetting("sd_prompt_instruction", instruction))
+
+	llmSvc := &mockLLM{
+		genSDPromptFn: func(systemPrompt, userMessage, presetType, model string, maxTokens int) (string, error) {
+			return `{"prompt": "(thick beard:1.3), giant luminescent mushrooms, (blue glow from artifact on face:1.2), sunny meadow", "negative_prompt": "lowres"}`, nil
+		},
+	}
+
+	svc := newTestService(t, db, llmSvc, &mockSD{})
+
+	result, err := svc.GenerateSDPrompt(GenerateSDPromptParams{
+		PresetID:    1,
+		Description: "sunny meadow with flowers",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	lower := strings.ToLower(result.Prompt)
+	for _, leak := range []string{"thick beard", "beard", "mushroom", "artifact", "blue glow"} {
+		assert.NotContains(t, lower, leak)
+	}
+	assert.Contains(t, result.Prompt, "sunny meadow")
+}
+
+func TestGenerateSDPrompt_KeepsUserRequestedTag(t *testing.T) {
+	t.Parallel()
+	db := openTestDB(t)
+	makeTestPreset(t, db, nil)
+
+	instruction := "Convert the scene to SD tags. Examples: (thick beard:1.3), (glowing moss:1.2)"
+	require.NoError(t, db.SetSetting("sd_prompt_instruction", instruction))
+
+	llmSvc := &mockLLM{
+		genSDPromptFn: func(systemPrompt, userMessage, presetType, model string, maxTokens int) (string, error) {
+			return `{"prompt": "(thick beard:1.3), forest", "negative_prompt": ""}`, nil
+		},
+	}
+
+	svc := newTestService(t, db, llmSvc, &mockSD{})
+
+	result, err := svc.GenerateSDPrompt(GenerateSDPromptParams{
+		PresetID:    1,
+		Description: "a man with a thick beard in a forest",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	assert.Contains(t, result.Prompt, "thick beard")
+	assert.Contains(t, result.Prompt, "forest")
+}
+
+func TestGenerateSDPrompt_PlaceholderLeakFiltered(t *testing.T) {
+	t.Parallel()
+	db := openTestDB(t)
+	makeTestPreset(t, db, nil)
+
+	llmSvc := &mockLLM{
+		genSDPromptFn: func(systemPrompt, userMessage, presetType, model string, maxTokens int) (string, error) {
+			return `{"prompt": "(character trait:1.3), real tag", "negative_prompt": ""}`, nil
+		},
+	}
+
+	svc := newTestService(t, db, llmSvc, &mockSD{})
+
+	result, err := svc.GenerateSDPrompt(GenerateSDPromptParams{
+		PresetID:    1,
+		Description: "a warrior standing on a hill at sunset",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	lower := strings.ToLower(result.Prompt)
+	assert.NotContains(t, lower, "character trait")
+	assert.Contains(t, result.Prompt, "real tag")
+}
+
+func TestGenerateSDPrompt_FiltersNegativePromptLeak(t *testing.T) {
+	t.Parallel()
+	db := openTestDB(t)
+	makeTestPreset(t, db, nil)
+
+	instruction := "Convert the scene to SD tags. Examples: (thick beard:1.3), (glowing moss:1.2)"
+	require.NoError(t, db.SetSetting("sd_prompt_instruction", instruction))
+
+	llmSvc := &mockLLM{
+		genSDPromptFn: func(systemPrompt, userMessage, presetType, model string, maxTokens int) (string, error) {
+			return `{"prompt": "sunny meadow", "negative_prompt": "(thick beard:1.3), glowing moss, lowres"}`, nil
+		},
+	}
+
+	svc := newTestService(t, db, llmSvc, &mockSD{})
+
+	result, err := svc.GenerateSDPrompt(GenerateSDPromptParams{
+		PresetID:    1,
+		Description: "sunny meadow with flowers",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	assert.Equal(t, "sunny meadow", result.Prompt)
+	assert.Equal(t, "lowres", result.NegativePrompt)
+}
+
+func TestGenerateSDPrompt_ShortGenericKeySubtracted(t *testing.T) {
+	t.Parallel()
+	db := openTestDB(t)
+	makeTestPreset(t, db, nil)
+
+	llmSvc := &mockLLM{
+		genSDPromptFn: func(systemPrompt, userMessage, presetType, model string, maxTokens int) (string, error) {
+			return `{"prompt": "(tag:1.3), garage interior", "negative_prompt": ""}`, nil
+		},
+	}
+
+	svc := newTestService(t, db, llmSvc, &mockSD{})
+
+	result, err := svc.GenerateSDPrompt(GenerateSDPromptParams{
+		PresetID:    1,
+		Description: "vintage car garage",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	assert.Equal(t, "garage interior", result.Prompt)
+}
+
+func TestGenerateLLMPromptFromTags_FiltersInstructionLeak(t *testing.T) {
+	t.Parallel()
+	db := openTestDB(t)
+	p := makeTestPreset(t, db, nil)
+
+	instruction := "Convert the scene to SD tags. Examples: (thick beard:1.3), (glowing moss:1.2)"
+	require.NoError(t, db.SetSetting("sd_prompt_instruction", instruction))
+
+	llmSvc := &mockLLM{
+		genSDPromptFn: func(systemPrompt, userMessage, presetType, model string, maxTokens int) (string, error) {
+			return `{"prompt": "sunny meadow", "negative_prompt": "(thick beard:1.3), lowres"}`, nil
+		},
+	}
+
+	svc := newTestService(t, db, llmSvc, &mockSD{})
+
+	result, err := svc.generateLLMPromptFromTags(p, "sunny meadow with flowers", "txt2img", "")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	assert.Equal(t, "sunny meadow", result.Prompt)
+	assert.Equal(t, "lowres", result.NegativePrompt)
+}
+
+func TestFilterInstructionExamples(t *testing.T) {
+	t.Parallel()
+	db := openTestDB(t)
+	svc := newTestService(t, db, &mockLLM{}, &mockSD{})
+
+	tests := []struct {
+		name        string
+		prompt      string
+		instruction string
+		userInput   string
+		want        string
+	}{
+		{
+			name:        "leaked example tags subtracted",
+			prompt:      "(thick beard:1.3), giant luminescent mushrooms, sunny meadow",
+			instruction: "Examples: (thick beard:1.3), (giant luminescent mushrooms:1.2)",
+			userInput:   "sunny meadow with flowers",
+			want:        "sunny meadow",
+		},
+		{
+			name:        "user-requested example tag kept",
+			prompt:      "(thick beard:1.3), forest",
+			instruction: "Examples: (thick beard:1.3)",
+			userInput:   "a man with a thick beard in a forest",
+			want:        "(thick beard:1.3), forest",
+		},
+		{
+			name:        "empty instruction passthrough",
+			prompt:      "cat, dog",
+			instruction: "",
+			userInput:   "a cat",
+			want:        "cat, dog",
+		},
+		{
+			name:        "instruction without examples passthrough",
+			prompt:      "cat, dog",
+			instruction: "No weighted examples here at all",
+			userInput:   "a cat",
+			want:        "cat, dog",
+		},
+		{
+			name:        "case-insensitive user match keeps tag",
+			prompt:      "(thick beard:1.3), forest",
+			instruction: "Examples: (thick beard:1.3)",
+			userInput:   "a man with a THICK BEARD",
+			want:        "(thick beard:1.3), forest",
+		},
+		{
+			name:        "short generic key subtracted despite substring match",
+			prompt:      "(tag:1.3), garage interior",
+			instruction: "WEIGHT FORMAT — always use parentheses: (tag:1.3)",
+			userInput:   "vintage car garage",
+			want:        "garage interior",
+		},
+		{
+			name:        "four char key subtracted unconditionally",
+			prompt:      "(hood:1.2), forest",
+			instruction: "Examples: (hood:1.2)",
+			userInput:   "hooded figure in a forest",
+			want:        "forest",
+		},
+		{
+			name:        "five char key still guarded by substring match",
+			prompt:      "(sword:1.2), forest",
+			instruction: "Examples: (sword:1.2)",
+			userInput:   "a knight with a sword in a forest",
+			want:        "(sword:1.2), forest",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, svc.filterInstructionExamples(tt.prompt, tt.instruction, tt.userInput))
+		})
+	}
 }
 
 func TestRecommendPreset_EmptyDescription(t *testing.T) {

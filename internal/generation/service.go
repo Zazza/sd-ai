@@ -410,6 +410,26 @@ func (s *Service) getSDPromptInstruction() string {
 	return sdPromptInstruction
 }
 
+func (s *Service) filterInstructionExamples(prompt, instruction, userInput string) string {
+	examples := promptutil.ExtractExampleTags(instruction)
+	if examples == "" {
+		return prompt
+	}
+	userLower := strings.ToLower(userInput)
+	subtract := make([]string, 0)
+	for _, tag := range strings.Split(examples, ", ") {
+		key := strings.ToLower(strings.TrimSpace(tag))
+		if key == "" {
+			continue
+		}
+		if len(key) > 4 && strings.Contains(userLower, key) {
+			continue
+		}
+		subtract = append(subtract, tag)
+	}
+	return promptutil.RemoveTags(prompt, strings.Join(subtract, ", "))
+}
+
 func (s *Service) getAnalyzeModel() string {
 	model := s.cfg.VisionModel
 	if v, err := s.db.GetSetting("llm_analyze_model"); err == nil && v != "" {
@@ -689,7 +709,8 @@ func (s *Service) GenerateSDPrompt(params GenerateSDPromptParams) (*GenerateSDPr
 		}, nil
 	}
 
-	systemPrompt := s.getSDPromptInstruction()
+	instruction := s.getSDPromptInstruction()
+	systemPrompt := instruction
 
 	var filterErr error
 	description, filterErr = s.kids.FilterInput(description)
@@ -750,8 +771,10 @@ RESPONSE LENGTH: you have up to %d tokens. Include ALL visual elements from the 
 
 	result.Prompt = promptutil.StripJunk(result.Prompt)
 	result.Prompt = promptutil.TruncateRepetitive(result.Prompt, 1000)
+	result.Prompt = s.filterInstructionExamples(result.Prompt, instruction, description+" "+negative)
 	result.NegativePrompt = promptutil.StripJunk(result.NegativePrompt)
 	result.NegativePrompt = promptutil.TruncateRepetitive(result.NegativePrompt, 500)
+	result.NegativePrompt = s.filterInstructionExamples(result.NegativePrompt, instruction, description+" "+negative)
 
 	result.Prompt = s.kids.FilterOutput(result.Prompt)
 	result.NegativePrompt = s.kids.FilterOutput(result.NegativePrompt)

@@ -369,8 +369,10 @@ RESPONSE LENGTH: your response is limited to ~%d tokens. You MUST fit within thi
 	promptResult.Prompt = promptutil.TruncateRepetitive(promptResult.Prompt, 1000)
 	promptResult.Prompt = promptutil.DedupeTags(promptResult.Prompt)
 	promptResult.Prompt = promptutil.RemoveTags(promptResult.Prompt, p.Prompt)
+	promptResult.Prompt = s.filterInstructionExamples(promptResult.Prompt, sdPromptInstruction, tags+" "+extraNegative)
 	promptResult.NegativePrompt = promptutil.StripJunk(promptResult.NegativePrompt)
 	promptResult.NegativePrompt = promptutil.TruncateRepetitive(promptResult.NegativePrompt, 500)
+	promptResult.NegativePrompt = s.filterInstructionExamples(promptResult.NegativePrompt, sdPromptInstruction, tags+" "+extraNegative)
 
 	promptResult.Prompt = s.kids.FilterOutput(promptResult.Prompt)
 	promptResult.NegativePrompt = s.kids.FilterOutput(promptResult.NegativePrompt)
