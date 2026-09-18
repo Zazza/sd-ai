@@ -4,6 +4,12 @@ All notable changes to SD Studio are documented here.
 
 ## [Unreleased]
 
+## [0.7.10] — 2026-09-18
+
+### Fixed
+- **LLM instruction example leak (random bearded man / glowing blue mushrooms)**: the default prompt-converter instruction carried vivid weighted example tags in its conversion guide (`(thick beard:1.3)`, `(giant luminescent mushrooms:1.2)`, `(blue glow from artifact on face:1.2)`). Weak local LLMs occasionally copy guide examples into the response instead of deriving tags from the user scene — and because the examples carry the highest weights (1.2–1.3), SD rendered them dominantly, most often on short descriptions where the model has little real content to convert. Two-layer fix: (1) the guide now uses abstract format placeholders plus an explicit "NEVER copy guide examples" rule; (2) a runtime guard (`promptutil.ExtractExampleTags` + `Service.filterInstructionExamples`) parses `(tag:weight)` examples out of the *active* instruction — including user-customized ones in Settings — and subtracts them from the LLM's prompt **and** negative prompt in both converters (Generate, From Image), while never subtracting a tag the user actually requested. Covers custom instructions verbatim, weight variations of a leaked tag, and short generic placeholders unconditionally.
+- **History → Remix now updates an already-open From Image page**: picking an image in the History footer panel and pressing Remix only worked when the Remix page wasn't already mounted — the page loaded the active session item solely in `onMounted`, so nothing reloaded it and the image silently "landed" in Generate instead (GeneratePage restores the active item on its own mount). A new `session:selected` event is now emitted only on explicit user selection (`SetActiveSessionItem`, `SetLastImage` — including File Browser "Send to Remix"); the From Image page listens and reloads with a latest-wins guard against out-of-order responses. Generation-time `session:active`/`session:added` remain non-auto-loading so a running edit/mask is never clobbered. Also fixed a pre-existing `ReferenceError` on leaving the page: Wails `EventsOn` off-functions were declared inside `onMounted` but called from `onUnmounted` (different scope), leaking listeners on every visit (same latent bug still present in `ExportPage.vue`).
+
 ## [0.7.9] — 2026-09-15
 
 ### Changed
