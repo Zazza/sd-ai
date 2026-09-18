@@ -892,7 +892,10 @@ func (a *App) SetLastImage(base64Data string) error {
 	if len(base64Data) > generation.MaxImageBase64Len {
 		return fmt.Errorf("image too large (max 16 MB)")
 	}
-	a.sessions.AddToSession(base64Data, nil, "file-browser", false, nil)
+	itemID := a.sessions.AddToSession(base64Data, nil, "file-browser", false, nil)
+	if itemID != 0 {
+		a.emitter.Emit("session:selected", map[string]int64{"id": itemID})
+	}
 	return nil
 }
 

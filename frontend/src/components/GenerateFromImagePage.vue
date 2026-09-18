@@ -125,11 +125,16 @@ async function uploadImage() {
   }
 }
 
+let lastImageReqId = 0
+
 async function useLastImage() {
+  const reqId = ++lastImageReqId
   try {
     const item = await api.getActiveSessionItem()
+    if (reqId !== lastImageReqId) return
     if (item) {
       const b64 = await api.getSessionImage(item.id)
+      if (reqId !== lastImageReqId) return
       if (b64) {
         uploadedImage.value = b64
         uploadedImageMime.value = 'image/png'
@@ -620,19 +625,26 @@ function onQueueFailed(data) {
   }
 }
 
+let offRemoveStage = () => {}
+let offSessionAdded = () => {}
+let offSessionSelected = () => {}
+let offCompleted = () => {}
+let offFailed = () => {}
+
 onMounted(async () => {
   loadPresets()
   loadKidsMode()
   document.addEventListener('paste', handlePaste)
   document.addEventListener('keydown', onKeydown)
-  const offRemoveStage = EventsOn("remove:stage", (stage) => {
+  offRemoveStage = EventsOn("remove:stage", (stage) => {
     removeStage.value = stage
   })
-  const offSessionAdded = EventsOn("session:added", () => {
+  offSessionAdded = EventsOn("session:added", () => {
     // Don't auto-load — user picks when to load via Last Generated
   })
-  const offCompleted = EventsOn('queue:completed', onQueueCompleted)
-  const offFailed = EventsOn('queue:failed', onQueueFailed)
+  offSessionSelected = EventsOn("session:selected", () => { useLastImage() })
+  offCompleted = EventsOn('queue:completed', onQueueCompleted)
+  offFailed = EventsOn('queue:failed', onQueueFailed)
   try {
     const s = await api.getSettings()
     if (s.fi_mode) mode.value = s.fi_mode
@@ -673,6 +685,7 @@ onUnmounted(() => {
   document.removeEventListener('keydown', onKeydown)
   offRemoveStage()
   offSessionAdded()
+  offSessionSelected()
   offCompleted()
   offFailed()
   saveFIState()

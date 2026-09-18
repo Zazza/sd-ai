@@ -249,6 +249,7 @@ func (s *Service) SetActiveSessionItem(id int64) error {
 		return err
 	}
 	s.emit.Emit("session:active", map[string]int64{"id": id})
+	s.emit.Emit("session:selected", map[string]int64{"id": id})
 	return nil
 }
 

@@ -3,6 +3,9 @@ const listeners = {}
 export function EventsOn(event, handler) {
   if (!listeners[event]) listeners[event] = []
   listeners[event].push(handler)
+  return () => {
+    listeners[event] = listeners[event].filter(h => h !== handler)
+  }
 }
 
 export function EventsOff(event) {
