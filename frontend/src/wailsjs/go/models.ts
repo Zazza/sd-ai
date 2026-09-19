@@ -343,24 +343,6 @@ export namespace generation {
 	        this.negative_prompt = source["negative_prompt"];
 	    }
 	}
-	export class RecommendPresetResult {
-	    preset_id: number;
-	    preset_name: string;
-	    extra_prompt: string;
-	    reasoning: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new RecommendPresetResult(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.preset_id = source["preset_id"];
-	        this.preset_name = source["preset_name"];
-	        this.extra_prompt = source["extra_prompt"];
-	        this.reasoning = source["reasoning"];
-	    }
-	}
 	export class TestCompoundGenerateParams {
 	    selected_ids: number[];
 	    prompt: string;

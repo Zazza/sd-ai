@@ -271,7 +271,6 @@ func (s *Service) SetContext(ctx context.Context)
 func (s *Service) GenerateImage(params GenerateImageParams) (*GenerateImageResult, error)
 func (s *Service) GenerateFromImage(params GenerateFromImageParams) (*GenerateImageResult, error)
 func (s *Service) GenerateSDPrompt(description, presetType string) (string, error)
-func (s *Service) RecommendPreset(description string) (*RecommendPresetResult, error)
 func (s *Service) GenerateCompoundImage(params CompoundParams) (*GenerateImageResult, error)
 func (s *Service) GenerateScene(scene SavedScene) (*MultiPassResult, error)
 func (s *Service) UpscaleImage(image, mode string, scale float64) (*GenerateImageResult, error)
@@ -283,7 +282,6 @@ func (s *Service) StopSDPolling()
 - `GenerateImage` — генерация txt2img с разрешением пресета, генерацией промпта через LLM и опциональным батчем
 - `GenerateFromImage` — генерация img2img с анализом исходного изображения и инпейнтингом
 - `GenerateSDPrompt` — преобразование текстового описания в SD промпт через LLM
-- `RecommendPreset` — подбор лучшего пресета для заданного описания
 - `GenerateCompoundImage` — многошаговая генерация с использованием составных пресетов
 - `GenerateScene` — multi-pass генерация сцен с компоновкой персонажей
 - `UpscaleImage` — апскейлинг изображений через extras API SD WebUI

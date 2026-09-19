@@ -226,8 +226,6 @@ export function ReadImageFile():Promise<string>;
 
 export function ReadThumbnail(arg1:string):Promise<string>;
 
-export function RecommendPreset(arg1:string):Promise<generation.RecommendPresetResult>;
-
 export function RemoveQueueJob(arg1:number):Promise<void>;
 
 export function RenameSession(arg1:number,arg2:string):Promise<void>;

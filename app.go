@@ -298,7 +298,6 @@ type GenerateSDPromptParams = generation.GenerateSDPromptParams
 type GenerateSDPromptResult = generation.GenerateSDPromptResult
 type GenerateImageParams = generation.GenerateImageParams
 type GenerateImageResult = generation.GenerateImageResult
-type RecommendPresetResult = generation.RecommendPresetResult
 type AnalyzePrompts = generation.AnalyzePrompts
 type UpscaleImageParams = generation.UpscaleImageParams
 type TestGenerateParams = generation.TestGenerateParams
@@ -315,10 +314,6 @@ func (a *App) GenerateSDPrompt(params GenerateSDPromptParams) (*GenerateSDPrompt
 
 func (a *App) GetDefaultPromptInstruction() string {
 	return a.gen.GetDefaultPromptInstruction()
-}
-
-func (a *App) RecommendPreset(description string) (*RecommendPresetResult, error) {
-	return a.gen.RecommendPreset(description)
 }
 
 func (a *App) AnalyzeImage(imageBase64, mode string) (string, error) {

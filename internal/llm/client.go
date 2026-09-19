@@ -59,10 +59,6 @@ type ChatOptions struct {
 	NumGPU int `json:"num_gpu,omitempty"`
 }
 
-type ResponseFormat struct {
-	Type string `json:"type"`
-}
-
 type ChatRequest struct {
 	Model           string          `json:"model"`
 	Messages        []Message       `json:"messages"`
@@ -73,7 +69,6 @@ type ChatRequest struct {
 	Stream          bool            `json:"stream"`
 	KeepAlive       string          `json:"keep_alive,omitempty"`
 	Options         *ChatOptions    `json:"options,omitempty"`
-	ResponseFormat  *ResponseFormat `json:"response_format,omitempty"`
 }
 
 type ChatResponse struct {
@@ -107,33 +102,6 @@ func (c *Client) Chat(model, systemPrompt, userMessage string, temperature float
 
 	url := c.baseURL + "/v1/chat/completions"
 	logPrefix := fmt.Sprintf("[LLM] POST %s model=%s max_tokens=%d temperature=%.1f prompt_len=%d", url, model, maxTokens, temperature, len(userMessage))
-	return c.doChatRequest(reqBody, logPrefix)
-}
-
-func (c *Client) ChatJSON(model, systemPrompt, userMessage string, temperature float64, maxTokens int) (string, error) {
-	reqBody := ChatRequest{
-		Model: model,
-		Messages: []Message{
-			{Role: "system", Content: systemPrompt},
-			{Role: "user", Content: userMessage},
-		},
-		Temperature:    temperature,
-		MaxTokens:      maxTokens,
-		Stream:         false,
-		ResponseFormat: &ResponseFormat{Type: "json_object"},
-	}
-
-	if c.backend == BackendOllama {
-		reqBody.KeepAlive = c.backendCfg.KeepAlive
-		opts := ChatOptions{
-			NumCtx: c.backendCfg.NumCtx,
-			NumGPU: c.backendCfg.NumGPU,
-		}
-		reqBody.Options = &opts
-	}
-
-	url := c.baseURL + "/v1/chat/completions"
-	logPrefix := fmt.Sprintf("[LLM] POST %s model=%s max_tokens=%d temperature=%.1f json=true prompt_len=%d", url, model, maxTokens, temperature, len(userMessage))
 	return c.doChatRequest(reqBody, logPrefix)
 }
 

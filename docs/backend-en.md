@@ -271,7 +271,6 @@ func (s *Service) SetContext(ctx context.Context)
 func (s *Service) GenerateImage(params GenerateImageParams) (*GenerateImageResult, error)
 func (s *Service) GenerateFromImage(params GenerateFromImageParams) (*GenerateImageResult, error)
 func (s *Service) GenerateSDPrompt(description, presetType string) (string, error)
-func (s *Service) RecommendPreset(description string) (*RecommendPresetResult, error)
 func (s *Service) GenerateCompoundImage(params CompoundParams) (*GenerateImageResult, error)
 func (s *Service) GenerateScene(scene SavedScene) (*MultiPassResult, error)
 func (s *Service) UpscaleImage(image, mode string, scale float64) (*GenerateImageResult, error)
@@ -283,7 +282,6 @@ Methods:
 - `GenerateImage` — txt2img generation with preset resolution, LLM prompt generation, and optional batch
 - `GenerateFromImage` — img2img generation with init image analysis and inpainting
 - `GenerateSDPrompt` — converts text description to SD prompt via LLM
-- `RecommendPreset` — suggests best preset for a given description
 - `GenerateCompoundImage` — multi-step generation using compound presets
 - `GenerateScene` — multi-pass scene generation with character compositing
 - `UpscaleImage` — image upscaling via SD WebUI extras API

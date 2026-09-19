@@ -50,7 +50,6 @@ vi.mock('../../wailsjs/go/main/App.js', () => ({
   GetAllTags: vi.fn(() => Promise.resolve([])),
   GetSDLoRAs: vi.fn(() => Promise.resolve([])),
   ValidateImportModels: vi.fn(() => Promise.resolve([])),
-  RecommendPreset: vi.fn(() => Promise.resolve(null)),
   GetDefaultPromptInstruction: vi.fn(() => Promise.resolve('')),
   GetDefaultAnalyzePrompts: vi.fn(() => Promise.resolve({})),
   BatchGenerate: vi.fn(() => Promise.resolve()),

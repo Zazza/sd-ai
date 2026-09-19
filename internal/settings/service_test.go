@@ -29,9 +29,6 @@ type mockLLMService struct {
 func (m *mockLLMService) Chat(string, string, string, float64, int) (string, error) {
 	return "", nil
 }
-func (m *mockLLMService) ChatJSON(string, string, string, float64, int) (string, error) {
-	return "", nil
-}
 func (m *mockLLMService) ChatVision(string, string, string, string, float64, int) (string, error) {
 	return "", nil
 }

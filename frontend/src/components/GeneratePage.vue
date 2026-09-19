@@ -55,11 +55,6 @@ const selectedHiresProfileId = ref(null)
 
 const shared = inject('sharedGenState', null)
 
-const recommendDesc = ref('')
-const recommending = ref(false)
-const recommendResult = ref(null)
-const showSuggestPopover = ref(false)
-
 const genCount = ref(1)
 const enqueuedJobIds = ref(new Set())
 const batchTotal = ref(0)
@@ -132,32 +127,6 @@ function saveGenState() {
     gen_hires_profile_id: String(selectedHiresProfileId.value || ''),
     gen_count: String(genCount.value || 1),
   }).catch(() => {})
-}
-
-async function recommendPreset() {
-  if (!recommendDesc.value.trim()) return
-  recommending.value = true
-  recommendResult.value = null
-  error.value = ''
-  try {
-    const result = await api.recommendPreset(recommendDesc.value)
-    if (result) {
-      recommendResult.value = result
-      if (result.preset_id) {
-        const pid = Number(result.preset_id)
-        if (presets.value.find(p => p.id === pid)) {
-          selectedPresetId.value = pid
-        }
-      }
-      if (result.extra_prompt) {
-        description.value = result.extra_prompt
-      }
-    }
-  } catch (e) {
-    error.value = t('generate.error_recommend', { error: String(e) })
-  } finally {
-    recommending.value = false
-  }
 }
 
 async function sendToSD() {
@@ -723,30 +692,12 @@ function onKeydown(e) {
                 </select>
               </div>
               <div class="form-group">
-                <div style="display: flex; align-items: center; gap: 8px;">
-                  <div class="form-group" style="flex: 1; margin-bottom: 0;">
-                    <label class="form-label">{{ t('generate.label_style') }}</label>
-                    <select class="form-select" v-model="selectedPresetId">
-                      <option :value="null" disabled>{{ t('generate.select_style') }}</option>
-                      <option v-for="p in filteredPresets" :key="p.id" :value="p.id">{{ p.name }}</option>
-                    </select>
-                  </div>
-                  <button class="btn-icon-action" style="margin-top: 20px; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text-dim); cursor: pointer;" @click="showSuggestPopover = !showSuggestPopover" title="Suggest Style">&#10024;</button>
-                </div>
+                <label class="form-label">{{ t('generate.label_style') }}</label>
+                <select class="form-select" v-model="selectedPresetId">
+                  <option :value="null" disabled>{{ t('generate.select_style') }}</option>
+                  <option v-for="p in filteredPresets" :key="p.id" :value="p.id">{{ p.name }}</option>
+                </select>
               </div>
-            </div>
-            <div v-if="showSuggestPopover" style="margin-top: 8px; padding: 12px; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm);">
-              <div style="display: flex; gap: 8px;">
-                <input class="form-input" v-model="recommendDesc" :placeholder="t('generate.placeholder_suggest')" :disabled="recommending" style="flex: 1;" />
-                <button class="btn btn-secondary" @click="recommendPreset" :disabled="recommending || !recommendDesc.trim()">
-                  {{ recommending ? '...' : t('generate.btn_suggest') }}
-                </button>
-              </div>
-              <div v-if="recommendResult" style="margin-top: 8px; padding: 8px; background: var(--surface); border-radius: 6px; font-size: 13px;">
-                <div style="color: var(--text-bright);">{{ recommendResult.preset_name }}</div>
-                <div v-if="recommendResult.reasoning" style="color: var(--text-dim); margin-top: 4px;">{{ recommendResult.reasoning }}</div>
-              </div>
-              <button style="margin-top: 6px; background: none; border: none; color: var(--text-dim); font-size: 11px; cursor: pointer;" @click="showSuggestPopover = false; recommendResult = null">Close</button>
             </div>
             <div v-if="genMode === 'preset'" class="workflow-link" @click="enableWorkflowMode">{{ t('generate.using_workflows') }}</div>
           </div>

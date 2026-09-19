@@ -53,7 +53,6 @@ SD Studio bridges your local Stable Diffusion and LLM into a single workflow: de
 |---------|-------------|
 | Smart Merge | Natural language description → merged SD prompt via LLM |
 | Vision Analysis | Upload image, analyze via vision LLM (quick or deep chain mode) |
-| Preset Recommendation | LLM picks the best preset from your library for a given description |
 | Multi-Scene Decomposition | LLM breaks scene description into individual characters |
 | Customizable Instruction | Edit the system prompt that shapes LLM output format |
 

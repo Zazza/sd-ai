@@ -47,10 +47,6 @@ func (m *mockLLM) Chat(model, systemPrompt, userMessage string, temperature floa
 	return "", fmt.Errorf("not implemented")
 }
 
-func (m *mockLLM) ChatJSON(model, systemPrompt, userMessage string, temperature float64, maxTokens int) (string, error) {
-	return m.Chat(model, systemPrompt, userMessage, temperature, maxTokens)
-}
-
 func (m *mockLLM) ChatVision(model, systemPrompt, userText, imageBase64 string, temperature float64, maxTokens int) (string, error) {
 	m.mu.Lock()
 	fn := m.chatVisionFn
@@ -709,89 +705,6 @@ func TestFilterInstructionExamples(t *testing.T) {
 			assert.Equal(t, tt.want, svc.filterInstructionExamples(tt.prompt, tt.instruction, tt.userInput))
 		})
 	}
-}
-
-func TestRecommendPreset_EmptyDescription(t *testing.T) {
-	t.Parallel()
-	db := openTestDB(t)
-	svc := newTestService(t, db, &mockLLM{}, &mockSD{})
-
-	_, err := svc.RecommendPreset("")
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "description is required")
-}
-
-func TestRecommendPreset_NoPresets(t *testing.T) {
-	t.Parallel()
-	db := openTestDB(t)
-	svc := newTestService(t, db, &mockLLM{}, &mockSD{})
-
-	_, err := svc.RecommendPreset("a cat")
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "no presets available")
-}
-
-func TestRecommendPreset_Success(t *testing.T) {
-	t.Parallel()
-	db := openTestDB(t)
-	makeTestPreset(t, db, &preset.Preset{
-		Name:           "Anime Girl",
-		PresetType:     "anime",
-		Prompt:         "1girl",
-		NegativePrompt: "lowres",
-		Sampler:        "Euler a",
-		Steps:          20,
-		CfgScale:       7.0,
-	})
-
-	llmSvc := &mockLLM{
-		chatFn: func(model, systemPrompt, userMessage string, temperature float64, maxTokens int) (string, error) {
-			return `{"preset_id": 1, "preset_name": "Anime Girl", "extra_prompt": "cat ears", "reasoning": "best match"}`, nil
-		},
-	}
-
-	svc := newTestService(t, db, llmSvc, &mockSD{})
-
-	result, err := svc.RecommendPreset("anime girl with cat ears")
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	assert.Equal(t, int64(1), result.PresetID)
-	assert.Equal(t, "Anime Girl", result.PresetName)
-	assert.Equal(t, "cat ears", result.ExtraPrompt)
-}
-
-func TestRecommendPreset_LLMError(t *testing.T) {
-	t.Parallel()
-	db := openTestDB(t)
-	makeTestPreset(t, db, nil)
-
-	llmSvc := &mockLLM{
-		chatFn: func(model, systemPrompt, userMessage string, temperature float64, maxTokens int) (string, error) {
-			return "", fmt.Errorf("timeout")
-		},
-	}
-
-	svc := newTestService(t, db, llmSvc, &mockSD{})
-	_, err := svc.RecommendPreset("a cat")
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "timeout")
-}
-
-func TestRecommendPreset_InvalidJSONResponse(t *testing.T) {
-	t.Parallel()
-	db := openTestDB(t)
-	makeTestPreset(t, db, nil)
-
-	llmSvc := &mockLLM{
-		chatFn: func(model, systemPrompt, userMessage string, temperature float64, maxTokens int) (string, error) {
-			return "not json", nil
-		},
-	}
-
-	svc := newTestService(t, db, llmSvc, &mockSD{})
-	_, err := svc.RecommendPreset("a cat")
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to parse LLM response")
 }
 
 func TestGenerateImage_PresetNotFound(t *testing.T) {

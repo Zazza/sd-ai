@@ -430,10 +430,6 @@ export function ReadThumbnail(arg1) {
   return window['go']['main']['App']['ReadThumbnail'](arg1);
 }
 
-export function RecommendPreset(arg1) {
-  return window['go']['main']['App']['RecommendPreset'](arg1);
-}
-
 export function RemoveQueueJob(arg1) {
   return window['go']['main']['App']['RemoveQueueJob'](arg1);
 }

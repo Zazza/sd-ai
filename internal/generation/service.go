@@ -13,7 +13,6 @@ import (
 	"math"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -73,13 +72,6 @@ type GenerateSDPromptParams struct {
 type GenerateSDPromptResult struct {
 	Prompt         string `json:"prompt"`
 	NegativePrompt string `json:"negative_prompt"`
-}
-
-type RecommendPresetResult struct {
-	PresetID    int64  `json:"preset_id"`
-	PresetName  string `json:"preset_name"`
-	ExtraPrompt string `json:"extra_prompt"`
-	Reasoning   string `json:"reasoning"`
 }
 
 type AnalyzePrompts struct {
@@ -784,134 +776,6 @@ RESPONSE LENGTH: you have up to %d tokens. Include ALL visual elements from the 
 
 func (s *Service) GetDefaultPromptInstruction() string {
 	return config.DefaultSDPromptInstruction
-}
-
-// --- RecommendPreset ---
-
-func (s *Service) RecommendPreset(description string) (*RecommendPresetResult, error) {
-	if strings.TrimSpace(description) == "" {
-		return nil, fmt.Errorf("description is required")
-	}
-
-	allPresets, err := s.db.List()
-	if err != nil {
-		return nil, fmt.Errorf("load presets: %w", err)
-	}
-	if len(allPresets) == 0 {
-		return nil, fmt.Errorf("no presets available")
-	}
-
-	typesMap := make(map[int64]string)
-	types, _ := s.db.ListPresetTypes()
-	if types != nil {
-		for _, t := range types {
-			typesMap[t.ID] = t.Name
-		}
-	}
-
-	var presetList []string
-	for _, p := range allPresets {
-		typeName := ""
-		if p.TypeID != nil {
-			typeName = typesMap[*p.TypeID]
-		}
-		entry := fmt.Sprintf("ID:%d | Name:%q | Type:%q | Tags:%q", p.ID, p.Name, typeName, p.Tags)
-		presetList = append(presetList, entry)
-	}
-
-	systemPrompt := `You are a JSON API. Respond with ONLY a JSON object. No markdown, no explanation, no text before or after.
-
-Select the best preset matching the user description and suggest prompt enhancements.
-
-RULES:
-1. Select EXACTLY ONE preset from the list by ID
-2. extra_prompt: comma-separated Stable Diffusion tags, English only
-3. reasoning: brief, English only
-4. NEVER respond in any language other than English
-
-OUTPUT FORMAT (copy exactly):
-{"preset_id": 123, "preset_name": "exact name", "extra_prompt": "additional tags", "reasoning": "why"}`
-
-	userMessage := "AVAILABLE PRESETS:\n" + strings.Join(presetList, "\n") + "\n\nUSER DESCRIPTION: " + strings.TrimSpace(description)
-
-	generateModel := s.getGenerateModel()
-	s.settings.ApplyLLMConfig("generate")
-
-	maxTokens := 512
-	if v, err := s.db.GetSetting("llm_max_tokens"); err == nil && v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			maxTokens = n
-		}
-	}
-
-	s.emitter.Emit("llm:status", map[string]string{"status": "thinking"})
-	raw, err := s.llm.ChatJSON(generateModel, systemPrompt, userMessage, 0.3, maxTokens)
-	if err != nil {
-		s.emitter.Emit("llm:status", map[string]string{"status": "done"})
-		return nil, err
-	}
-	s.emitter.Emit("llm:status", map[string]string{"status": "done"})
-
-	extracted := promptutil.ExtractJSON(raw)
-	s.log.Debug("SuggestStyle raw response: %s", raw)
-	var result RecommendPresetResult
-	if err := json.Unmarshal([]byte(extracted), &result); err != nil {
-		s.log.Warn("SuggestStyle: LLM returned non-JSON, attempting fallback parse")
-		if fallback := s.recommendPresetFallback(raw, allPresets); fallback != nil {
-			return fallback, nil
-		}
-		return nil, fmt.Errorf("failed to parse LLM response: %w (raw: %.200s)", err, raw)
-	}
-
-	validIDs := make(map[int64]bool, len(allPresets))
-	for _, p := range allPresets {
-		validIDs[p.ID] = true
-	}
-	if !validIDs[result.PresetID] {
-		matched := false
-		if name := strings.TrimSpace(result.PresetName); name != "" {
-			for _, p := range allPresets {
-				if strings.EqualFold(p.Name, name) {
-					result.PresetID = p.ID
-					result.PresetName = p.Name
-					matched = true
-					break
-				}
-			}
-		}
-		if !matched {
-			if fallback := s.recommendPresetFallback(raw, allPresets); fallback != nil && validIDs[fallback.PresetID] {
-				result.PresetID = fallback.PresetID
-				result.PresetName = fallback.PresetName
-				return &result, nil
-			}
-			return nil, fmt.Errorf("recommended preset not found (LLM returned id %d)", result.PresetID)
-		}
-	}
-
-	return &result, nil
-}
-
-func (s *Service) recommendPresetFallback(raw string, allPresets []preset.Preset) *RecommendPresetResult {
-	re := regexp.MustCompile(`(?i)ID[:\s]*(\d+)`)
-	matches := re.FindStringSubmatch(raw)
-	if len(matches) < 2 {
-		return nil
-	}
-	id, err := strconv.ParseInt(matches[1], 10, 64)
-	if err != nil {
-		return nil
-	}
-	for _, p := range allPresets {
-		if p.ID == id {
-			return &RecommendPresetResult{
-				PresetID:   p.ID,
-				PresetName: p.Name,
-				Reasoning:  "auto-selected from text response",
-			}
-		}
-	}
-	return nil
 }
 
 // --- GenerateImage ---

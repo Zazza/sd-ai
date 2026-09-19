@@ -19,7 +19,6 @@ watch(() => props.droppedImage, (val) => {
     uploadedImage.value = val
     uploadedImageMime.value = 'image/png'
     tags.value = ''
-    recommendation.value = null
     error.value = ''
     clearMask()
     mode.value = 'img2img'
@@ -57,9 +56,6 @@ const batchDone = ref(0)
 const analyzeMode = ref('quick')
 const analyzeElapsed = ref(0)
 let analyzeTimer = null
-
-const recommending = ref(false)
-const recommendation = ref(null)
 
 const { kidsModeActive, loadKidsMode } = useKidsMode()
 const showViewer = ref(false)
@@ -116,7 +112,6 @@ async function uploadImage() {
       uploadedImage.value = base64
       uploadedImageMime.value = 'image/png'
       tags.value = ''
-      recommendation.value = null
       error.value = ''
       clearMask()
     }
@@ -139,7 +134,6 @@ async function useLastImage() {
         uploadedImage.value = b64
         uploadedImageMime.value = 'image/png'
         tags.value = ''
-        recommendation.value = null
         error.value = ''
         clearMask()
       } else {
@@ -160,7 +154,6 @@ async function pasteFromClipboard() {
       uploadedImage.value = base64
       uploadedImageMime.value = 'image/png'
       tags.value = ''
-      recommendation.value = null
       error.value = ''
       clearMask()
     }
@@ -189,7 +182,6 @@ function handlePaste(e) {
           uploadedImage.value = base64
           uploadedImageMime.value = mime
           tags.value = ''
-          recommendation.value = null
           error.value = ''
           clearMask()
         }
@@ -221,7 +213,6 @@ function onDrop(e) {
       uploadedImage.value = base64
       uploadedImageMime.value = mime
       tags.value = ''
-      recommendation.value = null
       error.value = ''
       clearMask()
     }
@@ -237,7 +228,6 @@ function clearImage() {
   genInfo.value = null
   effectivePrompt.value = ''
   effectiveNegative.value = ''
-  recommendation.value = null
   error.value = ''
   clearMask()
 }
@@ -252,9 +242,6 @@ async function analyzeImage() {
   try {
     const result = await api.analyzeImage(uploadedImage.value, analyzeMode.value)
     tags.value = result || ''
-    if (analyzeMode.value === 'quick' && tags.value.trim()) {
-      recommendPreset(tags.value)
-    }
   } catch (e) {
     error.value = t('fi.error_analysis', { error: String(e) })
   } finally {
@@ -263,19 +250,6 @@ async function analyzeImage() {
       clearInterval(analyzeTimer)
       analyzeTimer = null
     }
-  }
-}
-
-async function recommendPreset(tagsText) {
-  recommending.value = true
-  recommendation.value = null
-  try {
-    const rec = await api.recommendPreset(tagsText)
-    if (rec) recommendation.value = rec
-  } catch (e) {
-    console.error('Recommend preset failed:', e)
-  } finally {
-    recommending.value = false
   }
 }
 
@@ -556,21 +530,6 @@ function transferToGenerate() {
     shared.description = tags.value
   }
   emit('transfer-tags')
-}
-
-function applyRecommendation() {
-  if (!recommendation.value) return
-  if (recommendation.value.preset_id) {
-    const pid = Number(recommendation.value.preset_id)
-    if (presets.value.find(p => p.id === pid)) {
-      selectedPresetId.value = pid
-      genMode.value = 'preset'
-    }
-  }
-  if (recommendation.value.extra_prompt) {
-    const current = tags.value.trim()
-    tags.value = current ? current + ', ' + recommendation.value.extra_prompt : recommendation.value.extra_prompt
-  }
 }
 
 async function onQueueCompleted(data) {
@@ -1028,25 +987,6 @@ function onKeydown(e) {
             </div>
           </div>
 
-          <div v-if="mode !== 'remove' && recommendation" class="fi-recommendation">
-            <div style="font-weight: 600; margin-bottom: 6px;">{{ t('fi.recommended', { name: recommendation.preset_name }) }}</div>
-            <div v-if="recommendation.reasoning" style="font-size: 12px; color: var(--text-dim); margin-bottom: 8px;">
-              {{ recommendation.reasoning }}
-            </div>
-            <div v-if="recommendation.extra_prompt" style="font-size: 12px; color: var(--text-dim); margin-bottom: 8px;">
-              <span style="font-weight: 600;">{{ t('fi.extra_tags') }}</span> {{ recommendation.extra_prompt }}
-            </div>
-            <div style="display: flex; gap: 8px;">
-              <button class="btn btn-sm btn-primary" @click="applyRecommendation">{{ t('fi.btn_apply') }}</button>
-              <button class="btn btn-sm btn-secondary" @click="recommendation = null">{{ t('fi.btn_dismiss') }}</button>
-            </div>
-          </div>
-
-          <div v-if="mode !== 'remove' && recommending" style="margin-top: 8px; display: flex; align-items: center; gap: 8px; color: var(--text-dim); font-size: 13px;">
-            <span class="spinner" style="width: 14px; height: 14px; border-width: 2px;"></span>
-            {{ t('fi.recommending_style') }}
-          </div>
-
           <div v-if="!kidsModeActive" class="form-group">
             <label class="form-label">{{ t('fi.label_extra_exclude') }}</label>
             <textarea class="form-textarea" v-model="extraNegativePrompt" rows="2" :placeholder="t('fi.placeholder_extra_exclude')"></textarea>
@@ -1179,14 +1119,6 @@ function onKeydown(e) {
   gap: 8px;
   margin-top: 8px;
   flex-wrap: wrap;
-}
-.fi-recommendation {
-  margin-top: 12px;
-  padding: 12px;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-left: 3px solid var(--accent);
-  border-radius: var(--radius-sm);
 }
 .inpaint-canvas-container {
   position: relative;
