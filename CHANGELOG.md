@@ -4,6 +4,9 @@ All notable changes to SD Studio are documented here.
 
 ## [Unreleased]
 
+### Fixed
+- **"sql: no rows in result set" on generation**: the style-recommend button (`RecommendPreset`) returned the LLM's `preset_id` without validating it against the presets table — a hallucinated or garbled ID from a weak local LLM flowed into the Generate page's selection and, on Generate, `GenerateImage` propagated the raw `sql.ErrNoRows` straight into the queue job error. The recommender now validates the LLM's ID (falls back to a case-insensitive name match, then the regex fallback with the already-parsed `extra_prompt` merged in, then a clear error) and can no longer return a non-existent preset. `GenerateImage`, `UpscaleImage` and `UpscalePreview` wrap lookup failures as `preset not found: …` and reject `preset_id ≤ 0` upfront; `GetSessionItem` returns `(nil, nil)` on missing rows (matching `GetActiveItem`), making item deletion idempotent. Frontend defense: Generate and From Image pages verify preset/compound IDs against the loaded lists before assigning them — from recommendations, persisted settings and cross-page shared state — and From Image now awaits its preset list before restoring settings (validation previously ran against an empty list).
+
 ## [0.7.10] — 2026-09-18
 
 ### Fixed

@@ -561,8 +561,11 @@ function transferToGenerate() {
 function applyRecommendation() {
   if (!recommendation.value) return
   if (recommendation.value.preset_id) {
-    selectedPresetId.value = recommendation.value.preset_id
-    genMode.value = 'preset'
+    const pid = Number(recommendation.value.preset_id)
+    if (presets.value.find(p => p.id === pid)) {
+      selectedPresetId.value = pid
+      genMode.value = 'preset'
+    }
   }
   if (recommendation.value.extra_prompt) {
     const current = tags.value.trim()
@@ -632,7 +635,7 @@ let offCompleted = () => {}
 let offFailed = () => {}
 
 onMounted(async () => {
-  loadPresets()
+  await loadPresets()
   loadKidsMode()
   document.addEventListener('paste', handlePaste)
   document.addEventListener('keydown', onKeydown)
@@ -648,8 +651,18 @@ onMounted(async () => {
   try {
     const s = await api.getSettings()
     if (s.fi_mode) mode.value = s.fi_mode
-    if (s.fi_preset_id) selectedPresetId.value = Number(s.fi_preset_id)
-    if (s.fi_compound_preset_id) selectedCompoundPresetId.value = Number(s.fi_compound_preset_id)
+    if (s.fi_preset_id) {
+      const pid = Number(s.fi_preset_id)
+      if (presets.value.find(p => p.id === pid)) {
+        selectedPresetId.value = pid
+      }
+    }
+    if (s.fi_compound_preset_id) {
+      const cpid = Number(s.fi_compound_preset_id)
+      if (compoundPresets.value.find(c => c.id === cpid)) {
+        selectedCompoundPresetId.value = cpid
+      }
+    }
     if (s.fi_gen_mode) genMode.value = s.fi_gen_mode
     if (s.fi_denoising) denoisingStrength.value = Number(s.fi_denoising)
     if (s.fi_extra_negative) extraNegativePrompt.value = s.fi_extra_negative
@@ -659,8 +672,18 @@ onMounted(async () => {
     if (s.fi_count) genCount.value = Math.max(1, Math.min(100, Number(s.fi_count) || 1))
   } catch {}
   if (shared) {
-    if (shared.selectedPresetId) selectedPresetId.value = shared.selectedPresetId
-    if (shared.selectedCompoundPresetId) selectedCompoundPresetId.value = shared.selectedCompoundPresetId
+    if (shared.selectedPresetId) {
+      const pid = Number(shared.selectedPresetId)
+      if (presets.value.find(p => p.id === pid)) {
+        selectedPresetId.value = pid
+      }
+    }
+    if (shared.selectedCompoundPresetId) {
+      const cpid = Number(shared.selectedCompoundPresetId)
+      if (compoundPresets.value.find(c => c.id === cpid)) {
+        selectedCompoundPresetId.value = cpid
+      }
+    }
     if (shared.genMode) genMode.value = shared.genMode
   }
   if (!props.droppedImage && !uploadedImage.value) {

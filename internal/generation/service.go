@@ -863,6 +863,32 @@ OUTPUT FORMAT (copy exactly):
 		return nil, fmt.Errorf("failed to parse LLM response: %w (raw: %.200s)", err, raw)
 	}
 
+	validIDs := make(map[int64]bool, len(allPresets))
+	for _, p := range allPresets {
+		validIDs[p.ID] = true
+	}
+	if !validIDs[result.PresetID] {
+		matched := false
+		if name := strings.TrimSpace(result.PresetName); name != "" {
+			for _, p := range allPresets {
+				if strings.EqualFold(p.Name, name) {
+					result.PresetID = p.ID
+					result.PresetName = p.Name
+					matched = true
+					break
+				}
+			}
+		}
+		if !matched {
+			if fallback := s.recommendPresetFallback(raw, allPresets); fallback != nil && validIDs[fallback.PresetID] {
+				result.PresetID = fallback.PresetID
+				result.PresetName = fallback.PresetName
+				return &result, nil
+			}
+			return nil, fmt.Errorf("recommended preset not found (LLM returned id %d)", result.PresetID)
+		}
+	}
+
 	return &result, nil
 }
 
@@ -891,6 +917,9 @@ func (s *Service) recommendPresetFallback(raw string, allPresets []preset.Preset
 // --- GenerateImage ---
 
 func (s *Service) GenerateImage(params GenerateImageParams) (*GenerateImageResult, error) {
+	if params.PresetID <= 0 {
+		return nil, fmt.Errorf("preset is required")
+	}
 	s.log.UserAction("Generate image (preset_id=%d)", params.PresetID)
 	if err := s.sd.HealthCheck(); err != nil {
 		return nil, fmt.Errorf("SD is not available: %w", err)
@@ -900,7 +929,7 @@ func (s *Service) GenerateImage(params GenerateImageParams) (*GenerateImageResul
 	p, err := s.db.Get(params.PresetID)
 	if err != nil {
 		s.log.Error("Generate image: preset not found: %s", err)
-		return nil, err
+		return nil, fmt.Errorf("preset not found: %w", err)
 	}
 
 	bp := s.buildPrompts(p.Prompt, p.NegativePrompt, p.Loras, params.ExtraPrompt, params.ExtraNegativePrompt)
@@ -1356,7 +1385,7 @@ func (s *Service) UpscaleImage(params UpscaleImageParams) (*GenerateImageResult,
 	if params.PresetID > 0 {
 		p, err := s.db.Get(params.PresetID)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("preset not found: %w", err)
 		}
 		if p.Prompt != "" {
 			prompt = p.Prompt
@@ -1439,11 +1468,14 @@ func (s *Service) UpscaleImage(params UpscaleImageParams) (*GenerateImageResult,
 // --- UpscalePreview ---
 
 func (s *Service) UpscalePreview(params UpscalePreviewParams) (*GenerateImageResult, error) {
+	if params.PresetID <= 0 {
+		return nil, fmt.Errorf("preset is required")
+	}
 	s.StartSDPolling()
 	defer s.StopSDPolling()
 	p, err := s.db.Get(params.PresetID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("preset not found: %w", err)
 	}
 
 	prompt := p.Prompt

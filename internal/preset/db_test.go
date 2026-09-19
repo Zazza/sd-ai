@@ -758,8 +758,9 @@ func TestSession_DeleteItem(t *testing.T) {
 	err = db.DeleteSessionItem(itemID)
 	require.NoError(t, err)
 
-	_, err = db.GetSessionItem(itemID)
-	assert.Error(t, err)
+	item, err := db.GetSessionItem(itemID)
+	assert.NoError(t, err)
+	assert.Nil(t, item)
 }
 
 func TestSession_ClearItems(t *testing.T) {

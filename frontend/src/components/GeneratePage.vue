@@ -144,7 +144,10 @@ async function recommendPreset() {
     if (result) {
       recommendResult.value = result
       if (result.preset_id) {
-        selectedPresetId.value = result.preset_id
+        const pid = Number(result.preset_id)
+        if (presets.value.find(p => p.id === pid)) {
+          selectedPresetId.value = pid
+        }
       }
       if (result.extra_prompt) {
         description.value = result.extra_prompt
@@ -598,8 +601,18 @@ onMounted(async () => {
     if (s.gen_count) genCount.value = Math.max(1, Math.min(100, Number(s.gen_count) || 1))
   } catch {}
   if (shared) {
-    if (shared.selectedPresetId) selectedPresetId.value = shared.selectedPresetId
-    if (shared.selectedCompoundPresetId) selectedCompoundPresetId.value = shared.selectedCompoundPresetId
+    if (shared.selectedPresetId) {
+      const pid = Number(shared.selectedPresetId)
+      if (presets.value.find(p => p.id === pid)) {
+        selectedPresetId.value = pid
+      }
+    }
+    if (shared.selectedCompoundPresetId) {
+      const cpid = Number(shared.selectedCompoundPresetId)
+      if (compoundPresets.value.find(c => c.id === cpid)) {
+        selectedCompoundPresetId.value = cpid
+      }
+    }
     if (shared.genMode) genMode.value = shared.genMode
     if (shared.description) description.value = shared.description
     if (shared.negative) negative.value = shared.negative

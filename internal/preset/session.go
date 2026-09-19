@@ -106,6 +106,9 @@ func (d *DB) GetSessionItem(id int64) (*SessionItem, error) {
 			&item.Prompt, &item.NegativePrompt, &item.Sampler, &item.Steps, &item.CfgScale,
 			&item.Seed, &item.Denoising, &item.Width, &item.Height, &item.IsPreview,
 			&item.PresetID, &item.IsActive, &item.CreatedAt)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
 	if err != nil {
 		return nil, err
 	}

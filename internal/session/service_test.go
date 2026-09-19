@@ -292,7 +292,7 @@ func TestDeleteSessionItem_NonExistent(t *testing.T) {
 	svc, _, _ := testService(t)
 
 	err := svc.DeleteSessionItem(99999)
-	assert.Error(t, err)
+	assert.NoError(t, err)
 }
 
 func TestClearSession_Success(t *testing.T) {
