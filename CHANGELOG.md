@@ -4,6 +4,9 @@ All notable changes to SD Studio are documented here.
 
 ## [Unreleased]
 
+### Changed
+- **php-chat preset pack renamed to wallpapers**: the bundled pack (22 presets) recreates a set of desktop wallpapers — the old "php-chat" type name referenced only the chat where the original run happened and was confusing. File `data/presets/php-chat.json` → `data/presets/wallpapers.json`, preset type `php-chat` → `wallpapers`, origin mention dropped from tags. Affects fresh DBs and re-imports; existing databases keep the old category name (rename it in the app's category editor if desired).
+
 ### Fixed
 - **Same default face on every generation (checkpoint face attractor)**: when the user scene mentioned a person without appearance details, the LLM converter emitted no face tags (Rule 4 forbade inventing), so the SD checkpoint rendered its averaged "default face" — on epiCRealism XL every generation converged to the same Bella-Ramsey-like face. The default instruction now has an `APPEARANCE VARIATION` section: if the scene has a person but no appearance, the LLM must fill seven abstract slots (`(age range:1.2)`, `(ethnicity or heritage:1.2)`, `(face shape:1.2)`, `(hair color and texture:1.2)`, `(body type:1.1)`, two distinctive-feature slots) with concrete different values every call; Rules 4 and 6 carve this out explicitly. Slots are abstract placeholders only (no concrete tokens — example-leak guard invariant), so verbatim slot copies are subtracted by the existing runtime filter while invented values survive. `GenerateSDPrompt` temperature raised 0.4 → 0.7 for the roulette to actually vary. From Image is protected: img2img/inpaint converters get an explicit "the base image defines the person — do NOT invent appearance" line, so reference photos are never overwritten. If you had customized `sd_prompt_instruction` in Settings, reset it to the new default to pick this up.
 
