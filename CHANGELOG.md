@@ -2,7 +2,7 @@
 
 All notable changes to SD Studio are documented here.
 
-## [Unreleased]
+## [0.7.11] — 2026-09-20
 
 ### Changed
 - **php-chat preset pack renamed to wallpapers**: the bundled pack (22 presets) recreates a set of desktop wallpapers — the old "php-chat" type name referenced only the chat where the original run happened and was confusing. File `data/presets/php-chat.json` → `data/presets/wallpapers.json`, preset type `php-chat` → `wallpapers`, origin mention dropped from tags. Affects fresh DBs and re-imports; existing databases keep the old category name (rename it in the app's category editor if desired).
