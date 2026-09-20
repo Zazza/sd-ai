@@ -4,6 +4,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestLoad_DefaultValues(t *testing.T) {
@@ -150,5 +152,42 @@ func TestLoad_EmptyEnvFallsBack(t *testing.T) {
 	cfg := Load()
 	if cfg.LLMUrl != "http://localhost:1234" {
 		t.Errorf("LLMUrl with empty env = %q, want default %q", cfg.LLMUrl, "http://localhost:1234")
+	}
+}
+
+func TestDefaultSDPromptInstructionAppearance(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		token     string
+		contained bool
+	}{
+		{name: "appearance variation section present", token: "APPEARANCE VARIATION", contained: true},
+		{name: "slot age range", token: "(age range:1.2)", contained: true},
+		{name: "slot ethnicity or heritage", token: "(ethnicity or heritage:1.2)", contained: true},
+		{name: "slot face shape", token: "(face shape:1.2)", contained: true},
+		{name: "slot hair color and texture", token: "(hair color and texture:1.2)", contained: true},
+		{name: "slot body type", token: "(body type:1.1)", contained: true},
+		{name: "slot distinctive facial feature", token: "(distinctive facial feature:1.2)", contained: true},
+		{name: "slot second distinctive feature", token: "(second distinctive feature:1.1)", contained: true},
+		{name: "rule 4 appearance carve-out", token: "EXCEPT the mandatory appearance slots", contained: true},
+		{name: "no example leak freckles", token: "freckles", contained: false},
+		{name: "no example leak auburn", token: "auburn", contained: false},
+		{name: "no example leak curly", token: "curly", contained: false},
+		{name: "no example leak green eyes", token: "green eyes", contained: false},
+		{name: "no example leak blonde", token: "blonde", contained: false},
+		{name: "no example leak bella", token: "bella", contained: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if tt.contained {
+				require.Contains(t, DefaultSDPromptInstruction, tt.token)
+				return
+			}
+			require.NotContains(t, DefaultSDPromptInstruction, tt.token)
+		})
 	}
 }

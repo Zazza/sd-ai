@@ -222,7 +222,7 @@ func (c *Client) GenerateSDPrompt(systemPrompt, description, presetType, model s
 		userMessage = fmt.Sprintf("[Type: %s] %s", presetType, description)
 	}
 
-	result, err := c.Chat(model, systemPrompt, userMessage, 0.4, maxTokens)
+	result, err := c.Chat(model, systemPrompt, userMessage, 0.7, maxTokens)
 	if err != nil {
 		return "", err
 	}

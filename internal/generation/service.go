@@ -681,6 +681,22 @@ func (s *Service) doHiresFallback(req sd.Txt2ImgRequest, originalErr error, hire
 
 // --- GenerateSDPrompt ---
 
+func (s *Service) llmGenerateAndParse(systemPrompt, userMessage, presetType, model string, maxTokens int) (GenerateSDPromptResult, string, error) {
+	var raw string
+	for attempt := 0; attempt < 2; attempt++ {
+		var err error
+		raw, err = s.llm.GenerateSDPrompt(systemPrompt, userMessage, presetType, model, maxTokens)
+		if err != nil {
+			return GenerateSDPromptResult{}, "", err
+		}
+		var res GenerateSDPromptResult
+		if err := json.Unmarshal([]byte(promptutil.ExtractJSON(raw)), &res); err == nil {
+			return res, raw, nil
+		}
+	}
+	return GenerateSDPromptResult{}, raw, nil
+}
+
 func (s *Service) GenerateSDPrompt(params GenerateSDPromptParams) (*GenerateSDPromptResult, error) {
 	if params.PresetID <= 0 {
 		return nil, fmt.Errorf("preset is required")
@@ -736,16 +752,14 @@ RESPONSE LENGTH: you have up to %d tokens. Include ALL visual elements from the 
 	userMessage := strings.Join(userParts, "\n\n")
 
 	s.emitter.Emit("llm:status", map[string]string{"status": "thinking"})
-	raw, err := s.llm.GenerateSDPrompt(systemPrompt, userMessage, p.PresetType, generateModel, maxTokens)
+	result, raw, err := s.llmGenerateAndParse(systemPrompt, userMessage, p.PresetType, generateModel, maxTokens)
 	if err != nil {
 		s.emitter.Emit("llm:status", map[string]string{"status": "done"})
 		return nil, err
 	}
 	s.emitter.Emit("llm:status", map[string]string{"status": "done"})
 
-	var result GenerateSDPromptResult
-	jsonRaw := promptutil.ExtractJSON(raw)
-	if err := json.Unmarshal([]byte(jsonRaw), &result); err != nil {
+	if result.Prompt == "" && result.NegativePrompt == "" {
 		result = GenerateSDPromptResult{
 			Prompt:         promptutil.TruncateRepetitive(raw, 1000),
 			NegativePrompt: p.NegativePrompt,

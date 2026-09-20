@@ -8,6 +8,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"go-sd/internal/promptutil"
 )
 
@@ -219,6 +222,56 @@ func TestChat_Success(t *testing.T) {
 	}
 	if result != "generated prompt output" {
 		t.Errorf("Chat() = %q, want %q", result, "generated prompt output")
+	}
+}
+
+func TestGenerateSDPrompt_Temperature(t *testing.T) {
+	tests := []struct {
+		name       string
+		presetType string
+	}{
+		{name: "with preset type", presetType: "portrait"},
+		{name: "without preset type", presetType: ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			var reqBody ChatRequest
+			var reqPath string
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				reqPath = r.URL.Path
+				body, err := io.ReadAll(r.Body)
+				if err != nil {
+					t.Errorf("read body: %v", err)
+					return
+				}
+				if err := json.Unmarshal(body, &reqBody); err != nil {
+					t.Errorf("unmarshal: %v", err)
+				}
+
+				resp := ChatResponse{}
+				resp.Choices = append(resp.Choices, struct {
+					Message struct {
+						Content string `json:"content"`
+					} `json:"message"`
+				}{})
+				resp.Choices[0].Message.Content = "generated prompt output"
+
+				w.Header().Set("Content-Type", "application/json")
+				json.NewEncoder(w).Encode(resp)
+			}))
+			defer server.Close()
+
+			client := New(server.URL, BackendLMStudio)
+			result, err := client.GenerateSDPrompt("system prompt", "a warrior in a forest", tt.presetType, "test-model", 100)
+			require.NoError(t, err)
+			require.Equal(t, "generated prompt output", result)
+			require.Equal(t, "/v1/chat/completions", reqPath)
+			require.Equal(t, "test-model", reqBody.Model)
+			assert.InDelta(t, 0.7, reqBody.Temperature, 0.0001)
+		})
 	}
 }
 

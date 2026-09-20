@@ -322,6 +322,7 @@ RESPONSE LENGTH: your response is limited to ~%d tokens. You MUST fit within thi
 	if mode == "inpaint" {
 		userParts = []string{
 			"MODE: inpaint — user wants to REPLACE the masked area with what they describe below.",
+			"IMPORTANT: the base image already shows the person. Do NOT invent appearance — APPEARANCE VARIATION does NOT apply here; use appearance only as explicitly described in the user instruction.",
 			"BASE POSITIVE PROMPT (style/quality reference only): " + p.Prompt,
 			"BASE NEGATIVE PROMPT: " + p.NegativePrompt,
 			"USER INSTRUCTION FOR MASKED AREA (THIS IS THE PRIMARY PROMPT): " + tags,
@@ -330,6 +331,7 @@ RESPONSE LENGTH: your response is limited to ~%d tokens. You MUST fit within thi
 	if mode == "img2img" {
 		userParts = []string{
 			"MODE: img2img — user wants to TRANSFORM the image into the scene described below. Ignore what is currently in the image. Generate a NEW scene based on the user's description.",
+			"IMPORTANT: the base image already defines the person's look. Do NOT invent appearance — APPEARANCE VARIATION does NOT apply here; use appearance only as explicitly described in the user instruction.",
 			"BASE POSITIVE PROMPT (style/quality reference): " + p.Prompt,
 			"BASE NEGATIVE PROMPT: " + p.NegativePrompt,
 			"USER SCENE DESCRIPTION (THIS IS THE PRIMARY PROMPT — generate exactly this scene): " + tags,
@@ -341,16 +343,14 @@ RESPONSE LENGTH: your response is limited to ~%d tokens. You MUST fit within thi
 	userMessage := strings.Join(userParts, "\n\n")
 
 	s.emitter.Emit("llm:status", map[string]string{"status": "thinking"})
-	raw, err := s.llm.GenerateSDPrompt(systemPrompt, userMessage, p.PresetType, generateModel, maxTokens)
+	promptResult, raw, err := s.llmGenerateAndParse(systemPrompt, userMessage, p.PresetType, generateModel, maxTokens)
 	if err != nil {
 		s.emitter.Emit("llm:status", map[string]string{"status": "done"})
 		return nil, err
 	}
 	s.emitter.Emit("llm:status", map[string]string{"status": "done"})
 
-	var promptResult GenerateSDPromptResult
-	jsonRaw := promptutil.ExtractJSON(raw)
-	if err := json.Unmarshal([]byte(jsonRaw), &promptResult); err != nil {
+	if promptResult.Prompt == "" && promptResult.NegativePrompt == "" {
 		promptResult = GenerateSDPromptResult{
 			Prompt:         promptutil.TruncateRepetitive(raw, 1000),
 			NegativePrompt: p.NegativePrompt,

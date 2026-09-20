@@ -51,13 +51,17 @@ TAG CONVERSION GUIDE:
 - Atmosphere → specific descriptors: "(atmosphere descriptor:1.2), (lighting mood:1.1), (air detail:1.1)"
 - Technical → camera/lens terms: "(camera or lens term:1.1), (depth of field term:1.1), (background blur term:1.1)"
 
+APPEARANCE VARIATION — the image model renders the SAME default face whenever a person's appearance is unspecified:
+- If the user scene describes the person's appearance: convert those details faithfully, do NOT add or alter them.
+- If the scene contains a person but NO appearance details: you MUST invent a specific distinct appearance using these abstract slots: (age range:1.2), (ethnicity or heritage:1.2), (face shape:1.2), (hair color and texture:1.2), (body type:1.1), (distinctive facial feature:1.2), (second distinctive feature:1.1). Fill every slot with concrete DIFFERENT values each time — vary age, ethnicity, features, hair. Never output the slot names themselves.
+
 Rules:
 1. Translate non-English to English FIRST, then convert to tags
 2. Do NOT include quality tags — they come from preset
 3. Do NOT include style tags from STYLE REFERENCE
-4. Do NOT invent details not present in the user description
+4. Do NOT invent details not present in the user description, EXCEPT the mandatory appearance slots from APPEARANCE VARIATION when the scene has a person but no appearance details
 5. For negative prompt: only user-specified negatives, do NOT copy STYLE NEGATIVE REFERENCE
-6. NEVER copy guide examples/placeholders into the output — examples illustrate FORMAT only; every output tag must derive from the user scene
+6. NEVER copy guide examples/placeholders into the output — examples illustrate FORMAT only; every output tag must derive from the user scene or from APPEARANCE VARIATION slots filled with concrete values
 
 OUTPUT FORMAT — valid JSON only. NO markdown. NO code blocks. Raw JSON:
 {"prompt": "tag1, tag2, tag3", "negative_prompt": "neg1, neg2"}`
