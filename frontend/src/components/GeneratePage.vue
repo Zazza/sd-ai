@@ -47,6 +47,9 @@ const { llmStatus, sdProgress, preview, interrupt: interruptGeneration, reset: r
 const generationStage = ref('')
 const error = ref('')
 let promptDirty = true
+let currentDescId = null
+let lastUsedDescText = ''
+let lastUsedDescNegative = ''
 
 const { kidsModeActive, loadKidsMode } = useKidsMode()
 
@@ -94,6 +97,14 @@ watch([description, negative, selectedPresetId, selectedCompoundPresetId], () =>
   promptDirty = true
 })
 
+watch(description, (val) => {
+  if (currentDescId !== null && val !== lastUsedDescText) {
+    currentDescId = null
+    lastUsedDescText = ''
+    lastUsedDescNegative = ''
+  }
+})
+
 watch(selectedTypeId, () => {
   const filtered = filteredPresets.value
   if (selectedPresetId.value && !filtered.find(p => p.id === selectedPresetId.value)) {
@@ -119,6 +130,7 @@ function saveGenState() {
     gen_type_id: String(selectedTypeId.value || ''),
     gen_description: description.value || '',
     gen_negative: negative.value || '',
+    gen_desc_id: String(currentDescId || ''),
     gen_extra_prompt: extraPrompt.value || '',
     gen_extra_negative: extraNegativePrompt.value || '',
     gen_mode: genMode.value,
@@ -362,12 +374,17 @@ async function loadSavedDescs() {
 async function saveDescription() {
   if (!description.value.trim()) return
   try {
-    await api.createDescriptionFull({
+    const created = await api.createDescriptionFull({
       text: description.value.trim(),
       name: '',
       negative_prompt: negative.value || '',
       type: '',
     })
+    if (created && created.id) {
+      currentDescId = created.id
+      lastUsedDescText = description.value.trim()
+      lastUsedDescNegative = negative.value || ''
+    }
     await loadSavedDescs()
   } catch (e) {
     error.value = t('generate.error_save_desc', { error: String(e) })
@@ -377,6 +394,11 @@ async function saveDescription() {
 async function deleteDescription(id) {
   try {
     await api.deleteDescription(id)
+    if (currentDescId === id) {
+      currentDescId = null
+      lastUsedDescText = ''
+      lastUsedDescNegative = ''
+    }
     await loadSavedDescs()
   } catch (e) {
     error.value = t('generate.error_delete_desc', { error: String(e) })
@@ -384,6 +406,9 @@ async function deleteDescription(id) {
 }
 
 function useDescription(desc) {
+  currentDescId = desc.id
+  lastUsedDescText = desc.text
+  lastUsedDescNegative = desc.negative_prompt || ''
   description.value = desc.text
   if (desc.negative_prompt) negative.value = desc.negative_prompt
   showSavedDescs.value = false
@@ -402,6 +427,13 @@ async function handleUpdateDesc(data) {
   try {
     await api.updateDescription(data)
     await loadSavedDescs()
+    if (currentDescId === data.id) {
+      const negLoaded = negative.value === lastUsedDescNegative
+      lastUsedDescText = data.text
+      lastUsedDescNegative = data.negative_prompt || ''
+      description.value = data.text
+      if (negLoaded) negative.value = data.negative_prompt || ''
+    }
   } catch (e) {
     error.value = t('generate.error_update', { error: String(e) })
   }
@@ -534,7 +566,7 @@ onMounted(async () => {
   const isReset = props.resetting
   await loadPresets()
   loadKidsMode()
-  loadSavedDescs()
+  await loadSavedDescs()
   let resolutionLoaded = false
   try {
     const s = await api.getSettings()
@@ -554,6 +586,13 @@ onMounted(async () => {
       }
     }
     if (s.gen_description) description.value = s.gen_description
+    const rid = Number(s.gen_desc_id) || null
+    const rdesc = rid && savedDescs.value.find(d => d.id === rid)
+    if (rdesc && rdesc.text === description.value) {
+      currentDescId = rdesc.id
+      lastUsedDescText = rdesc.text
+      lastUsedDescNegative = rdesc.negative_prompt || ''
+    }
     if (s.gen_negative) negative.value = s.gen_negative
     if (s.gen_mode) genMode.value = s.gen_mode
     if (s.gen_compound_preset_id) {

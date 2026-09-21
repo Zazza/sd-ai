@@ -2,6 +2,15 @@
 
 All notable changes to SD Studio are documented here.
 
+## [Unreleased]
+
+### Fixed
+- **Editing a Saved idea no longer leaves the LLM prompt stale**: previously the update handler refreshed only the saved list — the live description field kept the old text, the dirty-flag stayed false, and the next generation silently reused the LLM prompt built from the previous wording. The page now tracks the currently loaded idea (persisted as `gen_desc_id` alongside the other Generate-page settings and restored on remount, including tab switches): editing that idea in the modal syncs the new text (and the negative when it was loaded from the idea and not hand-edited) into the live fields, and the watcher chain re-marks the prompt dirty so it regenerates. Hand edits detach the binding; deleting the bound idea clears it; saving a new description from the field binds it too. (The suspected cold-LLM/unload path was ruled out by code: a failed prompt generation aborts with an error instead of generating a wrong image.)
+- **Re-import duplicating presets**: importing the same preset/pipeline file again unconditionally created new rows — 3 imports of one chain produced 9 exact copies in the production DB. Both import paths (`ImportPresets` via `ImportItems`, and pipeline steps in `ImportCompoundItems`) now look up an exact match first via the new `preset.DB.FindExactPreset` (name, preset_type, prompt, negative_prompt, sampler, schedule_type, steps, cfg_scale, model_name, loras — all `=` in SQL): a match is reused (`[import] reusing existing preset …` in the log; pipeline steps point at the existing preset ID) instead of inserting a copy; non-matching presets are still created. Plain import returns the existing presets in the result so the UI shows them as imported.
+
+### Added
+- **Memory Guard — conditional LLM unload before heavy generations**: loading a heavy checkpoint (flux & co) while the ollama LLM is warm (~10 GB resident) thrashes the 32 GB server. Before every model switch (choke point: `prepareSDContext` covering all generation flows, plus Test-generate model mode) a new `MemoryGuard` checks free VRAM/RAM via Forge `GET /sdapi/v1/memory` and resident ollama models via `GET /api/ps`; when there is a deficit that unloading would actually fix, it unloads the LLM (`keep_alive:0`) and waits up to 15 s for it to leave memory. Fail-open by design: any error or non-ollama backend → silent no-op, generation is never blocked, and light models (SDXL) make zero HTTP requests. New settings: `heavy_models` (CSV name substrings, default `flux,z-image,qwen-image,chroma,hunyuan`) and `llm_auto_unload` (default `true`).
+
 ## [0.7.11] — 2026-09-20
 
 ### Changed
