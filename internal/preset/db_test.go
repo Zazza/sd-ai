@@ -1314,3 +1314,137 @@ func TestHiresProfile_DeleteNotFound(t *testing.T) {
 	assert.Error(t, err)
 	assert.Equal(t, "hires profile not found", err.Error())
 }
+
+func TestFindExactPreset(t *testing.T) {
+	t.Parallel()
+
+	base := func() Preset {
+		return Preset{
+			Name:           "exact candidate",
+			PresetType:     "portrait",
+			Prompt:         "a lighthouse in a storm",
+			NegativePrompt: "blurry, lowres",
+			Sampler:        "Euler a",
+			ScheduleType:   "Karras",
+			Steps:          25,
+			CfgScale:       6.5,
+			ModelName:      "model.safetensors",
+			Loras:          `[{"name":"detail","weight":0.5}]`,
+		}
+	}
+
+	tests := []struct {
+		name     string
+		seedRows int
+		modify   func(p *Preset)
+		found    bool
+	}{
+		{
+			name:     "exact match all ten fields",
+			seedRows: 1,
+			modify:   func(p *Preset) {},
+			found:    true,
+		},
+		{
+			name:     "different name only",
+			seedRows: 1,
+			modify:   func(p *Preset) { p.Name = "renamed" },
+			found:    false,
+		},
+		{
+			name:     "different cfg_scale only",
+			seedRows: 1,
+			modify:   func(p *Preset) { p.CfgScale = 9.0 },
+			found:    false,
+		},
+		{
+			name:     "different loras only",
+			seedRows: 1,
+			modify:   func(p *Preset) { p.Loras = `[{"name":"other","weight":1.0}]` },
+			found:    false,
+		},
+		{
+			name:     "empty table",
+			seedRows: 0,
+			modify:   func(p *Preset) {},
+			found:    false,
+		},
+		{
+			name:     "two identical rows returns lowest id",
+			seedRows: 2,
+			modify:   func(p *Preset) {},
+			found:    true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			db := testDB(t)
+
+			firstID := int64(0)
+			for i := 0; i < tt.seedRows; i++ {
+				p := base()
+				require.NoError(t, db.Create(&p))
+				if i == 0 {
+					firstID = p.ID
+				}
+			}
+
+			query := base()
+			tt.modify(&query)
+
+			got, err := db.FindExactPreset(&query)
+			require.NoError(t, err)
+
+			if tt.found {
+				require.NotNil(t, got)
+				assert.Equal(t, firstID, got.ID)
+				assert.Equal(t, base().Name, got.Name)
+			} else {
+				assert.Nil(t, got)
+			}
+		})
+	}
+}
+
+func TestFindExactPreset_ScheduleTypeAndNullableDiffs(t *testing.T) {
+	t.Parallel()
+	db := testDB(t)
+
+	base := Preset{
+		Name:           "nullable-key",
+		PresetType:     "portrait",
+		Prompt:         "a lighthouse in a storm",
+		NegativePrompt: "blurry, lowres",
+		Sampler:        "Euler a",
+		ScheduleType:   "Karras",
+		Steps:          25,
+		CfgScale:       6.5,
+		ModelName:      "model.safetensors",
+		Loras:          `[{"name":"detail","weight":0.5}]`,
+	}
+	require.NoError(t, db.Create(&base))
+	created, err := db.FindExactPreset(&base)
+	require.NoError(t, err)
+	require.NotNil(t, created)
+
+	sched := base
+	sched.ScheduleType = "Simple"
+	got, err := db.FindExactPreset(&sched)
+	require.NoError(t, err)
+	assert.Nil(t, got, "schedule_type difference must break the match")
+
+	clip := base
+	three := 3
+	clip.ClipSkip = &three
+	got, err = db.FindExactPreset(&clip)
+	require.NoError(t, err)
+	assert.Nil(t, got, "clip_skip difference must break the match")
+
+	vae := base
+	vae.VAE = "sdxl_vae.safetensors"
+	got, err = db.FindExactPreset(&vae)
+	require.NoError(t, err)
+	assert.Nil(t, got, "vae difference must break the match")
+}

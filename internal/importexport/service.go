@@ -308,7 +308,7 @@ func (s *Service) ImportItems(items []PresetData) ([]preset.Preset, error) {
 		}
 	}
 
-	batch := make([]preset.Preset, len(items))
+	result := make([]preset.Preset, len(items))
 	for i, item := range items {
 		sampler, scheduleType := promptutil.SplitCompositeSampler(item.Sampler, item.ScheduleType)
 		p := preset.Preset{
@@ -341,10 +341,27 @@ func (s *Service) ImportItems(items []PresetData) ([]preset.Preset, error) {
 			}
 		}
 
-		batch[i] = p
+		existing, err := s.db.FindExactPreset(&p)
+		if err != nil {
+			return nil, fmt.Errorf("find existing preset %q: %w", p.Name, err)
+		}
+		if existing != nil {
+			s.log.Info("[import] reusing existing preset %q (id=%d)", existing.Name, existing.ID)
+			result[i] = *existing
+			continue
+		}
+
+		created, err := s.db.CreateBatch([]preset.Preset{p})
+		if err != nil {
+			return nil, fmt.Errorf("create preset %q: %w", p.Name, err)
+		}
+		if len(created) == 0 {
+			return nil, fmt.Errorf("failed to create preset %q", p.Name)
+		}
+		result[i] = created[0]
 	}
 
-	return s.db.CreateBatch(batch)
+	return result, nil
 }
 
 func (s *Service) ProcessExportImage(params ExportImageParams) (*ProcessedImage, error) {
@@ -678,6 +695,20 @@ func (s *Service) ImportCompoundItems(items []CompoundExportData) ([]preset.Comp
 				Loras:                  pd.Loras,
 				TypeID:                 typeID,
 			}
+			existing, err := s.db.FindExactPreset(&p)
+			if err != nil {
+				return nil, fmt.Errorf("find existing preset %q: %w", p.Name, err)
+			}
+			if existing != nil {
+				s.log.Info("[import] reusing existing preset %q (id=%d)", existing.Name, existing.ID)
+				steps = append(steps, preset.CompoundPresetStep{
+					StepOrder:         j + 1,
+					PresetID:          existing.ID,
+					DenoisingStrength: se.DenoisingStrength,
+				})
+				continue
+			}
+
 			created, err := s.db.CreateBatch([]preset.Preset{p})
 			if err != nil {
 				return nil, fmt.Errorf("create preset %q: %w", p.Name, err)

@@ -324,6 +324,27 @@ func (d *DB) Get(id int64) (*Preset, error) {
 	return &p, nil
 }
 
+func (d *DB) FindExactPreset(p *Preset) (*Preset, error) {
+	var found Preset
+	err := scanPreset(d.db.QueryRow(`SELECT `+presetColumns+` FROM presets
+		WHERE name = ? AND preset_type = ? AND prompt = ? AND negative_prompt = ?
+		AND sampler = ? AND schedule_type = ? AND steps = ? AND cfg_scale = ?
+		AND model_name = ? AND loras = ?
+		AND seed IS ? AND denoising_strength IS ? AND clip_skip IS ? AND vae IS ?
+		ORDER BY id LIMIT 1`,
+		p.Name, p.PresetType, p.Prompt, p.NegativePrompt,
+		p.Sampler, p.ScheduleType, p.Steps, p.CfgScale,
+		p.ModelName, p.Loras,
+		p.Seed, p.DenoisingStrength, p.ClipSkip, p.VAE), &found)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &found, nil
+}
+
 func (d *DB) GetBundledInstallStatus(sdModels []string, loraModels []string) ([]PresetInstallStatus, error) {
 	sdSet := make(map[string]bool, len(sdModels))
 	for _, m := range sdModels {

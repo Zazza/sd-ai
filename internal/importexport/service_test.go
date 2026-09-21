@@ -46,6 +46,7 @@ func (m *mockSDService) SetURL(baseURL string)                        {}
 func (m *mockSDService) SetModel(modelName string) error              { return nil }
 func (m *mockSDService) SetVAE(vaeName string) error                  { return nil }
 func (m *mockSDService) UpscaleImage(base64Img string, upscaler string, scale float64) (string, error) { return "", nil }
+func (m *mockSDService) MemoryInfo() (*sd.MemoryStats, error)         { return nil, nil }
 
 func openTestDB(t *testing.T) *preset.DB {
 	t.Helper()
@@ -932,5 +933,233 @@ func TestRoundTrip_ExportParseImport(t *testing.T) {
 	assert.Equal(t, 25, imported[0].Steps)
 	assert.Equal(t, 8.0, imported[0].CfgScale)
 	assert.True(t, imported[0].ID > 0)
-	assert.NotEqual(t, p.ID, imported[0].ID)
+	assert.Equal(t, p.ID, imported[0].ID)
+}
+
+func countPresets(t *testing.T, db *preset.DB) int {
+	t.Helper()
+	items, err := db.List()
+	require.NoError(t, err)
+	return len(items)
+}
+
+func dedupPresetData(negativePrompt string) PresetData {
+	return PresetData{
+		Name:           "dedup-step",
+		PresetType:     "portrait",
+		Prompt:         "a lighthouse in a storm",
+		NegativePrompt: negativePrompt,
+		Sampler:        "Euler a",
+		ScheduleType:   "Karras",
+		Steps:          25,
+		CfgScale:       7.0,
+		ModelName:      "model.safetensors",
+		Loras:          `[{"name":"detail","weight":0.5}]`,
+	}
+}
+
+func createExactPreset(t *testing.T, db *preset.DB, pd PresetData) int64 {
+	t.Helper()
+	p := &preset.Preset{
+		Name:           pd.Name,
+		PresetType:     pd.PresetType,
+		Prompt:         pd.Prompt,
+		NegativePrompt: pd.NegativePrompt,
+		Sampler:        pd.Sampler,
+		ScheduleType:   pd.ScheduleType,
+		Steps:          pd.Steps,
+		CfgScale:       pd.CfgScale,
+		ModelName:      pd.ModelName,
+		Loras:          pd.Loras,
+	}
+	require.NoError(t, db.Create(p))
+	return p.ID
+}
+
+func TestImportCompoundItems_Dedup(t *testing.T) {
+	t.Parallel()
+	db := openTestDB(t)
+	svc := New(db, &mockSDService{}, logger.New(nil))
+
+	pd := dedupPresetData("blurry, lowres")
+	existingID := createExactPreset(t, db, pd)
+	before := countPresets(t, db)
+
+	pipelines := []CompoundExportData{{
+		Name:        "dedup-pipeline",
+		Description: "reuses existing preset",
+		Steps: []CompoundStepExportData{{
+			StepOrder:         1,
+			DenoisingStrength: 0.6,
+			Preset:            pd,
+		}},
+	}}
+
+	result, err := svc.ImportCompoundItems(pipelines)
+	require.NoError(t, err)
+	require.Len(t, result, 1)
+
+	assert.Equal(t, before, countPresets(t, db))
+
+	got, err := db.GetCompoundPreset(result[0].ID)
+	require.NoError(t, err)
+	require.Len(t, got.Steps, 1)
+	assert.Equal(t, existingID, got.Steps[0].PresetID)
+}
+
+func TestImportCompoundItems_NoDedupWhenModified(t *testing.T) {
+	t.Parallel()
+	db := openTestDB(t)
+	svc := New(db, &mockSDService{}, logger.New(nil))
+
+	pd := dedupPresetData("blurry, lowres")
+	existingID := createExactPreset(t, db, pd)
+	before := countPresets(t, db)
+
+	modified := pd
+	modified.NegativePrompt = "watermark, text"
+
+	pipelines := []CompoundExportData{{
+		Name: "modified-pipeline",
+		Steps: []CompoundStepExportData{{
+			StepOrder:         1,
+			DenoisingStrength: 0.6,
+			Preset:            modified,
+		}},
+	}}
+
+	result, err := svc.ImportCompoundItems(pipelines)
+	require.NoError(t, err)
+	require.Len(t, result, 1)
+
+	assert.Equal(t, before+1, countPresets(t, db))
+
+	got, err := db.GetCompoundPreset(result[0].ID)
+	require.NoError(t, err)
+	require.Len(t, got.Steps, 1)
+	assert.NotEqual(t, existingID, got.Steps[0].PresetID)
+	assert.Greater(t, got.Steps[0].PresetID, int64(0))
+
+	created, err := db.Get(got.Steps[0].PresetID)
+	require.NoError(t, err)
+	assert.Equal(t, "watermark, text", created.NegativePrompt)
+}
+
+func TestImportCompoundItems_TwoIdenticalStepsShare(t *testing.T) {
+	t.Parallel()
+	db := openTestDB(t)
+	svc := New(db, &mockSDService{}, logger.New(nil))
+
+	pd := dedupPresetData("blurry, lowres")
+	before := countPresets(t, db)
+
+	pipelines := []CompoundExportData{{
+		Name: "shared-steps-pipeline",
+		Steps: []CompoundStepExportData{
+			{StepOrder: 1, DenoisingStrength: 0.6, Preset: pd},
+			{StepOrder: 2, DenoisingStrength: 0.35, Preset: pd},
+		},
+	}}
+
+	result, err := svc.ImportCompoundItems(pipelines)
+	require.NoError(t, err)
+	require.Len(t, result, 1)
+
+	assert.Equal(t, before+1, countPresets(t, db))
+
+	got, err := db.GetCompoundPreset(result[0].ID)
+	require.NoError(t, err)
+	require.Len(t, got.Steps, 2)
+	assert.Equal(t, 1, got.Steps[0].StepOrder)
+	assert.Equal(t, 2, got.Steps[1].StepOrder)
+	assert.Equal(t, 0.6, got.Steps[0].DenoisingStrength)
+	assert.Equal(t, 0.35, got.Steps[1].DenoisingStrength)
+	assert.Greater(t, got.Steps[0].PresetID, int64(0))
+	assert.Equal(t, got.Steps[0].PresetID, got.Steps[1].PresetID)
+}
+
+func TestImportItems_Dedup(t *testing.T) {
+	t.Parallel()
+	db := openTestDB(t)
+	svc := New(db, &mockSDService{}, logger.New(nil))
+
+	pd := dedupPresetData("blurry, lowres")
+	existingID := createExactPreset(t, db, pd)
+	before := countPresets(t, db)
+
+	result, err := svc.ImportItems([]PresetData{pd})
+	require.NoError(t, err)
+	require.Len(t, result, 1)
+
+	assert.Equal(t, before, countPresets(t, db))
+	assert.Equal(t, existingID, result[0].ID)
+	assert.Equal(t, pd.Name, result[0].Name)
+}
+
+func TestImportItems_ImportNewStillWorks(t *testing.T) {
+	t.Parallel()
+	db := openTestDB(t)
+	svc := New(db, &mockSDService{}, logger.New(nil))
+
+	existingID := createExactPreset(t, db, dedupPresetData("blurry, lowres"))
+	before := countPresets(t, db)
+
+	fresh := dedupPresetData("blurry, lowres")
+	fresh.Name = "brand-new-preset"
+
+	result, err := svc.ImportItems([]PresetData{fresh})
+	require.NoError(t, err)
+	require.Len(t, result, 1)
+
+	assert.Equal(t, before+1, countPresets(t, db))
+	assert.NotEqual(t, existingID, result[0].ID)
+	assert.Greater(t, result[0].ID, int64(0))
+	assert.Equal(t, "brand-new-preset", result[0].Name)
+}
+
+func TestImportItems_MixedNewHitNew(t *testing.T) {
+	t.Parallel()
+	db := openTestDB(t)
+	svc := New(db, &mockSDService{}, logger.New(nil))
+
+	mid := dedupPresetData("shared negative")
+	mid.Name = "mixed-mid"
+	createExactPreset(t, db, mid)
+
+	first := dedupPresetData("first negative")
+	first.Name = "mixed-first"
+	third := dedupPresetData("third negative")
+	third.Name = "mixed-third"
+
+	before := countPresets(t, db)
+	result, err := svc.ImportItems([]PresetData{first, mid, third})
+	require.NoError(t, err)
+	require.Len(t, result, 3)
+
+	assert.NotZero(t, result[0].ID)
+	assert.Equal(t, "mixed-mid", result[1].Name)
+	assert.NotZero(t, result[2].ID)
+	assert.NotEqual(t, result[0].ID, result[1].ID)
+	assert.NotEqual(t, result[1].ID, result[2].ID)
+	assert.Equal(t, before+2, countPresets(t, db))
+	assert.Equal(t, "first negative", result[0].NegativePrompt)
+	assert.Equal(t, "third negative", result[2].NegativePrompt)
+}
+
+func TestImportItems_IntraFileDuplicate(t *testing.T) {
+	t.Parallel()
+	db := openTestDB(t)
+	svc := New(db, &mockSDService{}, logger.New(nil))
+
+	a := dedupPresetData("same negative")
+	a.Name = "intra-dup"
+	b := a
+
+	before := countPresets(t, db)
+	result, err := svc.ImportItems([]PresetData{a, b})
+	require.NoError(t, err)
+	require.Len(t, result, 2)
+
+	assert.Equal(t, result[0].ID, result[1].ID)
+	assert.Equal(t, before+1, countPresets(t, db))
 }

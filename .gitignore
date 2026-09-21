@@ -25,3 +25,6 @@ Thumbs.db
 CLAUDE.md
 .mcp.json
 .aider*
+
+# Local preset import packs (user data, not for distribution)
+data/imports/
