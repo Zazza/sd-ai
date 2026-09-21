@@ -141,6 +141,8 @@ func (s *Service) GetSettings() (map[string]string, error) {
 		"llm_analyze_num_predict":   "256",
 		"llm_analyze_top_p":         "0.9",
 		"llm_analyze_num_thread":    "0",
+		"heavy_models":              config.DefaultHeavyModels,
+		"llm_auto_unload":           "true",
 		"kids_mode":                 "false",
 		"kids_cat_violence":         "true",
 		"kids_cat_horror":           "true",

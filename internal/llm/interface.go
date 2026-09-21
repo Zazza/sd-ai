@@ -1,5 +1,7 @@
 package llm
 
+import "context"
+
 type Service interface {
 	Chat(model, systemPrompt, userMessage string, temperature float64, maxTokens int) (string, error)
 	ChatVision(model, systemPrompt, userText, imageBase64 string, temperature float64, maxTokens int) (string, error)
@@ -12,4 +14,7 @@ type Service interface {
 	SetURL(baseURL string)
 	SetBackend(backend string)
 	SetBackendConfig(cfg BackendConfig)
+	Backend() string
+	ListLoaded() ([]LoadedModel, error)
+	UnloadAll(ctx context.Context) error
 }

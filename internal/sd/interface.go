@@ -17,4 +17,5 @@ type Service interface {
 	SetModel(modelName string) error
 	SetVAE(vaeName string) error
 	UpscaleImage(base64Img string, upscaler string, scale float64) (string, error)
+	MemoryInfo() (*MemoryStats, error)
 }

@@ -201,6 +201,7 @@ type Service struct {
 	sessions  SessionAdder
 	settings  SettingsApplier
 	log       *logger.Logger
+	guard     *MemoryGuard
 
 	ctx             context.Context
 	sdPollingMu     sync.Mutex
@@ -234,6 +235,7 @@ func New(
 		sessions: sessions,
 		settings: settings,
 		log:      log,
+		guard:    NewMemoryGuard(llmSvc, sdSvc, db, log),
 	}
 }
 
@@ -616,6 +618,7 @@ func (s *Service) resolveHires(hiresProfileID *int64) (enabled bool, upscale *fl
 }
 
 func (s *Service) prepareSDContext(p *preset.Preset, logPrefix string) {
+	s.guard.EnsureHeadroom(p.ModelName, logPrefix)
 	if p.ModelName != "" {
 		if err := s.sd.SetModel(p.ModelName); err != nil {
 			s.log.Warn("%s: set model %q: %s", logPrefix, p.ModelName, err)
@@ -994,6 +997,7 @@ func (s *Service) TestGenerate(params TestGenerateParams) ([]TestGenerateResultI
 			s.prepareSDContext(p, fmt.Sprintf("test preset #%d", idx+1))
 		} else {
 			modelTitle := params.SelectedModels[idx]
+			s.guard.EnsureHeadroom(modelTitle, fmt.Sprintf("test model #%d", idx+1))
 			if err := s.sd.SetModel(modelTitle); err != nil {
 				s.log.Warn("set model %q: %s", modelTitle, err)
 			}

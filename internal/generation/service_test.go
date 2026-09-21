@@ -102,6 +102,9 @@ func (m *mockLLM) HealthCheck() error                      { return nil }
 func (m *mockLLM) SetURL(baseURL string)                   {}
 func (m *mockLLM) SetBackend(backend string)                {}
 func (m *mockLLM) SetBackendConfig(cfg llm.BackendConfig)   {}
+func (m *mockLLM) Backend() string                          { return "" }
+func (m *mockLLM) ListLoaded() ([]llm.LoadedModel, error)   { return nil, nil }
+func (m *mockLLM) UnloadAll(ctx context.Context) error      { return nil }
 
 type mockSD struct {
 	mu       sync.Mutex
@@ -177,6 +180,7 @@ func (m *mockSD) SetVAE(vaeName string) error {
 func (m *mockSD) UpscaleImage(base64Img string, upscaler string, scale float64) (string, error) {
 	return "", fmt.Errorf("not implemented")
 }
+func (m *mockSD) MemoryInfo() (*sd.MemoryStats, error) { return nil, nil }
 
 type mockEmitter struct {
 	mu     sync.Mutex

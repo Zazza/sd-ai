@@ -337,6 +337,24 @@ func (c *Client) SetBackendConfig(cfg BackendConfig) {
 	c.backendCfg = cfg
 }
 
+func (c *Client) Backend() string {
+	return c.backend
+}
+
+func (c *Client) ListLoaded() ([]LoadedModel, error) {
+	if c.backend != BackendOllama {
+		return nil, nil
+	}
+	return c.listOllamaLoaded()
+}
+
+func (c *Client) UnloadAll(ctx context.Context) error {
+	if c.backend != BackendOllama {
+		return nil
+	}
+	return c.unloadOllamaAll(ctx)
+}
+
 type LLMModel struct {
 	ID     string `json:"id"`
 	Object string `json:"object"`

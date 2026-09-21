@@ -9,6 +9,7 @@ var AllowedSettings = map[string]bool{
 	"llm_generate_top_p": true, "llm_generate_num_thread": true,
 	"llm_analyze_temperature": true, "llm_analyze_num_ctx": true, "llm_analyze_num_predict": true,
 	"llm_analyze_top_p": true, "llm_analyze_num_thread": true,
+	"heavy_models": true, "llm_auto_unload": true,
 	"kids_mode": true,
 	"kids_cat_violence": true, "kids_cat_horror": true, "kids_cat_weapons": true,
 	"kids_cat_substances": true, "kids_cat_mature": true,

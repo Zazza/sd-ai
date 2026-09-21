@@ -1,6 +1,7 @@
 package settings
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -61,6 +62,11 @@ func (m *mockLLMService) SetBackendConfig(cfg llm.BackendConfig) {
 	m.setBackendCfg = cfg
 	m.setBackendCfgV = true
 }
+func (m *mockLLMService) Backend() string { return "" }
+func (m *mockLLMService) ListLoaded() ([]llm.LoadedModel, error) {
+	return nil, nil
+}
+func (m *mockLLMService) UnloadAll(ctx context.Context) error { return nil }
 
 type mockSDService struct {
 	healthErr    error
@@ -116,6 +122,7 @@ func (m *mockSDService) SetURL(baseURL string) {
 func (m *mockSDService) SetModel(string) error { return nil }
 func (m *mockSDService) SetVAE(string) error   { return nil }
 func (m *mockSDService) UpscaleImage(string, string, float64) (string, error) { return "", nil }
+func (m *mockSDService) MemoryInfo() (*sd.MemoryStats, error) { return nil, nil }
 
 func testService(t *testing.T, llmSvc *mockLLMService, sdSvc *mockSDService) (*Service, *preset.DB) {
 	t.Helper()

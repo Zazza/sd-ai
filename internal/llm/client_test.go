@@ -1,11 +1,14 @@
 package llm
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -441,4 +444,150 @@ func TestHealthCheck_ConnectionRefused(t *testing.T) {
 	if !strings.Contains(err.Error(), "health check failed") {
 		t.Errorf("error = %q, want to contain 'health check failed'", err.Error())
 	}
+}
+
+func TestListLoaded(t *testing.T) {
+	t.Parallel()
+
+	t.Run("ollama parses api ps", func(t *testing.T) {
+		t.Parallel()
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodGet {
+				t.Errorf("expected GET, got %s", r.Method)
+			}
+			if r.URL.Path != "/api/ps" {
+				t.Errorf("expected /api/ps, got %s", r.URL.Path)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`{"models":[{"name":"llama3:latest","size":7665156538,"size_vram":6871947673,"expires_at":"2026-01-02T03:04:05Z"},{"name":"qwen2.5:7b","size":4600000000,"size_vram":0}]}`))
+		}))
+		defer server.Close()
+
+		client := New(server.URL, BackendOllama)
+		loaded, err := client.ListLoaded()
+		require.NoError(t, err)
+		require.Len(t, loaded, 2)
+		assert.Equal(t, "llama3:latest", loaded[0].Name)
+		assert.Equal(t, int64(7665156538), loaded[0].Size)
+		assert.Equal(t, int64(6871947673), loaded[0].SizeVRAM)
+		assert.Equal(t, "qwen2.5:7b", loaded[1].Name)
+		assert.Equal(t, int64(4600000000), loaded[1].Size)
+		assert.Zero(t, loaded[1].SizeVRAM)
+	})
+
+	t.Run("ollama empty ps returns empty list", func(t *testing.T) {
+		t.Parallel()
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`{"models":[]}`))
+		}))
+		defer server.Close()
+
+		client := New(server.URL, BackendOllama)
+		loaded, err := client.ListLoaded()
+		require.NoError(t, err)
+		assert.Empty(t, loaded)
+	})
+
+	t.Run("non ollama backend returns nil without request", func(t *testing.T) {
+		t.Parallel()
+		var requests atomic.Int32
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			requests.Add(1)
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer server.Close()
+
+		client := New(server.URL, BackendLMStudio)
+		loaded, err := client.ListLoaded()
+		require.NoError(t, err)
+		assert.Nil(t, loaded)
+		assert.Zero(t, requests.Load())
+	})
+}
+
+func TestUnloadAll(t *testing.T) {
+	t.Parallel()
+
+	t.Run("ollama sends keep_alive zero for each loaded model", func(t *testing.T) {
+		t.Parallel()
+		var mu sync.Mutex
+		var unloadRequests []map[string]any
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			switch r.URL.Path {
+			case "/api/ps":
+				w.Header().Set("Content-Type", "application/json")
+				w.Write([]byte(`{"models":[{"name":"llama3:latest","size":100,"size_vram":100},{"name":"qwen2.5:7b","size":200,"size_vram":150}]}`))
+			case "/api/generate":
+				if r.Method != http.MethodPost {
+					t.Errorf("expected POST, got %s", r.Method)
+				}
+				body, err := io.ReadAll(r.Body)
+				if err != nil {
+					t.Errorf("read body: %v", err)
+					return
+				}
+				var req map[string]any
+				if err := json.Unmarshal(body, &req); err != nil {
+					t.Errorf("unmarshal body: %v", err)
+					return
+				}
+				mu.Lock()
+				unloadRequests = append(unloadRequests, req)
+				mu.Unlock()
+				w.Header().Set("Content-Type", "application/json")
+				w.Write([]byte(`{}`))
+			default:
+				t.Errorf("unexpected path %s", r.URL.Path)
+			}
+		}))
+		defer server.Close()
+
+		client := New(server.URL, BackendOllama)
+		require.NoError(t, client.UnloadAll(context.Background()))
+
+		mu.Lock()
+		defer mu.Unlock()
+		require.Len(t, unloadRequests, 2)
+		names := make([]string, 0, len(unloadRequests))
+		for _, req := range unloadRequests {
+			keepAlive, ok := req["keep_alive"]
+			require.True(t, ok, "keep_alive must be present in unload request")
+			assert.EqualValues(t, 0, keepAlive)
+			name, _ := req["model"].(string)
+			names = append(names, name)
+		}
+		assert.ElementsMatch(t, []string{"llama3:latest", "qwen2.5:7b"}, names)
+	})
+
+	t.Run("ollama no loaded models no generate calls", func(t *testing.T) {
+		t.Parallel()
+		var generateCalls atomic.Int32
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/api/generate" {
+				generateCalls.Add(1)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`{"models":[]}`))
+		}))
+		defer server.Close()
+
+		client := New(server.URL, BackendOllama)
+		require.NoError(t, client.UnloadAll(context.Background()))
+		assert.Zero(t, generateCalls.Load())
+	})
+
+	t.Run("non ollama backend no-op", func(t *testing.T) {
+		t.Parallel()
+		var requests atomic.Int32
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			requests.Add(1)
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer server.Close()
+
+		client := New(server.URL, BackendLMStudio)
+		require.NoError(t, client.UnloadAll(context.Background()))
+		assert.Zero(t, requests.Load())
+	})
 }

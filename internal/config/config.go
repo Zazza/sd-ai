@@ -23,6 +23,8 @@ type Config struct {
 	DefaultHeight      int
 }
 
+const DefaultHeavyModels = "flux,z-image,qwen-image,chroma,hunyuan"
+
 const DefaultSDPromptInstruction = `You are an expert Stable Diffusion prompt engineer.
 
 CRITICAL — SD IS A LIMITED IMAGE MODEL, NOT A LANGUAGE MODEL:
