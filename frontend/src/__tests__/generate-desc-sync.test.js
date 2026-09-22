@@ -123,3 +123,38 @@ describe('saved idea negative edge branches', () => {
     expect(negField(wrapper).element.value).toBe('fresh neg')
   })
 })
+
+describe('manual description edit vs idea-sourced negative', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    clearEventMocks()
+  })
+
+  it('typing a new description clears the idea-sourced negative', async () => {
+    const wrapper = await mountPage()
+
+    const modal = await openSavedIdeas(wrapper)
+    await emitAndClose(modal, 'use', { id: 5, text: 'scene five', negative_prompt: 'idea neg' })
+    expect(negField(wrapper).element.value).toBe('idea neg')
+
+    await descField(wrapper).setValue('совершенно другая сцена')
+    await flushPromises()
+
+    expect(descField(wrapper).element.value).toBe('совершенно другая сцена')
+    expect(negField(wrapper).element.value).toBe('')
+  })
+
+  it('hand-written negative survives manual description edit', async () => {
+    const wrapper = await mountPage()
+
+    const modal = await openSavedIdeas(wrapper)
+    await emitAndClose(modal, 'use', { id: 6, text: 'scene six', negative_prompt: 'idea neg six' })
+
+    await negField(wrapper).setValue('my own neg')
+    await descField(wrapper).setValue('другая сцена')
+    await flushPromises()
+
+    expect(descField(wrapper).element.value).toBe('другая сцена')
+    expect(negField(wrapper).element.value).toBe('my own neg')
+  })
+})

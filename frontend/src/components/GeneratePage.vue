@@ -99,6 +99,7 @@ watch([description, negative, selectedPresetId, selectedCompoundPresetId], () =>
 
 watch(description, (val) => {
   if (currentDescId !== null && val !== lastUsedDescText) {
+    if (negative.value === lastUsedDescNegative) negative.value = ''
     currentDescId = null
     lastUsedDescText = ''
     lastUsedDescNegative = ''
@@ -588,12 +589,14 @@ onMounted(async () => {
     if (s.gen_description) description.value = s.gen_description
     const rid = Number(s.gen_desc_id) || null
     const rdesc = rid && savedDescs.value.find(d => d.id === rid)
+    let bindingRestored = false
     if (rdesc && rdesc.text === description.value) {
       currentDescId = rdesc.id
       lastUsedDescText = rdesc.text
       lastUsedDescNegative = rdesc.negative_prompt || ''
+      bindingRestored = true
     }
-    if (s.gen_negative) negative.value = s.gen_negative
+    if (s.gen_negative && (bindingRestored || !rid)) negative.value = s.gen_negative
     if (s.gen_mode) genMode.value = s.gen_mode
     if (s.gen_compound_preset_id) {
       const cpid = Number(s.gen_compound_preset_id)
