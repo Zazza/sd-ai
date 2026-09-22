@@ -303,7 +303,7 @@ func (s *Service) generateRemoveObject(params GenerateFromImageParams) (*Generat
 // --- generateLLMPromptFromTags ---
 
 func (s *Service) generateLLMPromptFromTags(p *preset.Preset, tags string, mode, extraNegative string) (*GenerateSDPromptResult, error) {
-	sdPromptInstruction := s.getSDPromptInstruction()
+	sdPromptInstruction := s.getSDPromptInstructionFor(p.ModelName)
 	systemPrompt := s.kids.ApplySystemPrompt(sdPromptInstruction)
 	maxTokens := s.getMaxTokens()
 	generateModel := s.getGenerateModel()
@@ -317,7 +317,7 @@ RESPONSE LENGTH: your response is limited to ~%d tokens. You MUST fit within thi
 	userParts := []string{
 		"STYLE REFERENCE (do NOT include in output): " + p.Prompt,
 		"STYLE NEGATIVE REFERENCE (do NOT include in output): " + p.NegativePrompt,
-		"USER SCENE (convert this to SD tags with weights): " + tags,
+		s.userSceneLabel(p.ModelName) + tags,
 	}
 	if mode == "inpaint" {
 		userParts = []string{
@@ -352,13 +352,15 @@ RESPONSE LENGTH: your response is limited to ~%d tokens. You MUST fit within thi
 
 	if promptResult.Prompt == "" && promptResult.NegativePrompt == "" {
 		promptResult = GenerateSDPromptResult{
-			Prompt:         promptutil.TruncateRepetitive(raw, 1000),
+			Prompt:         promptutil.TruncateRepetitive(raw, s.promptTruncateLimit(p.ModelName)),
 			NegativePrompt: p.NegativePrompt,
 		}
 	}
 
 	if promptutil.ContainsCyrillic(promptResult.Prompt) {
-		promptResult.Prompt = promptutil.ExtractTagsFromRaw(raw)
+		if extracted := promptutil.ExtractTagsFromRaw(raw); extracted != "" {
+			promptResult.Prompt = extracted
+		}
 	}
 	if promptutil.ContainsCyrillic(promptResult.NegativePrompt) {
 		promptResult.NegativePrompt = promptutil.ExtractNegativeFromRaw(raw)
@@ -366,7 +368,7 @@ RESPONSE LENGTH: your response is limited to ~%d tokens. You MUST fit within thi
 
 	extractEmbeddedNegative(&promptResult)
 	promptResult.Prompt = promptutil.StripJunk(promptResult.Prompt)
-	promptResult.Prompt = promptutil.TruncateRepetitive(promptResult.Prompt, 1000)
+	promptResult.Prompt = promptutil.TruncateRepetitive(promptResult.Prompt, s.promptTruncateLimit(p.ModelName))
 	promptResult.Prompt = promptutil.DedupeTags(promptResult.Prompt)
 	promptResult.Prompt = promptutil.RemoveTags(promptResult.Prompt, p.Prompt)
 	promptResult.Prompt = s.filterInstructionExamples(promptResult.Prompt, sdPromptInstruction, tags+" "+extraNegative)
@@ -453,8 +455,12 @@ func (s *Service) GenerateFromImage(params GenerateFromImageParams) (*GenerateIm
 		}
 
 		prompt = promptResult.Prompt
-		if params.Mode == "inpaint" {
-			prompt += ", " + tags
+		if params.Mode == "inpaint" && tags != "" {
+			if s.isProseModel(p.ModelName) {
+				prompt += " Focus on: " + strings.Trim(tags, " ,.") + "."
+			} else {
+				prompt += ", " + tags
+			}
 		}
 		prompt = appendLorasToPrompt(prompt, p.Loras)
 		negativePrompt = s.buildPrompts("", promptResult.NegativePrompt, "", "", params.ExtraNegativePrompt).NegativePrompt
@@ -791,26 +797,37 @@ func (s *Service) TestCompoundGenerate(params TestCompoundGenerateParams) ([]Tes
 	totalItems := len(params.SelectedIDs)
 	results := make([]TestGenerateResultItem, 0, totalItems)
 
-	var userScenePrompt, userSceneNeg string
-	{
-		firstCP, cpErr := s.db.GetCompoundPreset(params.SelectedIDs[0])
-		if cpErr == nil && len(firstCP.Steps) > 0 {
-			if firstPreset, pErr := s.db.Get(firstCP.Steps[0].PresetID); pErr == nil {
-				filtered, filterErr := s.kids.FilterInput(params.Prompt)
-				if filterErr == nil {
-					llmResult, llmErr := s.generateLLMPromptFromTags(firstPreset, filtered, "default", params.NegativePrompt)
-					if llmErr == nil {
-						userScenePrompt = llmResult.Prompt
-						userSceneNeg = llmResult.NegativePrompt
-					} else {
-						s.log.Warn("test compound: LLM conversion failed, using raw prompt: %s", llmErr)
-					}
-				}
-			}
+	convertForCompound := func(compoundID int64) (string, string) {
+		cp, cpErr := s.db.GetCompoundPreset(compoundID)
+		if cpErr != nil || len(cp.Steps) == 0 {
+			return "", ""
 		}
+		firstPreset, pErr := s.db.Get(cp.Steps[0].PresetID)
+		if pErr != nil {
+			return "", ""
+		}
+		filtered, filterErr := s.kids.FilterInput(params.Prompt)
+		if filterErr != nil {
+			return "", ""
+		}
+		llmResult, llmErr := s.generateLLMPromptFromTags(firstPreset, filtered, "default", params.NegativePrompt)
+		if llmErr != nil {
+			s.log.Warn("test compound: LLM conversion failed, using raw prompt: %s", llmErr)
+			return "", ""
+		}
+		return llmResult.Prompt, llmResult.NegativePrompt
 	}
+	conversions := make(map[int64][2]string, len(params.SelectedIDs))
+	for _, compoundID := range params.SelectedIDs {
+		pr, ng := convertForCompound(compoundID)
+		conversions[compoundID] = [2]string{pr, ng}
+	}
+	userScenePrompt, userSceneNeg := conversions[params.SelectedIDs[0]][0], conversions[params.SelectedIDs[0]][1]
 
 	for idx, compoundID := range params.SelectedIDs {
+		if c, ok := conversions[compoundID]; ok && (c[0] != userScenePrompt || c[1] != userSceneNeg) {
+			userScenePrompt, userSceneNeg = c[0], c[1]
+		}
 		s.emitter.Emit("test:progress", map[string]any{
 			"current": idx + 1,
 			"total":   totalItems,
@@ -891,10 +908,10 @@ func (s *Service) TestCompoundGenerate(params TestCompoundGenerateParams) ([]Tes
 					HiresUpscale:           hiresUpscale,
 					HiresDenoisingStrength: hiresDenoising,
 					HiresUpscaler:          hiresUpscaler,
-					BatchSize:       &batchSize,
-					BatchCount:      &batchCount,
-					DoNotSaveImages: true,
-					DoNotSaveGrid:   true,
+					BatchSize:              &batchSize,
+					BatchCount:             &batchCount,
+					DoNotSaveImages:        true,
+					DoNotSaveGrid:          true,
 				}
 				result, err := s.sd.Txt2Img(req)
 				if err != nil {

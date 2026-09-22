@@ -2,7 +2,6 @@ package generation
 
 import (
 	"context"
-	"strings"
 	"sync"
 	"time"
 
@@ -42,14 +41,7 @@ func (g *MemoryGuard) setting(key, fallback string) string {
 }
 
 func (g *MemoryGuard) isHeavy(modelName string) bool {
-	name := strings.ToLower(modelName)
-	for _, part := range strings.Split(g.setting("heavy_models", config.DefaultHeavyModels), ",") {
-		part = strings.ToLower(strings.TrimSpace(part))
-		if part != "" && strings.Contains(name, part) {
-			return true
-		}
-	}
-	return false
+	return config.ModelMatchesCSV(modelName, g.setting("heavy_models", config.DefaultHeavyModels))
 }
 
 func (g *MemoryGuard) EnsureHeadroom(modelName, logPrefix string) bool {

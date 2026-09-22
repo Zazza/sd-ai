@@ -3,27 +3,44 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 type Config struct {
-	LLMUrl             string
-	SDUrl              string
-	LLMModel           string
-	SDPromptModel      string
-	VisionModel        string
-	LLMBackend         string
-	Port               string
-	DBPath             string
-	SystemPrompt       string
-	DefaultNegative    string
-	DefaultSampler     string
-	DefaultSteps       int
-	DefaultCfgScale    float64
-	DefaultWidth       int
-	DefaultHeight      int
+	LLMUrl          string
+	SDUrl           string
+	LLMModel        string
+	SDPromptModel   string
+	VisionModel     string
+	LLMBackend      string
+	Port            string
+	DBPath          string
+	SystemPrompt    string
+	DefaultNegative string
+	DefaultSampler  string
+	DefaultSteps    int
+	DefaultCfgScale float64
+	DefaultWidth    int
+	DefaultHeight   int
 }
 
 const DefaultHeavyModels = "flux,z-image,qwen-image,chroma,hunyuan"
+
+const DefaultProseModels = "flux,z-image,qwen-image,chroma,hunyuan"
+
+func ModelMatchesCSV(modelName, csv string) bool {
+	name := strings.ToLower(strings.TrimSpace(modelName))
+	if name == "" {
+		return false
+	}
+	for _, part := range strings.Split(csv, ",") {
+		part = strings.ToLower(strings.TrimSpace(part))
+		if part != "" && strings.Contains(name, part) {
+			return true
+		}
+	}
+	return false
+}
 
 const DefaultSDPromptInstruction = `You are an expert Stable Diffusion prompt engineer.
 
@@ -67,6 +84,42 @@ Rules:
 
 OUTPUT FORMAT — valid JSON only. NO markdown. NO code blocks. Raw JSON:
 {"prompt": "tag1, tag2, tag3", "negative_prompt": "neg1, neg2"}`
+
+const DefaultSDPromptInstructionProse = `You are an expert prompt writer for natural-language image models with a T5-class text encoder.
+
+CRITICAL — THIS IMAGE MODEL UNDERSTANDS CONNECTED ENGLISH PROSE, NOT TAGS:
+It reads whole sentences and follows the spatial and logical relations you state in plain language.
+Comma-separated tag lists, parentheses, and numeric weights are meaningless noise for it.
+You ALWAYS write ONE connected English paragraph — flowing natural text, like a detailed caption of the finished image.
+
+ABSOLUTE RULE — DETAIL PRESERVATION:
+You MUST carry EVERY SINGLE visual detail from the user scene into the paragraph.
+Read the user scene carefully. For EACH sentence, keep ALL subjects, attributes, colors, materials, positions, lighting details, and actions.
+Do NOT summarize. Do NOT condense. Do NOT skip any element.
+Missing ANY visual element from the source text is a CRITICAL FAILURE.
+
+PARAGRAPH STRUCTURE:
+- Open with the main subject and what it is doing
+- Weave clothing, materials, colors, and textures into the description of each subject as natural phrases
+- State positions and relations explicitly: what stands on the left or right, what is behind or in front, what is above or below, what is near or far
+- Describe lighting with its source, color, and direction, then atmosphere, weather, and time of day
+- Cover the environment: surfaces, objects, foreground and background depth
+- Close with camera and composition terms in the same flowing style
+
+APPEARANCE VARIATION — the image model renders the SAME default face whenever a person's appearance is unspecified:
+- If the user scene describes the person's appearance: carry those details faithfully, do NOT add or alter them.
+- If the scene contains a person but NO appearance details: you MUST invent a specific distinct appearance and weave it into the paragraph as natural phrases, covering these aspects: age range, ethnicity or heritage, face shape, hair color and texture, body type, distinctive facial feature, second distinctive feature. Fill every aspect with concrete DIFFERENT values each time — vary age, ethnicity, features, hair. Never mention the aspect names themselves.
+
+Rules:
+1. Translate non-English to English FIRST, then write the paragraph
+2. Do NOT include quality terms — they come from preset
+3. Do NOT include style terms from STYLE REFERENCE
+4. Do NOT invent details not present in the user description, EXCEPT the mandatory appearance from APPEARANCE VARIATION when the scene has a person but no appearance details
+5. For negative prompt: a short comma-separated list of ONLY user-specified negatives, do NOT copy STYLE NEGATIVE REFERENCE
+6. NEVER copy guide examples into the output — every phrase must derive from the user scene or from APPEARANCE VARIATION filled with concrete values
+
+OUTPUT FORMAT — valid JSON only. NO markdown. NO code blocks. Raw JSON:
+{"prompt": "one connected English paragraph describing the scene", "negative_prompt": "neg1, neg2"}`
 
 const KidsModePrompt = `
 

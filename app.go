@@ -46,14 +46,14 @@ func (e *appEmitter) Emit(event string, data ...any) {
 }
 
 type App struct {
-	ctx         context.Context
-	presets     *preset.DB
-	llm         llm.Service
-	sd          sd.Service
-	rembgClient *rembg.Client
-	log         *logger.Logger
-	config      *config.Config
-	dataDir     string
+	ctx          context.Context
+	presets      *preset.DB
+	llm          llm.Service
+	sd           sd.Service
+	rembgClient  *rembg.Client
+	log          *logger.Logger
+	config       *config.Config
+	dataDir      string
 	serverClient *serverclient.Client
 
 	kidsMgr     *kids.Manager
@@ -314,6 +314,10 @@ func (a *App) GenerateSDPrompt(params GenerateSDPromptParams) (*GenerateSDPrompt
 
 func (a *App) GetDefaultPromptInstruction() string {
 	return a.gen.GetDefaultPromptInstruction()
+}
+
+func (a *App) GetDefaultPromptInstructionProse() string {
+	return a.gen.GetDefaultPromptInstructionProse()
 }
 
 func (a *App) AnalyzeImage(imageBase64, mode string) (string, error) {

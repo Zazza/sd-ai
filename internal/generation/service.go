@@ -92,11 +92,11 @@ type GenerateImageResult struct {
 	Image                   string          `json:"image"`
 	Parameters              json.RawMessage `json:"parameters"`
 	Info                    json.RawMessage `json:"info"`
-	IsPreview               bool   `json:"is_preview"`
-	HiresFixSkipped         bool   `json:"hires_fix_skipped"`
-	HiresFixManual          bool   `json:"hires_fix_manual"`
-	EffectivePrompt         string `json:"effective_prompt"`
-	EffectiveNegativePrompt string `json:"effective_negative_prompt"`
+	IsPreview               bool            `json:"is_preview"`
+	HiresFixSkipped         bool            `json:"hires_fix_skipped"`
+	HiresFixManual          bool            `json:"hires_fix_manual"`
+	EffectivePrompt         string          `json:"effective_prompt"`
+	EffectiveNegativePrompt string          `json:"effective_negative_prompt"`
 }
 
 type UpscaleImageParams struct {
@@ -190,18 +190,18 @@ type lastImageMeta struct {
 // --- Service ---
 
 type Service struct {
-	db        *preset.DB
-	llm       llm.Service
-	sd        sd.Service
-	cfg       *config.Config
-	rembg     *rembg.Client
-	dataDir   string
-	emitter   EventEmitter
-	kids      *kids.Manager
-	sessions  SessionAdder
-	settings  SettingsApplier
-	log       *logger.Logger
-	guard     *MemoryGuard
+	db       *preset.DB
+	llm      llm.Service
+	sd       sd.Service
+	cfg      *config.Config
+	rembg    *rembg.Client
+	dataDir  string
+	emitter  EventEmitter
+	kids     *kids.Manager
+	sessions SessionAdder
+	settings SettingsApplier
+	log      *logger.Logger
+	guard    *MemoryGuard
 
 	ctx             context.Context
 	sdPollingMu     sync.Mutex
@@ -402,6 +402,38 @@ func (s *Service) getSDPromptInstruction() string {
 		sdPromptInstruction = v
 	}
 	return sdPromptInstruction
+}
+
+func (s *Service) isProseModel(modelName string) bool {
+	proseModels := config.DefaultProseModels
+	if v, err := s.db.GetSetting("prose_models"); err == nil && v != "" {
+		proseModels = v
+	}
+	return config.ModelMatchesCSV(modelName, proseModels)
+}
+
+func (s *Service) getSDPromptInstructionFor(modelName string) string {
+	if s.isProseModel(modelName) {
+		if v, err := s.db.GetSetting("sd_prompt_instruction_prose"); err == nil && v != "" {
+			return v
+		}
+		return config.DefaultSDPromptInstructionProse
+	}
+	return s.getSDPromptInstruction()
+}
+
+func (s *Service) userSceneLabel(modelName string) string {
+	if s.isProseModel(modelName) {
+		return "USER SCENE (rewrite this as one connected English paragraph): "
+	}
+	return "USER SCENE (convert this to SD tags with weights): "
+}
+
+func (s *Service) promptTruncateLimit(modelName string) int {
+	if s.isProseModel(modelName) {
+		return 2000
+	}
+	return 1000
 }
 
 func (s *Service) filterInstructionExamples(prompt, instruction, userInput string) string {
@@ -636,10 +668,10 @@ func (s *Service) prepareSDContext(p *preset.Preset, logPrefix string) {
 }
 
 type hiresFallbackResult struct {
-	Result        *sd.Txt2ImgResponse
-	Err           error
-	HiresSkipped  bool
-	HiresManual   bool
+	Result       *sd.Txt2ImgResponse
+	Err          error
+	HiresSkipped bool
+	HiresManual  bool
 }
 
 func (s *Service) doHiresFallback(req sd.Txt2ImgRequest, originalErr error, hiresUpscale *float64, hiresDenoising *float64, hiresUpscaler string, logPrefix string) hiresFallbackResult {
@@ -720,7 +752,7 @@ func (s *Service) GenerateSDPrompt(params GenerateSDPromptParams) (*GenerateSDPr
 		}, nil
 	}
 
-	instruction := s.getSDPromptInstruction()
+	instruction := s.getSDPromptInstructionFor(p.ModelName)
 	systemPrompt := instruction
 
 	var filterErr error
@@ -747,7 +779,7 @@ RESPONSE LENGTH: you have up to %d tokens. Include ALL visual elements from the 
 	userParts = append(userParts, "STYLE REFERENCE (do NOT include in output): "+p.Prompt)
 	userParts = append(userParts, "STYLE NEGATIVE REFERENCE (do NOT include in output): "+p.NegativePrompt)
 	if description != "" {
-		userParts = append(userParts, "USER SCENE (convert this to SD tags with weights): "+description)
+		userParts = append(userParts, s.userSceneLabel(p.ModelName)+description)
 	}
 	if negative != "" {
 		userParts = append(userParts, "USER NEGATIVE: "+negative)
@@ -764,13 +796,15 @@ RESPONSE LENGTH: you have up to %d tokens. Include ALL visual elements from the 
 
 	if result.Prompt == "" && result.NegativePrompt == "" {
 		result = GenerateSDPromptResult{
-			Prompt:         promptutil.TruncateRepetitive(raw, 1000),
+			Prompt:         promptutil.TruncateRepetitive(raw, s.promptTruncateLimit(p.ModelName)),
 			NegativePrompt: p.NegativePrompt,
 		}
 	}
 
 	if promptutil.ContainsCyrillic(result.Prompt) {
-		result.Prompt = promptutil.ExtractTagsFromRaw(raw)
+		if extracted := promptutil.ExtractTagsFromRaw(raw); extracted != "" {
+			result.Prompt = extracted
+		}
 	}
 	if promptutil.ContainsCyrillic(result.NegativePrompt) {
 		result.NegativePrompt = promptutil.ExtractNegativeFromRaw(raw)
@@ -779,7 +813,7 @@ RESPONSE LENGTH: you have up to %d tokens. Include ALL visual elements from the 
 	extractEmbeddedNegative(&result)
 
 	result.Prompt = promptutil.StripJunk(result.Prompt)
-	result.Prompt = promptutil.TruncateRepetitive(result.Prompt, 1000)
+	result.Prompt = promptutil.TruncateRepetitive(result.Prompt, s.promptTruncateLimit(p.ModelName))
 	result.Prompt = s.filterInstructionExamples(result.Prompt, instruction, description+" "+negative)
 	result.NegativePrompt = promptutil.StripJunk(result.NegativePrompt)
 	result.NegativePrompt = promptutil.TruncateRepetitive(result.NegativePrompt, 500)
@@ -793,6 +827,10 @@ RESPONSE LENGTH: you have up to %d tokens. Include ALL visual elements from the 
 
 func (s *Service) GetDefaultPromptInstruction() string {
 	return config.DefaultSDPromptInstruction
+}
+
+func (s *Service) GetDefaultPromptInstructionProse() string {
+	return config.DefaultSDPromptInstructionProse
 }
 
 // --- GenerateImage ---
@@ -1452,10 +1490,10 @@ func (s *Service) GetLastImage() (*GenerateImageResult, error) {
 	}
 
 	return &GenerateImageResult{
-		Image:     base64.StdEncoding.EncodeToString(pngData),
+		Image:      base64.StdEncoding.EncodeToString(pngData),
 		Parameters: nil,
-		Info:      meta.Info,
-		IsPreview: meta.IsPreview,
+		Info:       meta.Info,
+		IsPreview:  meta.IsPreview,
 	}, nil
 }
 

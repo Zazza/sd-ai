@@ -214,6 +214,10 @@ export function GetDefaultPromptInstruction() {
   return window['go']['main']['App']['GetDefaultPromptInstruction']();
 }
 
+export function GetDefaultPromptInstructionProse() {
+  return window['go']['main']['App']['GetDefaultPromptInstructionProse']();
+}
+
 export function GetFooterHeight() {
   return window['go']['main']['App']['GetFooterHeight']();
 }

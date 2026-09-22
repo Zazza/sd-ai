@@ -118,6 +118,8 @@ export function GetDefaultAnalyzePrompts():Promise<generation.AnalyzePrompts>;
 
 export function GetDefaultPromptInstruction():Promise<string>;
 
+export function GetDefaultPromptInstructionProse():Promise<string>;
+
 export function GetFooterHeight():Promise<number>;
 
 export function GetHiresProfile(arg1:number):Promise<preset.HiresProfile>;

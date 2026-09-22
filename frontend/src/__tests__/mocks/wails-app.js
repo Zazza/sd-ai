@@ -49,6 +49,7 @@ export default {
   GetAllTags: vi.fn(() => Promise.resolve(undefined)),
   GetSDLoRAs: vi.fn(() => Promise.resolve(undefined)),
   ValidateImportModels: vi.fn(() => Promise.resolve(undefined)),
+  GetDefaultPromptInstructionProse: vi.fn(() => Promise.resolve('')),
   GetDefaultPromptInstruction: vi.fn(() => Promise.resolve(undefined)),
   GetDefaultAnalyzePrompts: vi.fn(() => Promise.resolve(undefined)),
   TestGenerate: vi.fn(() => Promise.resolve(undefined)),

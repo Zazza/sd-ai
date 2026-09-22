@@ -220,6 +220,8 @@ export const en = {
   'settings.section_sd_prompt': 'Image Engine Prompt Instruction',
   'settings.instruction_saved': 'Instruction saved.',
   'settings.prompt_instruction_description': 'This instruction is sent to the AI assistant when generating prompts. It defines how the AI should merge your style with your description into a valid image generation prompt.',
+  'settings.section_sd_prompt_prose': 'Prompt Instruction (Prose models — Flux & co)',
+  'settings.prompt_instruction_prose_description': "Used when the preset's model matches prose_models (flux-class). Converts the scene into one connected English paragraph.",
   'settings.btn_save_instruction': 'Save Instruction',
   'settings.btn_reset_default': 'Reset to Default',
   'settings.btn_start': 'Start',

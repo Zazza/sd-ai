@@ -116,6 +116,11 @@ const promptInstructionSaved = ref(false)
 const promptInstructionError = ref('')
 const defaultPromptInstruction = ref('')
 
+const promptInstructionProse = ref('')
+const promptInstructionProseSaved = ref(false)
+const promptInstructionProseError = ref('')
+const defaultPromptInstructionProse = ref('')
+
 const analyzeSystemPrompt = ref('')
 const analyzeSinglePrompt = ref('')
 const analyzeDescribePrompt = ref('')
@@ -166,6 +171,7 @@ async function loadSettings() {
     generationForm.preview_width = parseInt(settings.preview_width) || 512
     generationForm.preview_height = parseInt(settings.preview_height) || 512
     promptInstruction.value = settings.sd_prompt_instruction || ''
+    promptInstructionProse.value = settings.sd_prompt_instruction_prose || ''
     rembgForm.rembg_url = settings.rembg_url || ''
     connectionMode.value = settings.connection_mode || 'direct'
     serverURL.value = settings.server_url || ''
@@ -184,6 +190,16 @@ async function loadSettings() {
 
   if (!promptInstruction.value && defaultPromptInstruction.value) {
     promptInstruction.value = defaultPromptInstruction.value
+  }
+
+  try {
+    defaultPromptInstructionProse.value = await api.getDefaultPromptInstructionProse()
+  } catch (e) {
+    console.error('getDefaultPromptInstructionProse:', e)
+  }
+
+  if (!promptInstructionProse.value && defaultPromptInstructionProse.value) {
+    promptInstructionProse.value = defaultPromptInstructionProse.value
   }
 
   try {
@@ -610,6 +626,17 @@ async function savePromptInstruction() {
     promptInstructionSaved.value = true
   } catch (e) {
     promptInstructionError.value = String(e)
+  }
+}
+
+async function savePromptInstructionProse() {
+  promptInstructionProseSaved.value = false
+  promptInstructionProseError.value = ''
+  try {
+    await api.updateSettings({ sd_prompt_instruction_prose: promptInstructionProse.value })
+    promptInstructionProseSaved.value = true
+  } catch (e) {
+    promptInstructionProseError.value = String(e)
   }
 }
 
@@ -1050,6 +1077,22 @@ onMounted(loadSettings)
         <div style="display: flex; gap: 8px;">
           <button class="btn btn-primary" @click="savePromptInstruction">{{ t('settings.btn_save_instruction') }}</button>
           <button class="btn btn-secondary" @click="promptInstruction = defaultPromptInstruction">{{ t('settings.btn_reset_default') }}</button>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top: 16px;">
+        <h3 style="color: var(--text-bright); margin-bottom: 16px;">{{ t('settings.section_sd_prompt_prose') }}</h3>
+        <div v-if="promptInstructionProseSaved" class="status status-success" style="margin-bottom: 16px;">{{ t('settings.instruction_saved') }}</div>
+        <div v-if="promptInstructionProseError" class="status status-error" style="margin-bottom: 16px;">{{ promptInstructionProseError }}</div>
+        <div style="color: var(--text-dim); font-size: 13px; margin-bottom: 12px; line-height: 1.5;">
+          {{ t('settings.prompt_instruction_prose_description') }}
+        </div>
+        <div class="form-group">
+          <textarea class="form-textarea" v-model="promptInstructionProse" rows="16" style="font-family: monospace; font-size: 12px; line-height: 1.5;"></textarea>
+        </div>
+        <div style="display: flex; gap: 8px;">
+          <button class="btn btn-primary" @click="savePromptInstructionProse">{{ t('settings.btn_save_instruction') }}</button>
+          <button class="btn btn-secondary" @click="promptInstructionProse = defaultPromptInstructionProse">{{ t('settings.btn_reset_default') }}</button>
         </div>
       </div>
     </div>

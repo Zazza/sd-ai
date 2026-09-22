@@ -29,12 +29,12 @@ type ServiceStatus struct {
 }
 
 type Service struct {
-	db          *preset.DB
-	llm         llm.Service
-	sd          sd.Service
-	cfg         *config.Config
-	rembg       *rembg.Client
-	log         *logger.Logger
+	db           *preset.DB
+	llm          llm.Service
+	sd           sd.Service
+	cfg          *config.Config
+	rembg        *rembg.Client
+	log          *logger.Logger
 	serverClient *serverclient.Client
 }
 
@@ -119,42 +119,44 @@ func (s *Service) GetSettings() (map[string]string, error) {
 	}
 
 	defaults := map[string]string{
-		"llm_url":                   s.cfg.LLMUrl,
-		"sd_url":                    s.cfg.SDUrl,
-		"llm_model":                 s.cfg.LLMModel,
-		"sd_prompt_model":           s.cfg.SDPromptModel,
-		"vision_model":              s.cfg.VisionModel,
-		"llm_backend":               s.cfg.LLMBackend,
-		"llm_keep_alive":            "5m",
-		"llm_num_ctx":               "4096",
-		"llm_num_gpu":               "-1",
-		"llm_max_tokens":            "256",
-		"llm_generate_model":        s.cfg.SDPromptModel,
-		"llm_analyze_model":         s.cfg.VisionModel,
-		"llm_generate_temperature":  "0.4",
-		"llm_generate_num_ctx":      "4096",
-		"llm_generate_num_predict":  "256",
-		"llm_generate_top_p":        "0.9",
-		"llm_generate_num_thread":   "0",
-		"llm_analyze_temperature":   "0.4",
-		"llm_analyze_num_ctx":       "4096",
-		"llm_analyze_num_predict":   "256",
-		"llm_analyze_top_p":         "0.9",
-		"llm_analyze_num_thread":    "0",
-		"heavy_models":              config.DefaultHeavyModels,
-		"llm_auto_unload":           "true",
-		"kids_mode":                 "false",
-		"kids_cat_violence":         "true",
-		"kids_cat_horror":           "true",
-		"kids_cat_weapons":          "true",
-		"kids_cat_substances":       "true",
-		"kids_cat_mature":           "true",
-		"rembg_url":                 "",
-		"connection_mode":           "direct",
-		"server_url":                "",
-		"preview_mode":              "false",
-		"preview_width":             "512",
-		"preview_height":            "512",
+		"llm_url":                     s.cfg.LLMUrl,
+		"sd_url":                      s.cfg.SDUrl,
+		"llm_model":                   s.cfg.LLMModel,
+		"sd_prompt_model":             s.cfg.SDPromptModel,
+		"vision_model":                s.cfg.VisionModel,
+		"llm_backend":                 s.cfg.LLMBackend,
+		"llm_keep_alive":              "5m",
+		"llm_num_ctx":                 "4096",
+		"llm_num_gpu":                 "-1",
+		"llm_max_tokens":              "256",
+		"llm_generate_model":          s.cfg.SDPromptModel,
+		"llm_analyze_model":           s.cfg.VisionModel,
+		"llm_generate_temperature":    "0.4",
+		"llm_generate_num_ctx":        "4096",
+		"llm_generate_num_predict":    "256",
+		"llm_generate_top_p":          "0.9",
+		"llm_generate_num_thread":     "0",
+		"llm_analyze_temperature":     "0.4",
+		"llm_analyze_num_ctx":         "4096",
+		"llm_analyze_num_predict":     "256",
+		"llm_analyze_top_p":           "0.9",
+		"llm_analyze_num_thread":      "0",
+		"heavy_models":                config.DefaultHeavyModels,
+		"prose_models":                config.DefaultProseModels,
+		"sd_prompt_instruction_prose": config.DefaultSDPromptInstructionProse,
+		"llm_auto_unload":             "true",
+		"kids_mode":                   "false",
+		"kids_cat_violence":           "true",
+		"kids_cat_horror":             "true",
+		"kids_cat_weapons":            "true",
+		"kids_cat_substances":         "true",
+		"kids_cat_mature":             "true",
+		"rembg_url":                   "",
+		"connection_mode":             "direct",
+		"server_url":                  "",
+		"preview_mode":                "false",
+		"preview_width":               "512",
+		"preview_height":              "512",
 	}
 	for k, v := range defaults {
 		if _, ok := settings[k]; !ok {

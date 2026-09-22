@@ -155,6 +155,73 @@ func TestLoad_EmptyEnvFallsBack(t *testing.T) {
 	}
 }
 
+func TestModelMatchesCSV(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		modelName string
+		csv       string
+		want      bool
+	}{
+		{name: "exact match", modelName: "flux", csv: "flux", want: true},
+		{name: "substring in model name", modelName: "flux1-dev-fp8", csv: "flux,z-image,qwen-image", want: true},
+		{name: "model name case insensitive", modelName: "Flux-Dev", csv: "flux", want: true},
+		{name: "csv part case insensitive", modelName: "flux-dev", csv: "FLUX,Z-Image", want: true},
+		{name: "model name with surrounding spaces", modelName: "  flux-dev  ", csv: "flux", want: true},
+		{name: "csv parts with surrounding spaces", modelName: "z-image-turbo", csv: " flux , z-image ", want: true},
+		{name: "last csv part matches", modelName: "hunyuan-image-2.1", csv: "flux,z-image,qwen-image,chroma,hunyuan", want: true},
+		{name: "empty model name", modelName: "", csv: "flux", want: false},
+		{name: "whitespace only model name", modelName: "   ", csv: "flux", want: false},
+		{name: "empty csv", modelName: "flux-dev", csv: "", want: false},
+		{name: "csv with only empty parts", modelName: "flux-dev", csv: " , , ,", want: false},
+		{name: "empty part between valid parts skipped", modelName: "flux-dev", csv: ",,flux,,", want: true},
+		{name: "no match", modelName: "epicrealismXL_pureFix", csv: "flux,z-image,qwen-image,chroma,hunyuan", want: false},
+		{name: "partial letters do not match", modelName: "fl", csv: "flux", want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tt.want, ModelMatchesCSV(tt.modelName, tt.csv))
+		})
+	}
+}
+
+func TestDefaultSDPromptInstructionProseInvariants(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		token     string
+		contained bool
+	}{
+		{name: "appearance variation section present", token: "APPEARANCE VARIATION", contained: true},
+		{name: "json prompt key present", token: `"prompt"`, contained: true},
+		{name: "json negative prompt key present", token: `"negative_prompt"`, contained: true},
+		{name: "no open parenthesis", token: "(", contained: false},
+		{name: "no close parenthesis", token: ")", contained: false},
+		{name: "no example leak freckles", token: "freckles", contained: false},
+		{name: "no example leak auburn", token: "auburn", contained: false},
+		{name: "no example leak blonde", token: "blonde", contained: false},
+		{name: "no example leak curly", token: "curly", contained: false},
+		{name: "no example leak green eyes", token: "green eyes", contained: false},
+		{name: "no weight above one", token: ":1.", contained: false},
+		{name: "no weight below one", token: ":0.", contained: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if tt.contained {
+				require.Contains(t, DefaultSDPromptInstructionProse, tt.token)
+				return
+			}
+			require.NotContains(t, DefaultSDPromptInstructionProse, tt.token)
+		})
+	}
+}
+
 func TestDefaultSDPromptInstructionAppearance(t *testing.T) {
 	t.Parallel()
 

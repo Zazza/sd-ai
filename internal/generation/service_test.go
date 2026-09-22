@@ -2156,3 +2156,122 @@ func TestGenerateImage_HiresFallbackStillFails(t *testing.T) {
 	assert.Contains(t, err.Error(), "SD server error")
 	assert.Equal(t, 2, callCount)
 }
+
+func TestGetSDPromptInstructionFor(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		modelName string
+		setup     func(t *testing.T, db *preset.DB)
+		wantFn    func(t *testing.T, svc *Service) string
+	}{
+		{
+			name:      "flux model uses default prose instruction",
+			modelName: "flux1-dev-fp8",
+			wantFn: func(t *testing.T, svc *Service) string {
+				return config.DefaultSDPromptInstructionProse
+			},
+		},
+		{
+			name:      "tagged model uses tagged instruction",
+			modelName: "epicrealismXL_pureFix",
+			wantFn: func(t *testing.T, svc *Service) string {
+				return svc.getSDPromptInstruction()
+			},
+		},
+		{
+			name:      "empty model name uses tagged instruction",
+			modelName: "",
+			wantFn: func(t *testing.T, svc *Service) string {
+				return svc.getSDPromptInstruction()
+			},
+		},
+		{
+			name:      "custom prose instruction from db",
+			modelName: "flux-dev",
+			setup: func(t *testing.T, db *preset.DB) {
+				require.NoError(t, db.SetSetting("sd_prompt_instruction_prose", "CUSTOM PROSE"))
+			},
+			wantFn: func(t *testing.T, svc *Service) string {
+				return "CUSTOM PROSE"
+			},
+		},
+		{
+			name:      "custom prose models csv overrides default prose list",
+			modelName: "flux-dev",
+			setup: func(t *testing.T, db *preset.DB) {
+				require.NoError(t, db.SetSetting("prose_models", "megatron"))
+			},
+			wantFn: func(t *testing.T, svc *Service) string {
+				return svc.getSDPromptInstruction()
+			},
+		},
+		{
+			name:      "model matching custom prose models csv uses prose",
+			modelName: "megatron-xl",
+			setup: func(t *testing.T, db *preset.DB) {
+				require.NoError(t, db.SetSetting("prose_models", "megatron"))
+			},
+			wantFn: func(t *testing.T, svc *Service) string {
+				return config.DefaultSDPromptInstructionProse
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			db := openTestDB(t)
+			if tt.setup != nil {
+				tt.setup(t, db)
+			}
+			svc := newTestService(t, db, &mockLLM{}, &mockSD{})
+			assert.Equal(t, tt.wantFn(t, svc), svc.getSDPromptInstructionFor(tt.modelName))
+		})
+	}
+}
+
+func TestUserSceneLabel(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		modelName string
+		contains  string
+	}{
+		{name: "prose model asks for connected english paragraph", modelName: "flux1-dev-fp8", contains: "connected English paragraph"},
+		{name: "tagged model asks for sd tags with weights", modelName: "sd_xl_base_1.0", contains: "SD tags with weights"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			db := openTestDB(t)
+			svc := newTestService(t, db, &mockLLM{}, &mockSD{})
+			assert.Contains(t, svc.userSceneLabel(tt.modelName), tt.contains)
+		})
+	}
+}
+
+func TestPromptTruncateLimit(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		modelName string
+		want      int
+	}{
+		{name: "prose model limit", modelName: "flux1-dev-fp8", want: 2000},
+		{name: "tagged model limit", modelName: "riMix", want: 1000},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			db := openTestDB(t)
+			svc := newTestService(t, db, &mockLLM{}, &mockSD{})
+			assert.Equal(t, tt.want, svc.promptTruncateLimit(tt.modelName))
+		})
+	}
+}
