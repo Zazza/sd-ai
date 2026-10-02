@@ -90,7 +90,6 @@ Key-value settings store.
 |-----|-------------|---------|
 | `llm_url` | LLM API URL | `http://localhost:1234` |
 | `sd_url` | SD WebUI URL | `http://localhost:7860` |
-| `rembg_url` | rembg API URL | `http://localhost:5000` |
 | `llm_generate_model` | Model for prompts | from env |
 | `llm_analyze_model` | Model for vision | from env |
 | `llm_backend` | ollama/lmstudio | from env |
@@ -135,16 +134,6 @@ Saved prompts.
 |-------|------|
 | id | INTEGER PK |
 | text | TEXT |
-| created_at | TEXT |
-
-### saved_scenes
-Saved scenes for multi-pass.
-
-| Field | Type |
-|-------|------|
-| id | INTEGER PK |
-| name | TEXT |
-| scene_json | TEXT (JSON Scene) |
 | created_at | TEXT |
 
 ### sessions

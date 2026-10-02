@@ -8,7 +8,6 @@
 - [Ollama](#ollama)
 - [LM Studio](#lm-studio)
 - [llama.cpp](#llamacpp)
-- [Rembg](#rembg)
 - [SD Studio Server](#sd-studio-server)
 
 ---
@@ -241,76 +240,9 @@ In SD Studio -> Settings -> Connection: select **llama.cpp**, URL `http://localh
 
 ---
 
-## Rembg
-
-AI background removal. Used for clean character extraction in multi-character generation. Runs as a standalone HTTP service.
-
-### Installation
-
-**CPU:**
-```bash
-pip install "rembg[cli]"
-```
-
-**GPU (NVIDIA CUDA):**
-```bash
-pip install "rembg[gpu,cli]"
-```
-
-> Requires Python 3.10+. For GPU: CUDA Toolkit + cuDNN.
-
-**Windows (if `rembg` command not found):**
-```bat
-python -m rembg s --host 0.0.0.0 --port 7000
-```
-
-### Running the Server
-
-```bash
-rembg s --host 0.0.0.0 --port 7000 --log_level info
-```
-
-On first run, the model downloads automatically (~180 MB, saved to `~/.u2net/`).
-
-### Models
-
-Default model is `u2net`. Specify a different one:
-
-```bash
-rembg s --host 0.0.0.0 --port 7000 -m birefnet-general
-```
-
-| Model | Size | Quality | Speed |
-|-------|------|---------|-------|
-| `u2net` | 176 MB | Good | Medium |
-| `u2netp` | 4 MB | Fair | Fast |
-| `isnet-general-use` | 176 MB | Good | Medium |
-| `birefnet-general` | 176 MB | Excellent | Slower |
-| `birefnet-general-lite` | 88 MB | Good | Medium |
-| `birefnet-portrait` | 176 MB | Excellent for portraits | Medium |
-| `isnet-anime` | 176 MB | Excellent for anime | Medium |
-
-### Verification
-
-```bash
-# Check API
-curl http://localhost:7000/api
-
-# Test background removal
-curl -s -F file=@test.png http://localhost:7000/api/remove -o result.png
-```
-
-### SD Studio Configuration
-
-Settings -> Rembg -> enter URL (e.g. `http://192.168.1.100:7000`) -> **Test** -> **Save**.
-
-If rembg is not configured, SD Studio falls back to built-in Go-based background removal (lower quality, visible edge artifacts).
-
----
-
 ## SD Studio Server
 
-A standalone service that automatically manages all AI components (SD WebUI, Ollama, Rembg) — installation, startup, health monitoring, GPU optimization, and model management. Ideal for headless or server deployments.
+A standalone service that automatically manages all AI components (SD WebUI, Ollama) — installation, startup, health monitoring, GPU optimization, and model management. Ideal for headless or server deployments.
 
 ### Installation
 
@@ -331,7 +263,7 @@ docker compose up --build
 ```
 
 On first run, an interactive setup wizard will guide you through:
-- Selecting which components to install (SD WebUI, Ollama, Rembg)
+- Selecting which components to install (SD WebUI, Ollama)
 - Choosing data directory
 - Configuring GPU backend (Forge / A1111)
 
@@ -410,5 +342,4 @@ curl http://localhost:8080/
 | Ollama | 11434 | `http://localhost:11434` |
 | LM Studio | 1234 | `http://localhost:1234` |
 | llama.cpp | 8081 | `http://localhost:8081` |
-| Rembg | 7000 | `http://localhost:7000` |
 | SD Studio Server | 8080 | `http://localhost:8080` |

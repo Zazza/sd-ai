@@ -9,7 +9,6 @@ import (
 	"go-sd/internal/config"
 	"go-sd/internal/llm"
 	"go-sd/internal/preset"
-	"go-sd/internal/rembg"
 	"go-sd/internal/sd"
 	"go-sd/internal/serverclient"
 
@@ -23,7 +22,7 @@ func newTestApp(t *testing.T) (*App, *preset.DB) {
 	require.NoError(t, err)
 	t.Cleanup(func() { db.Close() })
 	cfg := &config.Config{LLMModel: "test-llm-model", SDPromptModel: "test-sd-model"}
-	app := NewApp(db, llm.New("http://localhost:1234", "lmstudio"), sd.New("http://localhost:7860"), rembg.New(""), serverclient.NewClient(), cfg)
+	app := NewApp(db, llm.New("http://localhost:1234", "lmstudio"), sd.New("http://localhost:7860"), serverclient.NewClient(), cfg)
 	return app, db
 }
 
@@ -47,7 +46,7 @@ func TestCheckServices_LLMModelField(t *testing.T) {
 	defer db.Close()
 
 	cfg := &config.Config{LLMModel: "my-llm-model", SDPromptModel: "my-sd-model"}
-	app := NewApp(db, llm.New(llmSrv.URL, "lmstudio"), sd.New(sdSrv.URL), rembg.New(""), serverclient.NewClient(), cfg)
+	app := NewApp(db, llm.New(llmSrv.URL, "lmstudio"), sd.New(sdSrv.URL), serverclient.NewClient(), cfg)
 
 	status := app.CheckServices()
 	assert.True(t, status.LLM.Available)

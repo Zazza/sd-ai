@@ -587,11 +587,39 @@ function onQueueFailed(data) {
   }
 }
 
+function onQueuePaused(data) {
+  if (!data?.job_id || !enqueuedJobIds.value.has(data.job_id)) return
+  if ((data.retry_count || 0) < (data.max_retries || 0)) return
+
+  enqueuedJobIds.value.delete(data.job_id)
+  batchDone.value++
+  if (data.error) error.value = data.error
+
+  if (enqueuedJobIds.value.size === 0) {
+    generatingImage.value = false
+    generationStage.value = ''
+    removeStage.value = ''
+  }
+}
+
+async function interruptBatch() {
+  if (enqueuedJobIds.value.size > 0) {
+    try { await api.cancelQueue() } catch {}
+    enqueuedJobIds.value = new Set()
+    generatingImage.value = false
+    generationStage.value = ''
+    removeStage.value = ''
+    return
+  }
+  await interruptGeneration()
+}
+
 let offRemoveStage = () => {}
 let offSessionAdded = () => {}
 let offSessionSelected = () => {}
 let offCompleted = () => {}
 let offFailed = () => {}
+let offPaused = () => {}
 
 onMounted(async () => {
   await loadPresets()
@@ -607,6 +635,7 @@ onMounted(async () => {
   offSessionSelected = EventsOn("session:selected", () => { useLastImage() })
   offCompleted = EventsOn('queue:completed', onQueueCompleted)
   offFailed = EventsOn('queue:failed', onQueueFailed)
+  offPaused = EventsOn('queue:paused', onQueuePaused)
   try {
     const s = await api.getSettings()
     if (s.fi_mode) mode.value = s.fi_mode
@@ -670,6 +699,7 @@ onUnmounted(() => {
   offSessionSelected()
   offCompleted()
   offFailed()
+  offPaused()
   saveFIState()
   if (shared) {
     shared.selectedPresetId = selectedPresetId.value
@@ -926,7 +956,7 @@ function onKeydown(e) {
               </label>
             </div>
             <div v-if="hasMask" style="font-size: 11px; color: var(--accent); margin-top: 4px;">
-              {{ t('fi.mask_drawn', { count: maskHistory.length, inverted: invertMask ? ' [inverted]' : '' }) }}
+              {{ t('fi.mask_drawn', { count: maskHistory.length, inverted: invertMask ? t('fi.mask_inverted') : '' }) }}
             </div>
             <div v-else style="font-size: 11px; color: var(--text-dim); margin-top: 4px;">
               {{ t('fi.paint_areas') }}
@@ -1021,7 +1051,27 @@ function onKeydown(e) {
               <div style="background: var(--surface-2); border-radius: 4px; overflow: hidden; height: 6px;">
                 <div :style="{ width: (sdProgress.progress * 100) + '%', background: 'var(--accent)', height: '100%', transition: 'width 0.3s' }"></div>
               </div>
-              <button class="btn btn-sm btn-secondary" @click="interruptGeneration" style="margin-top: 8px; font-size: 11px;">{{ t('progress.btn_interrupt') }}</button>
+              <button class="btn btn-sm btn-secondary" @click="interruptBatch" style="margin-top: 8px; font-size: 11px;">{{ t('progress.btn_interrupt') }}</button>
+            </div>
+          </div>
+          <div v-else-if="generatingImage && generatedImage && enqueuedJobIds.size > 0" style="width: 100%; padding: 12px; position: relative;">
+            <img :src="imageSrc" alt="Generating..." style="border-radius: var(--radius-sm); opacity: 0.4; width: 100%;" />
+            <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; background: rgba(0,0,0,0.6); padding: 16px 24px; border-radius: 8px;">
+              <img v-if="preview && sdProgress && sdProgress.progress > 0 && sdProgress.progress < 1" :src="preview" alt="preview" style="max-width: 200px; border-radius: var(--radius-sm); opacity: 0.8; image-rendering: pixelated;" />
+              <span v-else class="spinner" style="width: 24px; height: 24px; border-width: 2px;"></span>
+              <p style="margin-top: 8px; color: var(--text-dim); font-size: 13px;">{{ (batchDone + 1) + ' / ' + batchTotal }}</p>
+              <div v-if="sdProgress && sdProgress.progress > 0" style="margin-top: 8px; min-width: 180px;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                  <span style="color: var(--text-dim); font-size: 11px;">{{ Math.round(sdProgress.progress * 100) }}%</span>
+                  <span style="color: var(--text-dim); font-size: 11px;">
+                    <span v-if="sdProgress.etaRelative > 0">~{{ Math.ceil(sdProgress.etaRelative) }}s</span>
+                  </span>
+                </div>
+                <div style="background: var(--surface-2); border-radius: 4px; overflow: hidden; height: 4px;">
+                  <div :style="{ width: (sdProgress.progress * 100) + '%', background: 'var(--accent)', height: '100%', transition: 'width 0.3s' }"></div>
+                </div>
+                <button class="btn btn-sm btn-secondary" @click="interruptBatch" style="margin-top: 8px; font-size: 11px;">{{ t('progress.btn_interrupt') }}</button>
+              </div>
             </div>
           </div>
           <div v-else-if="generatedImage" style="width: 100%; padding: 12px;">

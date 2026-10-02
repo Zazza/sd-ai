@@ -27,14 +27,12 @@ sd-ai/
 │   ├── preset/                # SQLite CRUD (presets, settings, sessions)
 │   ├── generation/            # Сервис генерации изображений
 │   ├── queue/                 # Очередь задач с повторами и паузой
-│   ├── compositor/            # Multi-pass генерация (background + characters)
 │   ├── session/               # Управление сессиями
 │   ├── importexport/          # Импорт/экспорт пресетов
 │   ├── settings/              # Сервис настроек
 │   ├── promptutil/            # Утилиты промптов (ExtractJSON, StripJunk)
 │   ├── filebrowser/           # Файловый браузер
 │   ├── serverclient/          # Клиент API сервера
-│   ├── rembg/                 # Удаление фона (rembg API)
 │   ├── kids/                  # Kids mode (фильтрация контента)
 │   └── logger/                # Логирование событий с LogBridge
 ├── server/                    # Автономный оркестратор сервисов
@@ -77,7 +75,7 @@ sd-ai/
 `App` — единая точка входа для frontend. Все Wails bindings — методы на `*App` с заглавной буквы. Frontend не обращается к internal напрямую.
 
 ### Client (HTTP-обёртки)
-`llm.Client`, `sd.Client`, `rembg.Client` — Stateless HTTP-клиенты для внешних сервисов. Constructor injection через `New*`.
+`llm.Client`, `sd.Client` — Stateless HTTP-клиенты для внешних сервисов. Constructor injection через `New*`.
 
 ### Repository (preset.DB)
 `preset.DB` инкапсулирует SQLite. Raw SQL через `database/sql`. Миграции в Go-коде (`CREATE TABLE IF NOT EXISTS`).
@@ -124,7 +122,7 @@ Backend → Frontend коммуникация через `runtime.EventsEmit(ctx
 ```
 
 ### Ключевые возможности
-- **Управление процессами** — жизненный цикл SD WebUI, Ollama, Rembg (start/stop/restart)
+- **Управление процессами** — жизненный цикл SD WebUI, Ollama (start/stop/restart)
 - **Мониторинг GPU** — опрос nvidia-smi, отслеживание VRAM, автооптимизация
 - **GPU-прокси** — приоритетная очередь с VRAM cooldown (предотвращает OOM на GPU с малой VRAM)
 - **Мониторинг здоровья** — периодические HTTP-проверки всех сервисов
@@ -148,7 +146,6 @@ sessions ──── session_items
 settings (key-value)
 saved_descriptions
 saved_prompts
-saved_scenes
 export_presets
 ```
 

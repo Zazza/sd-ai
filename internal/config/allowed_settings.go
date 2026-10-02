@@ -16,7 +16,6 @@ var AllowedSettings = map[string]bool{
 	"kids_mode":         true,
 	"kids_cat_violence": true, "kids_cat_horror": true, "kids_cat_weapons": true,
 	"kids_cat_substances": true, "kids_cat_mature": true,
-	"rembg_url":       true,
 	"connection_mode": true, "server_url": true,
 	"preview_mode": true, "preview_width": true, "preview_height": true,
 	"gen_preset_id": true, "gen_action_pose": true, "gen_characters": true,

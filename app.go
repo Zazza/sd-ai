@@ -18,7 +18,6 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 
 	"go-sd/internal/clipboard"
-	"go-sd/internal/compositor"
 	"go-sd/internal/config"
 	"go-sd/internal/filebrowser"
 	"go-sd/internal/generation"
@@ -28,7 +27,6 @@ import (
 	"go-sd/internal/logger"
 	"go-sd/internal/preset"
 	"go-sd/internal/queue"
-	"go-sd/internal/rembg"
 	"go-sd/internal/sd"
 	"go-sd/internal/serverclient"
 	"go-sd/internal/session"
@@ -50,7 +48,6 @@ type App struct {
 	presets      *preset.DB
 	llm          llm.Service
 	sd           sd.Service
-	rembgClient  *rembg.Client
 	log          *logger.Logger
 	config       *config.Config
 	dataDir      string
@@ -76,12 +73,11 @@ func (a *App) saveWithDialog(defaultFilename string, data []byte) (string, error
 	return path, os.WriteFile(path, data, 0o644)
 }
 
-func NewApp(presets *preset.DB, llmClient llm.Service, sdClient sd.Service, rembgClient *rembg.Client, srvClient *serverclient.Client, cfg *config.Config) *App {
+func NewApp(presets *preset.DB, llmClient llm.Service, sdClient sd.Service, srvClient *serverclient.Client, cfg *config.Config) *App {
 	a := &App{
 		presets:      presets,
 		llm:          llmClient,
 		sd:           sdClient,
-		rembgClient:  rembgClient,
 		log:          logger.New(nil),
 		config:       cfg,
 		dataDir:      filepath.Dir(cfg.DBPath),
@@ -90,11 +86,11 @@ func NewApp(presets *preset.DB, llmClient llm.Service, sdClient sd.Service, remb
 	}
 	a.emitter = appEmitter{ctx: &a.ctx}
 	a.sessions = session.New(presets, a.dataDir, &a.emitter)
-	a.settingsSvc = settings.New(presets, llmClient, sdClient, cfg, a.rembgClient, a.log, srvClient)
+	a.settingsSvc = settings.New(presets, llmClient, sdClient, cfg, a.log, srvClient)
 	a.ieSvc = importexport.New(presets, sdClient, a.log)
 	a.gen = generation.New(
 		presets, llmClient, sdClient, cfg,
-		a.rembgClient, a.dataDir,
+		a.dataDir,
 		&a.emitter, a.kidsMgr, a.sessions, a.settingsSvc, a.log,
 	)
 	queueStore := queue.NewStore(presets.DB())
@@ -195,10 +191,6 @@ type ServiceStatus = settings.ServiceStatus
 
 func (a *App) CheckServices() ServiceStatus {
 	return a.settingsSvc.CheckServices()
-}
-
-func (a *App) CheckRembg() error {
-	return a.settingsSvc.CheckRembg()
 }
 
 // --- Presets ---
@@ -306,7 +298,6 @@ type UpscalePreviewParams = generation.UpscalePreviewParams
 type GenerateCompoundImageParams = generation.GenerateCompoundImageParams
 type GenerateFromImageParams = generation.GenerateFromImageParams
 type TestCompoundGenerateParams = generation.TestCompoundGenerateParams
-type DecomposeSceneParams = generation.DecomposeSceneParams
 
 func (a *App) GenerateSDPrompt(params GenerateSDPromptParams) (*GenerateSDPromptResult, error) {
 	return a.gen.GenerateSDPrompt(params)
@@ -366,14 +357,6 @@ func (a *App) GenerateFromImage(params GenerateFromImageParams) (*GenerateImageR
 
 func (a *App) TestCompoundGenerate(params TestCompoundGenerateParams) ([]TestGenerateResultItem, error) {
 	return a.gen.TestCompoundGenerate(params)
-}
-
-func (a *App) DecomposeScene(params DecomposeSceneParams) (*compositor.Scene, error) {
-	return a.gen.DecomposeScene(params)
-}
-
-func (a *App) GenerateMultiPass(scene compositor.Scene) (*compositor.MultiPassResult, error) {
-	return a.gen.GenerateMultiPass(scene)
 }
 
 // --- File/Clipboard (Wails runtime) ---
@@ -896,50 +879,6 @@ func (a *App) SetLastImage(base64Data string) error {
 		a.emitter.Emit("session:selected", map[string]int64{"id": itemID})
 	}
 	return nil
-}
-
-// --- Scene Management ---
-
-func (a *App) ListSavedScenes() ([]preset.SavedScene, error) {
-	items, err := a.presets.ListSavedScenes()
-	if err != nil {
-		return nil, err
-	}
-	if items == nil {
-		items = []preset.SavedScene{}
-	}
-	return items, nil
-}
-
-func (a *App) GetSavedScene(id int64) (*preset.SavedScene, error) {
-	return a.presets.GetSavedScene(id)
-}
-
-func (a *App) SaveScene(s preset.SavedScene) (*preset.SavedScene, error) {
-	if strings.TrimSpace(s.Name) == "" {
-		return nil, fmt.Errorf("scene name is required")
-	}
-	if s.SceneJSON == "" {
-		return nil, fmt.Errorf("scene data is required")
-	}
-	if err := a.presets.CreateSavedScene(&s); err != nil {
-		return nil, err
-	}
-	return &s, nil
-}
-
-func (a *App) UpdateSavedScene(s preset.SavedScene) (*preset.SavedScene, error) {
-	if s.ID <= 0 {
-		return nil, fmt.Errorf("invalid scene ID")
-	}
-	if err := a.presets.UpdateSavedScene(&s); err != nil {
-		return nil, err
-	}
-	return &s, nil
-}
-
-func (a *App) DeleteSavedScene(id int64) error {
-	return a.presets.DeleteSavedScene(id)
 }
 
 // --- Session Management ---

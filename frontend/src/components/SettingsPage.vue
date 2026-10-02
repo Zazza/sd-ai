@@ -128,14 +128,6 @@ const analyzeSaved = ref(false)
 const analyzeError = ref('')
 const defaultAnalyzePrompts = ref(null)
 
-const rembgForm = reactive({
-  rembg_url: '',
-})
-const rembgSaved = ref(false)
-const rembgError = ref('')
-const rembgTesting = ref(false)
-const rembgStatus = ref('')
-
 watch(() => connectionForm.llm_backend, (newVal, oldVal) => {
   if (oldVal && defaultURLs[oldVal] && connectionForm.llm_url === defaultURLs[oldVal]) {
     connectionForm.llm_url = defaultURLs[newVal] || defaultURLs.lmstudio
@@ -172,7 +164,6 @@ async function loadSettings() {
     generationForm.preview_height = parseInt(settings.preview_height) || 512
     promptInstruction.value = settings.sd_prompt_instruction || ''
     promptInstructionProse.value = settings.sd_prompt_instruction_prose || ''
-    rembgForm.rembg_url = settings.rembg_url || ''
     connectionMode.value = settings.connection_mode || 'direct'
     serverURL.value = settings.server_url || ''
     if (connectionMode.value === 'server' && serverURL.value) {
@@ -663,34 +654,6 @@ function resetAnalyzePrompts() {
   analyzeDescribePrompt.value = defaultAnalyzePrompts.value.describe_prompt || ''
 }
 
-async function saveRembg() {
-  rembgSaved.value = false
-  rembgError.value = ''
-  rembgStatus.value = ''
-  try {
-    await api.updateSettings({ rembg_url: rembgForm.rembg_url })
-    rembgSaved.value = true
-  } catch (e) {
-    rembgError.value = String(e)
-  }
-}
-
-async function testRembg() {
-  rembgTesting.value = true
-  rembgStatus.value = ''
-  rembgError.value = ''
-  try {
-    await api.updateSettings({ rembg_url: rembgForm.rembg_url })
-    await api.checkRembg()
-    rembgStatus.value = 'ok'
-  } catch (e) {
-    rembgStatus.value = 'error'
-    rembgError.value = String(e)
-  } finally {
-    rembgTesting.value = false
-  }
-}
-
 onMounted(loadSettings)
 </script>
 
@@ -911,44 +874,6 @@ onMounted(loadSettings)
 
         <button class="btn btn-primary" @click="saveServerConnection">{{ t('settings.btn_save_server') }}</button>
       </template>
-
-      <!-- Rembg section (shared) -->
-      <div class="card" style="margin-top: 24px;">
-        <h3 style="color: var(--text-bright); margin-bottom: 16px;">{{ t('settings.section_rembg') }}</h3>
-        <div v-if="rembgSaved" class="status status-success" style="margin-bottom: 16px;">{{ t('settings.rembg_saved') }}</div>
-        <div v-if="rembgError" class="status status-error" style="margin-bottom: 16px;">{{ rembgError }}</div>
-
-        <template v-if="connectionMode === 'direct'">
-          <div style="color: var(--text-dim); font-size: 13px; margin-bottom: 12px; line-height: 1.5;">
-            {{ t('settings.rembg_description') }}
-            <code style="background: var(--surface-2); padding: 2px 6px; border-radius: 4px; font-size: 12px;">rembg s --host 0.0.0.0 --port 7000</code>
-            <br>{{ t('settings.rembg_required') }}
-          </div>
-        </template>
-
-        <div class="form-group">
-          <label class="form-label">{{ t('settings.label_rembg_url') }}</label>
-          <div style="display: flex; gap: 8px;">
-            <input class="form-input" v-model="rembgForm.rembg_url" :placeholder="connectionMode === 'server' ? 'Auto-configured via server' : 'http://192.168.1.100:7000'" :disabled="connectionMode === 'server'" style="flex: 1;" />
-            <button v-if="connectionMode === 'direct'" class="btn btn-secondary btn-sm" @click="testRembg" :disabled="rembgTesting || !rembgForm.rembg_url">
-              {{ rembgTesting ? t('settings.btn_testing') : t('settings.btn_test') }}
-            </button>
-          </div>
-        </div>
-
-        <div v-if="rembgStatus === 'ok'" style="color: #4ade80; font-size: 13px; margin-bottom: 12px;">
-          {{ t('settings.rembg_ok') }}
-        </div>
-        <div v-if="rembgStatus === 'error'" style="color: #f87171; font-size: 13px; margin-bottom: 12px;">
-          {{ t('settings.rembg_error') }}
-        </div>
-
-        <div v-if="connectionMode === 'direct' && !rembgForm.rembg_url" style="color: var(--text-dim); font-size: 12px; padding: 8px; background: var(--surface-2); border-radius: 6px; margin-bottom: 12px;">
-          {{ t('settings.rembg_no_url') }}
-        </div>
-
-        <button v-if="connectionMode === 'direct'" class="btn btn-primary" @click="saveRembg">{{ t('settings.btn_save_rembg') }}</button>
-      </div>
 
       <!-- LLM Models (direct mode only) -->
       <div v-if="connectionMode === 'direct'" class="card" style="margin-top: 24px;">

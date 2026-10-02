@@ -14,7 +14,6 @@ SD Studio bridges your local Stable Diffusion and LLM into a single workflow: de
 
 - **LLM Prompt Engineering** — describe in natural language, LLM merges your intent with preset into a production-ready SD prompt
 - **Smart Remove** — draw a mask, LLM analyzes the context, inpaints the background automatically
-- **Multi-Scene Composition** — describe a scene, LLM decomposes it into characters, composites via multi-pass inpaint
 - **Pipelines** — chain multiple generation steps (txt2img → img2img → inpaint) into a single workflow
 - **Session Management** — organize work into sessions with full generation history
 - **Kids Mode** — PIN-protected content filtering with category controls
@@ -26,7 +25,6 @@ SD Studio bridges your local Stable Diffusion and LLM into a single workflow: de
   <img src="docs/screenshots/from-image-inpaint.png" width="45%" alt="Inpainting with mask editor">
 </p>
 <p align="center">
-  <img src="docs/screenshots/scene-editor.png" width="45%" alt="Multi-scene composition">
   <img src="docs/screenshots/batch-generation.png" width="45%" alt="Batch generation">
 </p>
 
@@ -53,7 +51,6 @@ SD Studio bridges your local Stable Diffusion and LLM into a single workflow: de
 |---------|-------------|
 | Smart Merge | Natural language description → merged SD prompt via LLM |
 | Vision Analysis | Upload image, analyze via vision LLM (quick or deep chain mode) |
-| Multi-Scene Decomposition | LLM breaks scene description into individual characters |
 | Customizable Instruction | Edit the system prompt that shapes LLM output format |
 
 ### Workflow & Management
@@ -81,8 +78,6 @@ SD Studio connects to two services on your local network:
 
 - **Stable Diffusion WebUI** (A1111 or [Forge](https://github.com/lllyasviel/stable-diffusion-webui-forge)) — runs with `--api` flag. [Setup guide](docs/setup-en.md). Default: `http://localhost:7860`
 - **LLM API** — any OpenAI-compatible server: [Ollama](https://ollama.com/), [llama.cpp](https://github.com/ggerganov/llama.cpp), or [LM Studio](https://lmstudio.ai/). Default: `http://localhost:11434/v1`
-
-Optional: [Rembg](https://github.com/danielgatis/rembg) for background removal in multi-scene mode.
 
 ### Development
 
@@ -154,8 +149,6 @@ User writes description in plain language
 
 **From Image:** Upload → Vision LLM analyzes → Inpaint/Remove with mask editor
 
-**Multi-Scene:** Describe scene → LLM decomposes → Multi-pass inpaint compositing
-
 **Smart Remove:** Draw mask → LLM vision analyzes context → Auto-inpaint background
 
 ## Project Structure
@@ -176,9 +169,7 @@ User writes description in plain language
 │   ├── promptutil/      # Prompt utilities
 │   ├── filebrowser/     # File browser backend
 │   ├── serverclient/    # Server API client
-│   ├── compositor/      # Multi-scene compositing
 │   ├── kids/            # Kids mode filtering
-│   ├── rembg/           # Background removal client
 │   ├── logger/          # Event logger
 │   └── api/             # HTTP API
 ├── serverclient/    # Server API client (connects to sd-ai-server)

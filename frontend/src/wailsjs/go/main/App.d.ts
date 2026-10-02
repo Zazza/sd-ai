@@ -3,9 +3,8 @@
 import {filebrowser} from '../models';
 import {settings} from '../models';
 import {preset} from '../models';
-import {generation} from '../models';
-import {compositor} from '../models';
 import {serverclient} from '../models';
+import {generation} from '../models';
 import {importexport} from '../models';
 import {kids} from '../models';
 import {llm} from '../models';
@@ -19,8 +18,6 @@ export function BrowseDirectory(arg1:string):Promise<Array<filebrowser.FileEntry
 export function CancelQueue():Promise<void>;
 
 export function CancelQueueJob(arg1:number):Promise<void>;
-
-export function CheckRembg():Promise<void>;
 
 export function CheckServices():Promise<settings.ServiceStatus>;
 
@@ -50,8 +47,6 @@ export function CreateResolution(arg1:preset.Resolution):Promise<preset.Resoluti
 
 export function CreateSession(arg1:string):Promise<preset.SessionInfo>;
 
-export function DecomposeScene(arg1:generation.DecomposeSceneParams):Promise<compositor.Scene>;
-
 export function DeleteCompoundPreset(arg1:number):Promise<void>;
 
 export function DeleteDescription(arg1:number):Promise<void>;
@@ -67,8 +62,6 @@ export function DeletePresetType(arg1:number):Promise<void>;
 export function DeletePrompt(arg1:number):Promise<void>;
 
 export function DeleteResolution(arg1:number):Promise<void>;
-
-export function DeleteSavedScene(arg1:number):Promise<void>;
 
 export function DeleteServerLLMModel(arg1:string):Promise<void>;
 
@@ -103,8 +96,6 @@ export function GenerateCompoundImage(arg1:generation.GenerateCompoundImageParam
 export function GenerateFromImage(arg1:generation.GenerateFromImageParams):Promise<generation.GenerateImageResult>;
 
 export function GenerateImage(arg1:generation.GenerateImageParams):Promise<generation.GenerateImageResult>;
-
-export function GenerateMultiPass(arg1:compositor.Scene):Promise<compositor.MultiPassResult>;
 
 export function GenerateSDPrompt(arg1:generation.GenerateSDPromptParams):Promise<generation.GenerateSDPromptResult>;
 
@@ -154,8 +145,6 @@ export function GetSDUpscalers():Promise<Array<sd.Upscaler>>;
 
 export function GetSDVAEs():Promise<Array<sd.VAE>>;
 
-export function GetSavedScene(arg1:number):Promise<preset.SavedScene>;
-
 export function GetServerBackends():Promise<Array<serverclient.BackendInfo>>;
 
 export function GetServerLLMModels():Promise<Array<serverclient.LLMModelInfo>>;
@@ -204,8 +193,6 @@ export function ListPrompts():Promise<Array<preset.SavedPrompt>>;
 
 export function ListResolutions():Promise<Array<preset.Resolution>>;
 
-export function ListSavedScenes():Promise<Array<preset.SavedScene>>;
-
 export function ListSessions():Promise<Array<preset.SessionInfo>>;
 
 export function OpenImportCompoundFile():Promise<importexport.CompoundImportPreview>;
@@ -242,8 +229,6 @@ export function SaveExportPreset(arg1:preset.ExportPreset):Promise<preset.Export
 
 export function SaveImage(arg1:string,arg2:string):Promise<string>;
 
-export function SaveScene(arg1:preset.SavedScene):Promise<preset.SavedScene>;
-
 export function SaveWindowLayout(arg1:number):Promise<void>;
 
 export function SelectBrowserFolder():Promise<string>;
@@ -279,8 +264,6 @@ export function UpdatePreset(arg1:preset.Preset):Promise<preset.Preset>;
 export function UpdatePresetType(arg1:preset.PresetType):Promise<preset.PresetType>;
 
 export function UpdateResolution(arg1:preset.Resolution):Promise<preset.Resolution>;
-
-export function UpdateSavedScene(arg1:preset.SavedScene):Promise<preset.SavedScene>;
 
 export function UpdateSettings(arg1:Record<string, string>):Promise<void>;
 

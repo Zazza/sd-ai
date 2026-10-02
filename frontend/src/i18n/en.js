@@ -4,7 +4,6 @@ export const en = {
   'app.nav_create': 'Create',
   'app.nav_generate': 'Generate',
   'app.nav_remix': 'Remix',
-  'app.nav_multi_scene': 'Multi-Scene',
   'app.nav_compare': 'Compare',
   'app.nav_library': 'Library',
   'app.nav_my_images': 'My Images',
@@ -180,17 +179,6 @@ export const en = {
   'settings.label_keep_alive': 'Keep Alive',
   'settings.label_gpu_layers': 'GPU Layers (num_gpu)',
   'settings.btn_save_connection': 'Save Connection Settings',
-  'settings.section_rembg': 'Rembg (Background Removal)',
-  'settings.rembg_saved': 'URL saved.',
-  'settings.rembg_description': 'Rembg is an AI background removal service. Run it on any device with Python/CUDA:',
-  'settings.rembg_required': 'Then enter its URL below. Required for clean multi-character compositing.',
-  'settings.label_rembg_url': 'Rembg Server URL',
-  'settings.btn_testing': 'Testing...',
-  'settings.btn_test': 'Test',
-  'settings.rembg_ok': 'Connection successful \u2014 rembg is running.',
-  'settings.rembg_error': 'Connection failed \u2014 check URL and make sure rembg is running.',
-  'settings.rembg_no_url': 'Without rembg, Go-based white background removal will be used (lower quality, visible artifacts on edges).',
-  'settings.btn_save_rembg': 'Save Rembg URL',
   'settings.section_llm_models': 'AI Assistant Models',
   'settings.no_models': 'No models available',
   'settings.btn_loading': 'Loading...',
@@ -380,49 +368,6 @@ export const en = {
   'export.btn_cancel': 'Cancel',
   'export.error_no_image': 'No image loaded',
 
-  // SceneEditorPage.vue
-  'scene.title': 'Multi-Pass Scene Generator',
-  'scene.label_style': 'Style',
-  'scene.select_style': 'Choose a style...',
-  'scene.label_description': 'Scene Description',
-  'scene.placeholder_description': 'Describe the scene with all characters, e.g.: A warrior and a mage standing in a dark forest clearing. The warrior is on the left with a sword, the mage on the right casting fire.',
-  'scene.label_exclude': 'Exclude',
-  'scene.placeholder_exclude': 'e.g.: female, woman, girl, nude, deformed',
-  'scene.btn_decompose': 'Decompose Scene',
-  'scene.decomposing': 'Decomposing...',
-  'scene.saved_scenes': 'Saved Scenes',
-  'scene.btn_delete': 'Delete',
-  'scene.scene_editor': 'Scene Editor',
-  'scene.btn_back': 'Back',
-  'scene.label_background': 'Background Prompt',
-  'scene.characters': 'Characters ({count})',
-  'scene.btn_add_character': '+ Add Character',
-  'scene.placeholder_char_name': 'Character name',
-  'scene.btn_remove': 'Remove',
-  'scene.label_char_prompt': 'Character Prompt',
-  'scene.x_position': 'X Position: {value}',
-  'scene.y_position': 'Y Position: {value}',
-  'scene.scale': 'Scale: {value}',
-  'scene.label_count': 'Count',
-  'scene.btn_save_scene': 'Save Scene',
-  'scene.btn_cancel': 'Cancel',
-  'scene.generating_background': 'Generating background...',
-  'scene.generating_character': 'Generating character {current}/{total}...',
-  'scene.removing_background': 'Removing background ({current}/{total})...',
-  'scene.refining': 'Refining image...',
-  'scene.done': 'Done!',
-  'scene.result': 'Result',
-  'scene.results': 'Results ({count})',
-  'scene.btn_save': 'Save',
-  'scene.btn_save_image': 'Save Image',
-  'scene.btn_new_scene': 'New Scene',
-  'scene.error_enter_description': 'Enter a scene description',
-  'scene.error_select_style': 'Please choose a style',
-  'scene.label_refine_prompt': 'Refinement Prompt',
-  'scene.placeholder_refine_prompt': 'Auto-generated if empty. Describe the full scene for better blending...',
-  'scene.label_refine_strength': 'Refinement Strength: {value}',
-  'scene.hint_refine_strength': 'Higher = more blending, lower = keeps original',
-
   // FileBrowserPage.vue
   'browser.placeholder_path': 'Enter folder path...',
   'browser.btn_browse': 'Browse',
@@ -607,14 +552,5 @@ export const en = {
   'pipeline_import.btn_import_short': 'Import',
   'pipeline_import.btn_import': 'Import ({count})',
   'pipeline_import.importing': 'Importing...',
-}
-
-export function t(key, params) {
-  let str = en[key] || key
-  if (params) {
-    for (const [k, v] of Object.entries(params)) {
-      str = str.replace(new RegExp(`\\{${k}\\}`, 'g'), v)
-    }
-  }
-  return str
+  'fi.mask_inverted': ' [inverted]',
 }

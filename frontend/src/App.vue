@@ -1,16 +1,15 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { WindowSetSystemDefaultTheme } from './wailsjs/runtime/runtime'
-import { Diamond, Sparkles, LayoutGrid, Sliders, Settings, RotateCcw, Download, FolderOpen, Sun, Moon, ImagePlus, Columns } from 'lucide-vue-next'
+import { Diamond, Sparkles, Sliders, Settings, RotateCcw, Download, FolderOpen, Sun, Moon, ImagePlus, Columns } from 'lucide-vue-next'
 import { api } from './api.js'
-import { t } from './i18n/index.js'
+import { t, setLocale, locale } from './i18n/index.js'
 import UnifiedPresetsPage from './components/UnifiedPresetsPage.vue'
 import UnifiedGeneratePage from './components/UnifiedGeneratePage.vue'
 import GenerateFromImagePage from './components/GenerateFromImagePage.vue'
 import ComparePage from './components/ComparePage.vue'
 import ExportPage from './components/ExportPage.vue'
 import SettingsPage from './components/SettingsPage.vue'
-import SceneEditorPage from './components/SceneEditorPage.vue'
 import AppFooter from './components/AppFooter.vue'
 import FileBrowserPage from './components/FileBrowserPage.vue'
 
@@ -110,7 +109,6 @@ const currentPage = computed(() => {
     case 'remix': return GenerateFromImagePage
     case 'compare': return ComparePage
     case 'export': return ExportPage
-    case 'scene': return SceneEditorPage
     case 'presets': return UnifiedPresetsPage
     case 'settings': return SettingsPage
     case 'browser': return FileBrowserPage
@@ -156,9 +154,6 @@ onUnmounted(() => {
           <a class="sidebar-link" :class="{ active: page === 'compare' }" @click="page = 'compare'">
             <Columns :size="16" class="icon" /> {{ t('app.nav_compare') }}
           </a>
-          <a class="sidebar-link" :class="{ active: page === 'scene' }" @click="page = 'scene'">
-            <LayoutGrid :size="16" class="icon" /> {{ t('app.nav_multi_scene') }}
-          </a>
         </div>
         <div class="sidebar-group">
           <div class="sidebar-group-label">{{ t('app.nav_library') }}</div>
@@ -183,6 +178,9 @@ onUnmounted(() => {
         <button class="sidebar-theme-btn" @click="toggleTheme" :title="theme === 'dark' ? t('app.theme_light') : t('app.theme_dark')">
           <Sun v-if="theme === 'dark'" :size="14" class="icon" />
           <Moon v-else :size="14" class="icon" />
+        </button>
+        <button class="sidebar-theme-btn" @click="setLocale(locale === 'ru' ? 'en' : 'ru')" :title="locale === 'ru' ? 'English' : 'Русский'">
+          {{ locale === 'ru' ? 'EN' : 'RU' }}
         </button>
         <button class="sidebar-reset-btn" :class="{ confirm: confirmReset }" @click="resetAll">
           <RotateCcw :size="14" class="icon" /> {{ confirmReset ? t('app.confirm') : t('app.reset_all') }}

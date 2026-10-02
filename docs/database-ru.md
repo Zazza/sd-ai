@@ -90,7 +90,6 @@ Key-value хранилище настроек.
 |------|----------|---------|
 | `llm_url` | URL LLM API | `http://localhost:1234` |
 | `sd_url` | URL SD WebUI | `http://localhost:7860` |
-| `rembg_url` | URL rembg API | `http://localhost:5000` |
 | `llm_generate_model` | Модель для промптов | из env |
 | `llm_analyze_model` | Модель для vision | из env |
 | `llm_backend` | ollama/lmstudio | из env |
@@ -135,16 +134,6 @@ Key-value хранилище настроек.
 |------|-----|
 | id | INTEGER PK |
 | text | TEXT |
-| created_at | TEXT |
-
-### saved_scenes
-Сохранённые сцены для multi-pass.
-
-| Поле | Тип |
-|------|-----|
-| id | INTEGER PK |
-| name | TEXT |
-| scene_json | TEXT (JSON Scene) |
 | created_at | TEXT |
 
 ### sessions

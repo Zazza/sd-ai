@@ -52,10 +52,6 @@ func Open(dbPath string) (*DB, error) {
 		return nil, fmt.Errorf("migrate v6: %w", err)
 	}
 
-	if err := migrateV7(db); err != nil {
-		return nil, fmt.Errorf("migrate v7: %w", err)
-	}
-
 	if err := migrateV8(db); err != nil {
 		return nil, fmt.Errorf("migrate v8: %w", err)
 	}
@@ -126,6 +122,10 @@ func Open(dbPath string) (*DB, error) {
 
 	if err := migrateV25(db); err != nil {
 		return nil, fmt.Errorf("migrate v25: %w", err)
+	}
+
+	if err := migrateV26(db); err != nil {
+		return nil, fmt.Errorf("migrate v26: %w", err)
 	}
 
 	return &DB{db: db}, nil
@@ -907,18 +907,6 @@ func (d *DB) GetCompoundPresetsByIDs(ids []int64) ([]CompoundPreset, error) {
 	return items, nil
 }
 
-func migrateV7(db *sql.DB) error {
-	_, err := db.Exec(`
-		CREATE TABLE IF NOT EXISTS saved_scenes (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			name TEXT NOT NULL,
-			scene_json TEXT NOT NULL,
-			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-		)
-	`)
-	return err
-}
-
 func migrateV8(db *sql.DB) error {
 	newCols := []struct {
 		name string
@@ -934,53 +922,6 @@ func migrateV8(db *sql.DB) error {
 		}
 	}
 	return nil
-}
-
-func (d *DB) ListSavedScenes() ([]SavedScene, error) {
-	rows, err := d.db.Query(`SELECT id, name, scene_json, created_at FROM saved_scenes ORDER BY created_at DESC`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var items []SavedScene
-	for rows.Next() {
-		var s SavedScene
-		if err := rows.Scan(&s.ID, &s.Name, &s.SceneJSON, &s.CreatedAt); err != nil {
-			return nil, err
-		}
-		items = append(items, s)
-	}
-	return items, rows.Err()
-}
-
-func (d *DB) GetSavedScene(id int64) (*SavedScene, error) {
-	var s SavedScene
-	err := d.db.QueryRow(`SELECT id, name, scene_json, created_at FROM saved_scenes WHERE id = ?`, id).
-		Scan(&s.ID, &s.Name, &s.SceneJSON, &s.CreatedAt)
-	if err != nil {
-		return nil, err
-	}
-	return &s, nil
-}
-
-func (d *DB) CreateSavedScene(s *SavedScene) error {
-	result, err := d.db.Exec(`INSERT INTO saved_scenes (name, scene_json) VALUES (?, ?)`, s.Name, s.SceneJSON)
-	if err != nil {
-		return err
-	}
-	s.ID, _ = result.LastInsertId()
-	return nil
-}
-
-func (d *DB) UpdateSavedScene(s *SavedScene) error {
-	_, err := d.db.Exec(`UPDATE saved_scenes SET name=?, scene_json=? WHERE id=?`, s.Name, s.SceneJSON, s.ID)
-	return err
-}
-
-func (d *DB) DeleteSavedScene(id int64) error {
-	_, err := d.db.Exec(`DELETE FROM saved_scenes WHERE id = ?`, id)
-	return err
 }
 
 func migrateV9(db *sql.DB) error {
@@ -1420,5 +1361,13 @@ func migrateV24(db *sql.DB) error {
 
 func migrateV25(db *sql.DB) error {
 	_, err := db.Exec(`UPDATE hires_profiles SET upscale = 3.0, denoising_strength = 0.6 WHERE name = 'Max' AND is_builtin = 1`)
+	return err
+}
+
+func migrateV26(db *sql.DB) error {
+	_, err := db.Exec(`
+		DROP TABLE IF EXISTS saved_scenes;
+		DELETE FROM settings WHERE key = 'rembg_url';
+	`)
 	return err
 }

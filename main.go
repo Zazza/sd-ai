@@ -19,7 +19,6 @@ import (
 	"go-sd/internal/config"
 	"go-sd/internal/llm"
 	"go-sd/internal/preset"
-	"go-sd/internal/rembg"
 	"go-sd/internal/sd"
 	"go-sd/internal/serverclient"
 )
@@ -61,7 +60,6 @@ func main() {
 
 	llmClient := llm.New(cfg.LLMUrl, cfg.LLMBackend)
 	sdClient := sd.New(cfg.SDUrl)
-	rembgClient := rembg.New("")
 	srvClient := serverclient.NewClient()
 
 	if v, _ := presets.GetSetting("llm_url"); v != "" {
@@ -90,13 +88,12 @@ func main() {
 	if mode, _ := presets.GetSetting("connection_mode"); mode == "server" {
 		if serverURL, _ := presets.GetSetting("server_url"); serverURL != "" {
 			srvClient.SetBaseURL(serverURL)
-			sdURL, llmURL, rembgURL := srvClient.ProxyURLs()
+			sdURL, llmURL := srvClient.ProxyURLs()
 			cfg.SDUrl = sdURL
 			cfg.LLMUrl = llmURL
 			sdClient.SetURL(sdURL)
 			llmClient.SetURL(llmURL)
 			llmClient.SetBackend("ollama")
-			rembgClient.SetURL(rembgURL)
 		}
 	}
 
@@ -116,7 +113,7 @@ func main() {
 	}
 	llmClient.SetBackendConfig(backendCfg)
 
-	app := NewApp(presets, llmClient, sdClient, rembgClient, srvClient, cfg)
+	app := NewApp(presets, llmClient, sdClient, srvClient, cfg)
 	imgHandler := &imageFileHandler{db: presets, dataDir: filepath.Dir(cfg.DBPath)}
 
 	if err := wails.Run(&options.App{

@@ -14,7 +14,6 @@ SD Studio объединяет локальный Stable Diffusion и LLM в е�
 
 - **LLM-генерация промптов** — опишите на естественном языке, LLM объединит ваш замысел с пресетом в готовый SD-промпт
 - **Smart Remove** — нарисуйте маску, LLM проанализирует контекст и автоматически восстановит фон
-- **Мульти-сцены** — опишите сцену, LLM разложит на персонажей, композитинг через multi-pass inpaint
 - **Пайплайны** — объедините несколько шагов генерации (txt2img → img2img → inpaint) в один воркфлоу
 - **Управление сессиями** — организуйте работу в сессии с полной историей генераций
 - **Детский режим** — PIN-защита с фильтрацией контента по категориям
@@ -26,7 +25,6 @@ SD Studio объединяет локальный Stable Diffusion и LLM в е�
   <img src="docs/screenshots/from-image-inpaint.png" width="45%" alt="Inpainting с редактором масок">
 </p>
 <p align="center">
-  <img src="docs/screenshots/scene-editor.png" width="45%" alt="Мульти-сцены">
   <img src="docs/screenshots/batch-generation.png" width="45%" alt="Пакетная генерация">
 </p>
 
@@ -54,7 +52,6 @@ SD Studio объединяет локальный Stable Diffusion и LLM в е�
 | Smart Merge | Описание на естественном языке → объединённый SD-промпт через LLM |
 | Анализ изображений | Загрузите изображение, анализ через vision LLM (быстрый или глубокий режим) |
 | Рекомендация пресетов | LLM выбирает лучший пресет из библиотеки по описанию |
-| Декомпозиция сцен | LLM разбивает описание сцены на отдельных персонажей |
 | Настройка инструкций | Редактируйте системный промпт, формирующий формат вывода LLM |
 
 ### Воркфлоу и управление
@@ -82,8 +79,6 @@ SD Studio подключается к двум сервисам в локаль�
 
 - **Stable Diffusion WebUI** (A1111 или [Forge](https://github.com/lllyasviel/stable-diffusion-webui-forge)) — запускается с флагом `--api`. [Руководство по настройке](docs/setup-ru.md). По умолчанию: `http://localhost:7860`
 - **LLM API** — любой OpenAI-совместимый сервер: [Ollama](https://ollama.com/), [llama.cpp](https://github.com/ggerganov/llama.cpp) или [LM Studio](https://lmstudio.ai/). По умолчанию: `http://localhost:11434/v1`
-
-Опционально: [Rembg](https://github.com/danielgatis/rembg) для удаления фона в режиме мульти-сцен.
 
 ### Разработка
 
@@ -155,8 +150,6 @@ make build   # production-бинарник → build/bin/sd-studio
 
 **From Image:** Загрузка → Vision LLM анализирует → Inpaint/Remove с редактором масок
 
-**Мульти-сцены:** Описание сцены → LLM декомпозирует → Multi-pass inpaint композитинг
-
 **Smart Remove:** Рисование маски → LLM vision анализирует контекст → Авто-inpaint фона
 
 ## Структура проекта
@@ -177,9 +170,7 @@ make build   # production-бинарник → build/bin/sd-studio
 │   ├── promptutil/      # Утилиты промптов
 │   ├── filebrowser/     # Файловый браузер
 │   ├── serverclient/    # Клиент API сервера
-│   ├── compositor/      # Мульти-сцены
 │   ├── kids/            # Детский режим
-│   ├── rembg/           # Удаление фона
 │   ├── logger/          # Логирование
 │   └── api/             # HTTP API
 ├── serverclient/    # Клиент API сервера (подключение к sd-ai-server)

@@ -172,7 +172,6 @@ Compound: `ListCompoundPresets`, `GetCompoundPreset`, `CreateCompoundPreset`, `U
 Settings: `GetSetting(key)`, `SetSetting(key, value)`
 Descriptions: `ListDescriptions`, `CreateDescription`, `UpdateDescription`, `DeleteDescription`
 Prompts: `ListPrompts`, `CreatePrompt`, `DeletePrompt`
-Scenes: `ListSavedScenes`, `GetSavedScene`, `SaveScene`, `UpdateSavedScene`, `DeleteSavedScene`
 Sessions: `CreateSession`, `ListSessions`, `SwitchSession`, `DeleteSession`, etc.
 - `AddSessionItem` деактивирует предыдущие элементы (`is_active=0`) перед вставкой нового
 Export: `ListExportPresets`, `SaveExportPreset`, `DeleteExportPreset`
@@ -212,53 +211,6 @@ type LoRAEntry struct {
 }
 ```
 
-## internal/compositor
-
-### Compositor
-Multi-pass генерация сцен с персонажами.
-
-```go
-type Compositor struct { ... }
-
-func New(sdClient SDGenerator, rembgClient RembgClient, presetDB PresetGetter, emit ProgressEmitter) *Compositor
-func (c *Compositor) GenerateScene(scene Scene) (*MultiPassResult, error)
-func DecomposeSceneFromJSON(jsonStr string) (*Scene, error)
-```
-
-### Интерфейсы
-```go
-type SDGenerator interface {
-    Txt2Img(req sd.Txt2ImgRequest) (*sd.Txt2ImgResponse, error)
-    Img2Img(req sd.Img2ImgRequest) (*sd.Txt2ImgResponse, error)
-    SetModel(modelName string) error
-    SetVAE(vaeName string) error
-}
-
-type RembgClient interface {
-    Remove(imageBase64 string) (string, error)
-}
-
-type PresetGetter interface {
-    Get(id int64) (*preset.Preset, error)
-}
-
-type ProgressEmitter interface {
-    Emit(step string, character, total int)
-}
-```
-
-### Компоновка
-- `RemoveWhiteBackground(img)` — удаляет белый фон (порог 240)
-- `CompositeOver(background, character, pos, scale)` — накладывает персонажа на фон
-
-## internal/rembg
-
-```go
-type Client struct { ... }
-func New(baseURL string) *Client
-func (c *Client) Remove(imageBase64 string) (string, error)
-```
-
 ## internal/generation
 
 Сервис генерации, обрабатывающий все режимы генерации изображений. Извлечён из `app.go` для изоляции логики генерации от Wails bindings.
@@ -272,7 +224,6 @@ func (s *Service) GenerateImage(params GenerateImageParams) (*GenerateImageResul
 func (s *Service) GenerateFromImage(params GenerateFromImageParams) (*GenerateImageResult, error)
 func (s *Service) GenerateSDPrompt(description, presetType string) (string, error)
 func (s *Service) GenerateCompoundImage(params CompoundParams) (*GenerateImageResult, error)
-func (s *Service) GenerateScene(scene SavedScene) (*MultiPassResult, error)
 func (s *Service) UpscaleImage(image, mode string, scale float64) (*GenerateImageResult, error)
 func (s *Service) StartSDPolling()
 func (s *Service) StopSDPolling()
@@ -283,7 +234,6 @@ func (s *Service) StopSDPolling()
 - `GenerateFromImage` — генерация img2img с анализом исходного изображения и инпейнтингом
 - `GenerateSDPrompt` — преобразование текстового описания в SD промпт через LLM
 - `GenerateCompoundImage` — многошаговая генерация с использованием составных пресетов
-- `GenerateScene` — multi-pass генерация сцен с компоновкой персонажей
 - `UpscaleImage` — апскейлинг изображений через extras API SD WebUI
 - `StartSDPolling` / `StopSDPolling` — периодический опрос состояния SD WebUI
 
@@ -399,7 +349,6 @@ runtime.EventsEmit(a.ctx, "event:name", data)
 ```
 - `analyze:step` — прогресс анализа
 - `remove:stage` — "analyzing" / "generating"
-- `multipass:progress` — progress multi-pass
 - `batch:progress` / `batch:done` / `batch:error`
 - `session:added` — новое изображение в сессии
 - `queue:updated` — изменение состояния очереди

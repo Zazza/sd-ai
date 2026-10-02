@@ -23,7 +23,6 @@ interface GenerateImageResult {
 interface ServiceStatus {
   sd: boolean                      // SD WebUI доступен
   llm: boolean                     // LLM API доступен
-  rembg: boolean                   // rembg доступен
 }
 ```
 
@@ -132,60 +131,6 @@ api.batchGenerate(params: BatchGenerateParams): Promise<void>
 EventsOn("batch:progress", (current, total, fileName) => { ... })
 EventsOn("batch:done", () => { ... })
 EventsOn("batch:error", (err) => { ... })
-```
-
----
-
-## Multi-Pass Composition
-
-### DecomposeScene
-LLM decomposes a scene description into background + characters.
-
-```typescript
-api.decomposeScene(params: DecomposeSceneParams)
-  → Promise<Scene>
-```
-
-```typescript
-interface DecomposeSceneParams {
-  description: string
-  preset_id: number
-  width?: number
-  height?: number
-}
-
-interface Scene {
-  background_prompt: string
-  negative_prompt: string
-  characters: CharacterSlot[]
-  width: number
-  height: number
-  preset_id: number
-}
-
-interface CharacterSlot {
-  name: string
-  prompt: string
-  position: { x: number; y: number }    // 0.0 - 1.0
-  scale: number                          // 0.1 - 2.0
-}
-```
-
-### GenerateMultiPass
-Generate a scene in multiple passes.
-
-```typescript
-api.generateMultiPass(scene: Scene)
-  → Promise<MultiPassResult>
-```
-
-**Events:**
-```javascript
-EventsOn("multipass:progress", (data) => {
-  // data.step: "background" | "character" | "compositing"
-  // data.character: 1-based index
-  // data.total: total characters
-})
 ```
 
 ---

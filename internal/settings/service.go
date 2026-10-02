@@ -12,7 +12,6 @@ import (
 	"go-sd/internal/llm"
 	"go-sd/internal/logger"
 	"go-sd/internal/preset"
-	"go-sd/internal/rembg"
 	"go-sd/internal/sd"
 	"go-sd/internal/serverclient"
 )
@@ -33,13 +32,12 @@ type Service struct {
 	llm          llm.Service
 	sd           sd.Service
 	cfg          *config.Config
-	rembg        *rembg.Client
 	log          *logger.Logger
 	serverClient *serverclient.Client
 }
 
-func New(db *preset.DB, llmSvc llm.Service, sdSvc sd.Service, cfg *config.Config, rembgClient *rembg.Client, log *logger.Logger, srvClient *serverclient.Client) *Service {
-	return &Service{db: db, llm: llmSvc, sd: sdSvc, cfg: cfg, rembg: rembgClient, log: log, serverClient: srvClient}
+func New(db *preset.DB, llmSvc llm.Service, sdSvc sd.Service, cfg *config.Config, log *logger.Logger, srvClient *serverclient.Client) *Service {
+	return &Service{db: db, llm: llmSvc, sd: sdSvc, cfg: cfg, log: log, serverClient: srvClient}
 }
 
 func (s *Service) CheckServices() ServiceStatus {
@@ -97,21 +95,6 @@ func (s *Service) CheckServices() ServiceStatus {
 	return status
 }
 
-func (s *Service) CheckRembg() error {
-	rembgURL, _ := s.db.GetSetting("rembg_url")
-	if rembgURL == "" {
-		return fmt.Errorf("rembg URL not configured")
-	}
-	s.rembg.SetURL(rembgURL)
-	err := s.rembg.HealthCheck()
-	if err != nil {
-		s.log.Error("Rembg check failed: %s", err)
-	} else {
-		s.log.Info("Rembg connected: %s", rembgURL)
-	}
-	return err
-}
-
 func (s *Service) GetSettings() (map[string]string, error) {
 	settings, err := s.db.GetAllSettings()
 	if err != nil {
@@ -151,7 +134,6 @@ func (s *Service) GetSettings() (map[string]string, error) {
 		"kids_cat_weapons":            "true",
 		"kids_cat_substances":         "true",
 		"kids_cat_mature":             "true",
-		"rembg_url":                   "",
 		"connection_mode":             "direct",
 		"server_url":                  "",
 		"preview_mode":                "false",
@@ -167,7 +149,7 @@ func (s *Service) GetSettings() (map[string]string, error) {
 }
 
 func (s *Service) UpdateSettings(data map[string]string) error {
-	urlFields := map[string]bool{"llm_url": true, "sd_url": true, "rembg_url": true, "server_url": true}
+	urlFields := map[string]bool{"llm_url": true, "sd_url": true, "server_url": true}
 	for k, v := range data {
 		if urlFields[k] && v != "" {
 			if _, err := url.Parse(v); err != nil {
@@ -208,10 +190,9 @@ func (s *Service) UpdateSettings(data map[string]string) error {
 			}
 			if serverURL != "" && s.serverClient != nil {
 				s.serverClient.SetBaseURL(serverURL)
-				sdURL, llmURL, rembgURL := s.serverClient.ProxyURLs()
+				sdURL, llmURL := s.serverClient.ProxyURLs()
 				s.llm.SetURL(llmURL)
 				s.sd.SetURL(sdURL)
-				s.rembg.SetURL(rembgURL)
 				s.llm.SetBackend("ollama")
 				s.cfg.LLMUrl = llmURL
 				s.cfg.SDUrl = sdURL
@@ -227,9 +208,6 @@ func (s *Service) UpdateSettings(data map[string]string) error {
 			if v, err := s.db.GetSetting("sd_url"); err == nil && v != "" {
 				s.sd.SetURL(v)
 				s.cfg.SDUrl = v
-			}
-			if v, err := s.db.GetSetting("rembg_url"); err == nil && v != "" {
-				s.rembg.SetURL(v)
 			}
 			if v, err := s.db.GetSetting("llm_backend"); err == nil && v != "" {
 				s.llm.SetBackend(v)
@@ -274,12 +252,6 @@ func (s *Service) UpdateSettings(data map[string]string) error {
 	}
 	if v, ok := data["llm_analyze_model"]; ok && v != "" {
 		s.cfg.VisionModel = v
-	}
-	if v, ok := data["rembg_url"]; ok {
-		mode, _ := s.db.GetSetting("connection_mode")
-		if mode != "server" {
-			s.rembg.SetURL(v)
-		}
 	}
 
 	var changed []string

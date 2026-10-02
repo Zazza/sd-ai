@@ -27,14 +27,12 @@ sd-ai/
 │   ├── preset/                # SQLite CRUD (presets, settings, sessions)
 │   ├── generation/            # Image generation service
 │   ├── queue/                 # Job queue with retry and paused state
-│   ├── compositor/            # Multi-pass generation (background + characters)
 │   ├── session/               # Session management
 │   ├── importexport/          # Preset import/export
 │   ├── settings/              # Settings service
 │   ├── promptutil/            # Prompt utilities (ExtractJSON, StripJunk)
 │   ├── filebrowser/           # File browser backend
 │   ├── serverclient/          # Server API client
-│   ├── rembg/                 # Background removal (rembg API)
 │   ├── kids/                  # Kids mode (content filtering)
 │   └── logger/                # Event logger with LogBridge
 ├── server/                    # Standalone service orchestrator
@@ -77,7 +75,7 @@ sd-ai/
 `App` is the single entry point for the frontend. All Wails bindings are exported methods on `*App` (capitalized). The frontend never accesses internal packages directly.
 
 ### Client (HTTP wrappers)
-`llm.Client`, `sd.Client`, `rembg.Client` — stateless HTTP clients for external services. Constructor injection via `New*`.
+`llm.Client`, `sd.Client` — stateless HTTP clients for external services. Constructor injection via `New*`.
 
 ### Repository (preset.DB)
 `preset.DB` encapsulates SQLite. Raw SQL via `database/sql`. Migrations are defined in Go code (`CREATE TABLE IF NOT EXISTS`).
@@ -124,7 +122,7 @@ The `server/` package is a standalone Go service for managing AI infrastructure:
 ```
 
 ### Key Features
-- **Process Management** — lifecycle of SD WebUI, Ollama, Rembg (start/stop/restart)
+- **Process Management** — lifecycle of SD WebUI, Ollama (start/stop/restart)
 - **GPU Monitoring** — nvidia-smi polling, VRAM tracking, auto-optimization
 - **GPU Proxy** — priority queue with VRAM cooldown (prevents OOM on low-VRAM GPUs)
 - **Health Monitoring** — periodic HTTP checks for all services
@@ -148,7 +146,6 @@ sessions ──── session_items
 settings (key-value)
 saved_descriptions
 saved_prompts
-saved_scenes
 export_presets
 ```
 

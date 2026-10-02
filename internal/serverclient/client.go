@@ -100,11 +100,10 @@ func (c *Client) GetBaseURL() string {
 	return c.baseURL
 }
 
-func (c *Client) ProxyURLs() (sdURL, llmURL, rembgURL string) {
+func (c *Client) ProxyURLs() (sdURL, llmURL string) {
 	base := c.baseURL
 	sdURL = base + "/api/sd"
 	llmURL = base + "/api/llm"
-	rembgURL = base + "/api/rembg"
 	return
 }
 

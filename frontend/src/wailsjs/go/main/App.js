@@ -18,10 +18,6 @@ export function CancelQueueJob(arg1) {
   return window['go']['main']['App']['CancelQueueJob'](arg1);
 }
 
-export function CheckRembg() {
-  return window['go']['main']['App']['CheckRembg']();
-}
-
 export function CheckServices() {
   return window['go']['main']['App']['CheckServices']();
 }
@@ -78,10 +74,6 @@ export function CreateSession(arg1) {
   return window['go']['main']['App']['CreateSession'](arg1);
 }
 
-export function DecomposeScene(arg1) {
-  return window['go']['main']['App']['DecomposeScene'](arg1);
-}
-
 export function DeleteCompoundPreset(arg1) {
   return window['go']['main']['App']['DeleteCompoundPreset'](arg1);
 }
@@ -112,10 +104,6 @@ export function DeletePrompt(arg1) {
 
 export function DeleteResolution(arg1) {
   return window['go']['main']['App']['DeleteResolution'](arg1);
-}
-
-export function DeleteSavedScene(arg1) {
-  return window['go']['main']['App']['DeleteSavedScene'](arg1);
 }
 
 export function DeleteServerLLMModel(arg1) {
@@ -184,10 +172,6 @@ export function GenerateFromImage(arg1) {
 
 export function GenerateImage(arg1) {
   return window['go']['main']['App']['GenerateImage'](arg1);
-}
-
-export function GenerateMultiPass(arg1) {
-  return window['go']['main']['App']['GenerateMultiPass'](arg1);
 }
 
 export function GenerateSDPrompt(arg1) {
@@ -286,10 +270,6 @@ export function GetSDVAEs() {
   return window['go']['main']['App']['GetSDVAEs']();
 }
 
-export function GetSavedScene(arg1) {
-  return window['go']['main']['App']['GetSavedScene'](arg1);
-}
-
 export function GetServerBackends() {
   return window['go']['main']['App']['GetServerBackends']();
 }
@@ -386,10 +366,6 @@ export function ListResolutions() {
   return window['go']['main']['App']['ListResolutions']();
 }
 
-export function ListSavedScenes() {
-  return window['go']['main']['App']['ListSavedScenes']();
-}
-
 export function ListSessions() {
   return window['go']['main']['App']['ListSessions']();
 }
@@ -462,10 +438,6 @@ export function SaveImage(arg1, arg2) {
   return window['go']['main']['App']['SaveImage'](arg1, arg2);
 }
 
-export function SaveScene(arg1) {
-  return window['go']['main']['App']['SaveScene'](arg1);
-}
-
 export function SaveWindowLayout(arg1) {
   return window['go']['main']['App']['SaveWindowLayout'](arg1);
 }
@@ -536,10 +508,6 @@ export function UpdatePresetType(arg1) {
 
 export function UpdateResolution(arg1) {
   return window['go']['main']['App']['UpdateResolution'](arg1);
-}
-
-export function UpdateSavedScene(arg1) {
-  return window['go']['main']['App']['UpdateSavedScene'](arg1);
 }
 
 export function UpdateSettings(arg1) {

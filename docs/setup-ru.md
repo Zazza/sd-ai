@@ -8,7 +8,6 @@
 - [Ollama](#ollama)
 - [LM Studio](#lm-studio)
 - [llama.cpp](#llamacpp)
-- [Rembg](#rembg)
 - [SD Studio Server](#sd-studio-server)
 
 ---
@@ -241,76 +240,9 @@ curl http://localhost:8081/v1/models
 
 ---
 
-## Rembg
-
-AI-удаление фона. Используется для чистой вырезки персонажей при генерации нескольких персонажей. Работает как самостоятельный HTTP-сервис.
-
-### Установка
-
-**CPU:**
-```bash
-pip install "rembg[cli]"
-```
-
-**GPU (NVIDIA CUDA):**
-```bash
-pip install "rembg[gpu,cli]"
-```
-
-> Требуется Python 3.10+. Для GPU: CUDA Toolkit + cuDNN.
-
-**Windows (если команда `rembg` не найдена):**
-```bat
-python -m rembg s --host 0.0.0.0 --port 7000
-```
-
-### Запуск сервера
-
-```bash
-rembg s --host 0.0.0.0 --port 7000 --log_level info
-```
-
-При первом запуске модель скачивается автоматически (~180 МБ, сохраняется в `~/.u2net/`).
-
-### Модели
-
-Модель по умолчанию — `u2net`. Укажите другую:
-
-```bash
-rembg s --host 0.0.0.0 --port 7000 -m birefnet-general
-```
-
-| Модель | Размер | Качество | Скорость |
-|--------|--------|----------|----------|
-| `u2net` | 176 МБ | Хорошее | Средняя |
-| `u2netp` | 4 МБ | Приемлемое | Быстрая |
-| `isnet-general-use` | 176 МБ | Хорошее | Средняя |
-| `birefnet-general` | 176 МБ | Отличное | Медленнее |
-| `birefnet-general-lite` | 88 МБ | Хорошее | Средняя |
-| `birefnet-portrait` | 176 МБ | Отличное для портретов | Средняя |
-| `isnet-anime` | 176 МБ | Отличное для аниме | Средняя |
-
-### Проверка
-
-```bash
-# Проверка API
-curl http://localhost:7000/api
-
-# Тест удаления фона
-curl -s -F file=@test.png http://localhost:7000/api/remove -o result.png
-```
-
-### Настройка в SD Studio
-
-Настройки -> Rembg -> введите URL (например, `http://192.168.1.100:7000`) -> **Тест** -> **Сохранить**.
-
-Если rembg не настроен, SD Studio использует встроенное удаление фона на Go (более низкое качество, заметные артефакты по краям).
-
----
-
 ## SD Studio Server
 
-Автономный сервис для автоматического управления всеми AI-компонентами (SD WebUI, Ollama, Rembg) — установка, запуск, мониторинг, оптимизация GPU и управление моделями. Идеально для headless-развертываний и серверов.
+Автономный сервис для автоматического управления всеми AI-компонентами (SD WebUI, Ollama) — установка, запуск, мониторинг, оптимизация GPU и управление моделями. Идеально для headless-развертываний и серверов.
 
 ### Установка
 
@@ -331,7 +263,7 @@ docker compose up --build
 ```
 
 При первом запуске интерактивный мастер настройки проведёт через:
-- Выбор компонентов для установки (SD WebUI, Ollama, Rembg)
+- Выбор компонентов для установки (SD WebUI, Ollama)
 - Выбор директории данных
 - Настройку GPU-бэкенда (Forge / A1111)
 
@@ -410,5 +342,4 @@ curl http://localhost:8080/
 | Ollama | 11434 | `http://localhost:11434` |
 | LM Studio | 1234 | `http://localhost:1234` |
 | llama.cpp | 8081 | `http://localhost:8081` |
-| Rembg | 7000 | `http://localhost:7000` |
 | SD Studio Server | 8080 | `http://localhost:8080` |

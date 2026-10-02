@@ -18,14 +18,12 @@ import (
 	"sync"
 	"time"
 
-	"go-sd/internal/compositor"
 	"go-sd/internal/config"
 	"go-sd/internal/kids"
 	"go-sd/internal/llm"
 	"go-sd/internal/logger"
 	"go-sd/internal/preset"
 	"go-sd/internal/promptutil"
-	"go-sd/internal/rembg"
 	"go-sd/internal/sd"
 
 	xdraw "golang.org/x/image/draw"
@@ -177,11 +175,6 @@ type TestCompoundGenerateParams struct {
 	HiresProfileID *int64  `json:"hires_profile_id,omitempty"`
 }
 
-type DecomposeSceneParams struct {
-	Description string `json:"description"`
-	PresetID    int64  `json:"preset_id"`
-}
-
 type lastImageMeta struct {
 	IsPreview bool            `json:"is_preview"`
 	Info      json.RawMessage `json:"info"`
@@ -194,7 +187,6 @@ type Service struct {
 	llm      llm.Service
 	sd       sd.Service
 	cfg      *config.Config
-	rembg    *rembg.Client
 	dataDir  string
 	emitter  EventEmitter
 	kids     *kids.Manager
@@ -215,7 +207,6 @@ func New(
 	llmSvc llm.Service,
 	sdSvc sd.Service,
 	cfg *config.Config,
-	rembgClient *rembg.Client,
 	dataDir string,
 	emitter EventEmitter,
 	kidsMgr *kids.Manager,
@@ -228,7 +219,6 @@ func New(
 		llm:      llmSvc,
 		sd:       sdSvc,
 		cfg:      cfg,
-		rembg:    rembgClient,
 		dataDir:  dataDir,
 		emitter:  emitter,
 		kids:     kidsMgr,
@@ -1500,122 +1490,4 @@ func (s *Service) GetLastImage() (*GenerateImageResult, error) {
 func (s *Service) ClearLastImage() {
 	os.Remove(filepath.Join(s.dataDir, "last_image.png"))
 	os.Remove(filepath.Join(s.dataDir, "last_image.json"))
-}
-
-// --- DecomposeScene ---
-
-func (s *Service) DecomposeScene(params DecomposeSceneParams) (*compositor.Scene, error) {
-	s.log.UserAction("Decompose scene: %s", promptutil.Truncate(params.Description, 80))
-	if params.Description == "" {
-		return nil, fmt.Errorf("description is required")
-	}
-	if params.PresetID <= 0 {
-		return nil, fmt.Errorf("preset is required")
-	}
-
-	p, err := s.db.Get(params.PresetID)
-	if err != nil {
-		return nil, fmt.Errorf("preset not found: %w", err)
-	}
-
-	systemPrompt := config.DefaultSceneDecomposePrompt
-
-	userMessage := params.Description
-	userMessage += "\n\nPreset dimensions: 512x512"
-	if p.Prompt != "" {
-		userMessage += fmt.Sprintf("\nPreset positive prompt (STYLE — all character and background prompts MUST follow this style): %s", p.Prompt)
-	}
-	if p.NegativePrompt != "" {
-		userMessage += fmt.Sprintf("\nPreset negative prompt (MERGE into scene negative_prompt): %s", p.NegativePrompt)
-	}
-
-	maxTokens := 2048
-	if v, err := s.db.GetSetting("llm_max_tokens"); err == nil && v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			maxTokens = n
-		}
-	}
-	if maxTokens < 2048 {
-		maxTokens = 2048
-	}
-
-	generateModel := s.getGenerateModel()
-	s.settings.ApplyLLMConfig("generate")
-
-	s.emitter.Emit("llm:status", map[string]string{"status": "thinking"})
-	raw, err := s.llm.Chat(generateModel, systemPrompt, userMessage, 0.4, maxTokens)
-	if err != nil {
-		s.emitter.Emit("llm:status", map[string]string{"status": "done"})
-		return nil, fmt.Errorf("LLM decomposition failed: %w", err)
-	}
-	s.emitter.Emit("llm:status", map[string]string{"status": "done"})
-
-	scene, err := compositor.DecomposeSceneFromJSON(raw)
-	if err != nil {
-		preview := raw
-		if len(preview) > 200 {
-			preview = preview[:200] + "..."
-		}
-		s.log.Warn("Scene parse failed, LLM response: %s", preview)
-		return nil, fmt.Errorf("failed to parse scene from LLM response: %w (raw: %s)", err, preview)
-	}
-
-	scene.PresetID = params.PresetID
-	if scene.Width == 0 {
-		scene.Width = 512
-	}
-	if scene.Height == 0 {
-		scene.Height = 512
-	}
-
-	return scene, nil
-}
-
-// --- GenerateMultiPass ---
-
-func (s *Service) GenerateMultiPass(scene compositor.Scene) (*compositor.MultiPassResult, error) {
-	s.log.UserAction("Multi-pass generation: %d characters", len(scene.Characters))
-
-	emit := func(progress compositor.MultiPassProgress) {
-		s.emitter.Emit("multipass:progress", progress)
-		switch progress.Step {
-		case "background":
-			s.log.Info("Generating background...")
-		case "character":
-			s.log.Info("Generating character %d/%d", progress.Character, progress.Total)
-		case "rembg":
-			s.log.Info("Removing background (character %d/%d)", progress.Character, progress.Total)
-		case "done":
-			s.log.Info("Multi-pass generation complete")
-		}
-	}
-
-	mode, _ := s.db.GetSetting("connection_mode")
-	if mode != "server" {
-		rembgURL, _ := s.db.GetSetting("rembg_url")
-		if rembgURL != "" {
-			s.rembg.SetURL(rembgURL)
-		}
-	}
-
-	var rembgIf compositor.RembgClient
-	if s.rembg.HasURL() {
-		rembgIf = s.rembg
-		s.log.Debug("Rembg enabled: %s", s.rembg.URL())
-	} else {
-		s.log.Warn("Rembg not configured, using Go-based background removal")
-	}
-
-	c := compositor.New(s.sd, rembgIf, s.db, emit)
-	result, err := c.GenerateScene(scene)
-	if err != nil {
-		s.log.Error("Multi-pass failed: %s", err)
-		return nil, err
-	}
-
-	if result.Image != "" {
-		s.sessions.AddToSession(result.Image, nil, "scene", false, nil)
-	}
-
-	return result, nil
 }

@@ -13,7 +13,6 @@ frontend/src/
 ├── components/
 │   ├── GeneratePage.vue           # Основная генерация (txt2img)
 │   ├── GenerateFromImagePage.vue  # Генерация из изображения
-│   ├── SceneEditorPage.vue        # Multi-pass редактор сцен
 │   ├── PresetsPage.vue            # Управление пресетами
 │   ├── UnifiedPresetsPage.vue     # Unified: presets + types + compounds
 │   ├── PresetForm.vue             # Форма создания/редактирования пресета
@@ -98,7 +97,6 @@ EventsOff("remove:stage")
 |-------|------|----------|
 | `analyze:step` | `(step, total)` | GenerateFromImage |
 | `remove:stage` | `"analyzing"` / `"generating"` | GenerateFromImage |
-| `multipass:progress` | `{step, character, total}` | SceneEditor |
 | `batch:progress` | `(current, total, fileName)` | Batch |
 | `batch:done` | — | Batch |
 | `batch:error` | `error` | Batch |
@@ -148,15 +146,6 @@ const mode = ref('img2img')  // img2img | inpaint | remove
 - Перетаскивание изображения на drop zone
 - Ctrl+V вставка из буфера
 - Кнопка "Last Generated" (из сессии)
-
-### SceneEditorPage.vue
-Multi-pass компоновка персонажей.
-
-**Flow:**
-1. Описание сцены → `api.decomposeScene()` → Scene объект
-2. Редактирование: drag персонажей, промпты, позиции
-3. `api.generateMultiPass(scene)` → результат с композицией
-4. Progress: `multipass:progress` events
 
 ### PresetsPage.vue / UnifiedPresetsPage.vue
 CRUD пресетов.

@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch, inject } from 'vue'
-import { EventsOn, EventsOff } from '../wailsjs/runtime/runtime'
+import { EventsOn } from '../wailsjs/runtime/runtime'
 import { api } from '../api.js'
 import { t } from '../i18n/index.js'
 import { useGenerationProgress } from '../composables/useGenerationProgress.js'
@@ -543,6 +543,31 @@ function onQueueFailed(data) {
   }
 }
 
+function onQueuePaused(data) {
+  if (!data?.job_id || !enqueuedJobIds.value.has(data.job_id)) return
+  if ((data.retry_count || 0) < (data.max_retries || 0)) return
+
+  enqueuedJobIds.value.delete(data.job_id)
+  batchDone.value++
+  if (data.error) error.value = data.error
+
+  if (enqueuedJobIds.value.size === 0) {
+    generatingImage.value = false
+    generationStage.value = ''
+  }
+}
+
+async function interruptBatch() {
+  if (enqueuedJobIds.value.size > 0) {
+    try { await api.cancelQueue() } catch {}
+    enqueuedJobIds.value = new Set()
+    generatingImage.value = false
+    generationStage.value = ''
+    return
+  }
+  await interruptGeneration()
+}
+
 async function onSessionAdded() {
   if (!generatingImage.value && generatedImage.value) return
   try {
@@ -553,8 +578,10 @@ async function onSessionAdded() {
     genInfo.value = item.info || null
     sourceGenInfo.value = item.info || null
     isPreview.value = item.is_preview || false
-    generatingImage.value = false
-    generationStage.value = ''
+    if (enqueuedJobIds.value.size === 0) {
+      generatingImage.value = false
+      generationStage.value = ''
+    }
   } catch {}
 }
 
@@ -562,6 +589,11 @@ function enableWorkflowMode() {
   genMode.value = 'compound'
   showWorkflowLink.value = false
 }
+
+let offCompleted = () => {}
+let offFailed = () => {}
+let offSessionAdded = () => {}
+let offPaused = () => {}
 
 onMounted(async () => {
   const isReset = props.resetting
@@ -654,7 +686,7 @@ onMounted(async () => {
 
   try {
     const queue = await api.getQueue()
-    const activeJobs = (queue || []).filter(j => j.status === 'pending' || j.status === 'running')
+    const activeJobs = (queue || []).filter(j => (j.type === 'txt2img' || j.type === 'compound') && (j.status === 'pending' || j.status === 'running'))
     if (activeJobs.length > 0) {
       generatingImage.value = true
       generationStage.value = 'image'
@@ -664,29 +696,31 @@ onMounted(async () => {
     }
   } catch {}
 
-  const offCompleted = EventsOn('queue:completed', onQueueCompleted)
-  const offFailed = EventsOn('queue:failed', onQueueFailed)
-  const offSessionAdded = EventsOn('session:added', onSessionAdded)
+  offCompleted = EventsOn('queue:completed', onQueueCompleted)
+  offFailed = EventsOn('queue:failed', onQueueFailed)
+  offSessionAdded = EventsOn('session:added', onSessionAdded)
+  offPaused = EventsOn('queue:paused', onQueuePaused)
   document.addEventListener('keydown', onKeydown)
   window.addEventListener('resize', onResize)
+})
 
-  onUnmounted(() => {
-    offCompleted()
-    offFailed()
-    offSessionAdded()
-    document.removeEventListener('keydown', onKeydown)
-    window.removeEventListener('resize', onResize)
-    saveGenState()
-    if (shared) {
-      shared.selectedPresetId = selectedPresetId.value
-      shared.selectedCompoundPresetId = selectedCompoundPresetId.value
-      shared.genMode = genMode.value
-      shared.description = description.value
-      shared.negative = negative.value
-      shared.selectedResolutionId = selectedResolutionId.value
-      shared.selectedHiresProfileId = selectedHiresProfileId.value
-    }
-  })
+onUnmounted(() => {
+  offCompleted()
+  offFailed()
+  offSessionAdded()
+  offPaused()
+  document.removeEventListener('keydown', onKeydown)
+  window.removeEventListener('resize', onResize)
+  saveGenState()
+  if (shared) {
+    shared.selectedPresetId = selectedPresetId.value
+    shared.selectedCompoundPresetId = selectedCompoundPresetId.value
+    shared.genMode = genMode.value
+    shared.description = description.value
+    shared.negative = negative.value
+    shared.selectedResolutionId = selectedResolutionId.value
+    shared.selectedHiresProfileId = selectedHiresProfileId.value
+  }
 })
 
 function onKeydown(e) {
@@ -839,7 +873,7 @@ function onKeydown(e) {
               <div style="background: var(--surface-2); border-radius: 4px; overflow: hidden; height: 6px;">
                 <div :style="{ width: (sdProgress.progress * 100) + '%', background: 'var(--accent)', height: '100%', transition: 'width 0.3s' }"></div>
               </div>
-              <button class="btn btn-sm btn-secondary" @click="interruptGeneration" style="margin-top: 8px; font-size: 11px;">{{ t('progress.btn_interrupt') }}</button>
+              <button class="btn btn-sm btn-secondary" @click="interruptBatch" style="margin-top: 8px; font-size: 11px;">{{ t('progress.btn_interrupt') }}</button>
             </div>
           </div>
           <div v-else-if="generatingImage && generatedImage && enqueuedJobIds.size > 0" style="width: 100%; padding: 12px; position: relative;">
@@ -858,6 +892,7 @@ function onKeydown(e) {
                 <div style="background: var(--surface-2); border-radius: 4px; overflow: hidden; height: 4px;">
                   <div :style="{ width: (sdProgress.progress * 100) + '%', background: 'var(--accent)', height: '100%', transition: 'width 0.3s' }"></div>
                 </div>
+                <button class="btn btn-sm btn-secondary" @click="interruptBatch" style="margin-top: 8px; font-size: 11px;">{{ t('progress.btn_interrupt') }}</button>
               </div>
             </div>
           </div>

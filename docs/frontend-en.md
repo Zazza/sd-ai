@@ -13,7 +13,6 @@ frontend/src/
 ├── components/
 │   ├── GeneratePage.vue           # Main generation (txt2img)
 │   ├── GenerateFromImagePage.vue  # Generation from image
-│   ├── SceneEditorPage.vue        # Multi-pass scene editor
 │   ├── PresetsPage.vue            # Preset management
 │   ├── UnifiedPresetsPage.vue     # Unified: presets + types + compounds
 │   ├── PresetForm.vue             # Preset create/edit form
@@ -100,7 +99,6 @@ EventsOff("remove:stage")
 |-------|------|------|
 | `analyze:step` | `(step, total)` | GenerateFromImage |
 | `remove:stage` | `"analyzing"` / `"generating"` | GenerateFromImage |
-| `multipass:progress` | `{step, character, total}` | SceneEditor |
 | `batch:progress` | `(current, total, fileName)` | Batch |
 | `batch:done` | — | Batch |
 | `batch:error` | `error` | Batch |
@@ -150,15 +148,6 @@ const mode = ref('img2img')  // img2img | inpaint | remove
 - Drag an image onto the drop zone
 - Ctrl+V paste from clipboard
 - "Last Generated" button (from session)
-
-### SceneEditorPage.vue
-Multi-pass character composition.
-
-**Flow:**
-1. Scene description → `api.decomposeScene()` → Scene object
-2. Editing: drag characters, prompts, positions
-3. `api.generateMultiPass(scene)` → composition result
-4. Progress: `multipass:progress` events
 
 ### PresetsPage.vue / UnifiedPresetsPage.vue
 Preset CRUD.

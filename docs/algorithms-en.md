@@ -90,50 +90,6 @@ Binary mask (user-drawn)
 
 Default parameters: padding=8px, feather=8px. Configurable via sliders in the UI.
 
-## 3. Multi-Pass — Character Composition
-
-```
-Frontend                    app.go                    LLM           Compositor      SD WebUI
-   │                          │                         │              │              │
-   │  DecomposeScene()        │                         │              │              │
-   │─────────────────────────>│                         │              │              │
-   │                          │  LLM: decompose         │              │              │
-   │                          │────────────────────────>│              │              │
-   │                          │  Scene JSON             │              │              │
-   │                          │<────────────────────────│              │              │
-   │  Scene (user edits)      │                         │              │              │
-   │<─────────────────────────│                         │              │              │
-   │                          │                         │              │              │
-   │  GenerateMultiPass()     │                         │              │              │
-   │─────────────────────────>│                         │              │              │
-   │                          │                         │              │              │
-   │                          │     GenerateScene()     │              │              │
-   │                          │────────────────────────────────────────>│              │
-   │                          │                         │              │              │
-   │                          │                         │     Pass 1:  │  txt2img     │
-   │                          │                         │  background  │─────────────>│
-   │                          │                         │              │<─────────────│
-   │                          │                         │              │              │
-   │                          │                         │  Pass 2-N:   │  txt2img     │
-   │                          │                         │  characters  │─────────────>│
-   │                          │                         │  (rembg)     │<─────────────│
-   │                          │                         │              │              │
-   │                          │                         │  Composite:  │              │
-   │                          │                         │  bg + chars  │              │
-   │                          │                         │              │              │
-   │  MultiPassResult         │                         │              │              │
-   │<─────────────────────────│<───────────────────────────────────────│              │
-```
-
-### Composition Algorithm
-1. LLM decomposes the scene: background + N characters (max 10)
-2. The user edits positions/prompts in SceneEditor
-3. Pass-by-pass generation:
-   - Pass 1: background (txt2img)
-   - Pass 2..N: each character (txt2img → rembg background removal)
-4. Composite: `draw.Draw` overlays characters onto the background at their positions
-5. Dimensions: 64-2048, multiples of 64
-
 ## 4. SD Client — Retry with Backoff
 
 ```

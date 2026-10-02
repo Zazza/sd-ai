@@ -3,15 +3,12 @@ package settings
 import (
 	"context"
 	"fmt"
-	"net/http"
-	"net/http/httptest"
 	"testing"
 
 	"go-sd/internal/config"
 	"go-sd/internal/llm"
 	"go-sd/internal/logger"
 	"go-sd/internal/preset"
-	"go-sd/internal/rembg"
 	"go-sd/internal/sd"
 
 	"github.com/stretchr/testify/assert"
@@ -146,10 +143,9 @@ func testService(t *testing.T, llmSvc *mockLLMService, sdSvc *mockSDService) (*S
 		LLMBackend:    "lmstudio",
 	}
 
-	rembgClient := rembg.New("")
 	log := logger.New(nil)
 
-	svc := New(db, llmSvc, sdSvc, cfg, rembgClient, log, nil)
+	svc := New(db, llmSvc, sdSvc, cfg, log, nil)
 	return svc, db
 }
 
@@ -259,57 +255,6 @@ func TestCheckServices_LLMFallbackModels(t *testing.T) {
 	assert.Equal(t, "vision-model", status.LLM.VisionModel)
 }
 
-func TestCheckRembg_NoURLConfigured(t *testing.T) {
-	t.Parallel()
-	svc, _ := testService(t, nil, nil)
-
-	err := svc.CheckRembg()
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "rembg URL not configured")
-}
-
-func TestCheckRembg_WithValidServer(t *testing.T) {
-	t.Parallel()
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/api" {
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-		w.WriteHeader(http.StatusNotFound)
-	}))
-	defer server.Close()
-
-	svc, db := testService(t, nil, nil)
-	require.NoError(t, db.SetSetting("rembg_url", server.URL))
-
-	err := svc.CheckRembg()
-	assert.NoError(t, err)
-}
-
-func TestCheckRembg_ServerUnreachable(t *testing.T) {
-	t.Parallel()
-	svc, db := testService(t, nil, nil)
-	require.NoError(t, db.SetSetting("rembg_url", "http://localhost:1"))
-
-	err := svc.CheckRembg()
-	assert.Error(t, err)
-}
-
-func TestCheckRembg_ServerReturnsError(t *testing.T) {
-	t.Parallel()
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusInternalServerError)
-	}))
-	defer server.Close()
-
-	svc, db := testService(t, nil, nil)
-	require.NoError(t, db.SetSetting("rembg_url", server.URL))
-
-	err := svc.CheckRembg()
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "rembg status 500")
-}
-
 func TestGetSettings_ReturnsDefaults(t *testing.T) {
 	t.Parallel()
 	svc, _ := testService(t, nil, nil)
@@ -326,7 +271,6 @@ func TestGetSettings_ReturnsDefaults(t *testing.T) {
 	assert.Equal(t, "lmstudio", settings["llm_backend"])
 	assert.Equal(t, "5m", settings["llm_keep_alive"])
 	assert.Equal(t, "false", settings["kids_mode"])
-	assert.Equal(t, "", settings["rembg_url"])
 	assert.Equal(t, "512", settings["preview_width"])
 	assert.Equal(t, "512", settings["preview_height"])
 }
@@ -365,7 +309,7 @@ func TestGetSettings_AllDefaultKeysPresent(t *testing.T) {
 		"llm_analyze_top_p", "llm_analyze_num_thread",
 		"kids_mode", "kids_cat_violence", "kids_cat_horror",
 		"kids_cat_weapons", "kids_cat_substances", "kids_cat_mature",
-		"rembg_url", "preview_mode", "preview_width", "preview_height",
+		"preview_mode", "preview_width", "preview_height",
 	}
 	for _, k := range expectedKeys {
 		_, ok := settings[k]
@@ -432,27 +376,13 @@ func TestUpdateSettings_InvalidSDUrl(t *testing.T) {
 	assert.Contains(t, err.Error(), "invalid sd_url")
 }
 
-func TestUpdateSettings_InvalidRembgUrl(t *testing.T) {
-	t.Parallel()
-	svc, _ := testService(t, nil, nil)
-
-	data := map[string]string{
-		"rembg_url": "::invalid",
-	}
-
-	err := svc.UpdateSettings(data)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "invalid rembg_url")
-}
-
 func TestUpdateSettings_EmptyUrlAllowed(t *testing.T) {
 	t.Parallel()
 	svc, _ := testService(t, nil, nil)
 
 	data := map[string]string{
-		"llm_url":   "",
-		"sd_url":    "",
-		"rembg_url": "",
+		"llm_url": "",
+		"sd_url":  "",
 	}
 
 	err := svc.UpdateSettings(data)
@@ -533,22 +463,6 @@ func TestUpdateSettings_DisallowedSettingIgnored(t *testing.T) {
 	val, err := db.GetSetting("malicious_key")
 	require.NoError(t, err)
 	assert.Empty(t, val)
-}
-
-func TestUpdateSettings_RembgURL(t *testing.T) {
-	t.Parallel()
-	svc, db := testService(t, nil, nil)
-
-	data := map[string]string{
-		"rembg_url": "http://rembg:7000",
-	}
-
-	err := svc.UpdateSettings(data)
-	require.NoError(t, err)
-
-	val, err := db.GetSetting("rembg_url")
-	require.NoError(t, err)
-	assert.Equal(t, "http://rembg:7000", val)
 }
 
 func TestUpdateSettings_ConfigUpdated(t *testing.T) {

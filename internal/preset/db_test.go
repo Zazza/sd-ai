@@ -963,59 +963,6 @@ func TestCompoundPreset_DeleteNonexistent(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-func TestSavedScene_CRUD(t *testing.T) {
-	t.Parallel()
-	db := testDB(t)
-
-	s := &SavedScene{Name: "Test Scene", SceneJSON: `{"characters": []}`}
-	err := db.CreateSavedScene(s)
-	require.NoError(t, err)
-	assert.Greater(t, s.ID, int64(0))
-
-	got, err := db.GetSavedScene(s.ID)
-	require.NoError(t, err)
-	assert.Equal(t, "Test Scene", got.Name)
-	assert.Equal(t, `{"characters": []}`, got.SceneJSON)
-
-	s.Name = "Updated Scene"
-	s.SceneJSON = `{"characters": [{"name": "Alice"}]}`
-	err = db.UpdateSavedScene(s)
-	require.NoError(t, err)
-
-	got, err = db.GetSavedScene(s.ID)
-	require.NoError(t, err)
-	assert.Equal(t, "Updated Scene", got.Name)
-	assert.Equal(t, `{"characters": [{"name": "Alice"}]}`, got.SceneJSON)
-
-	items, err := db.ListSavedScenes()
-	require.NoError(t, err)
-	assert.Len(t, items, 1)
-
-	err = db.DeleteSavedScene(s.ID)
-	require.NoError(t, err)
-
-	items, err = db.ListSavedScenes()
-	require.NoError(t, err)
-	assert.Nil(t, items)
-}
-
-func TestSavedScene_GetNonexistent(t *testing.T) {
-	t.Parallel()
-	db := testDB(t)
-
-	_, err := db.GetSavedScene(99999)
-	assert.Error(t, err)
-}
-
-func TestSavedScene_ListEmpty(t *testing.T) {
-	t.Parallel()
-	db := testDB(t)
-
-	items, err := db.ListSavedScenes()
-	require.NoError(t, err)
-	assert.Nil(t, items)
-}
-
 func TestExportPreset_CRUD(t *testing.T) {
 	t.Parallel()
 	db := testDB(t)

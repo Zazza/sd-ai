@@ -293,7 +293,6 @@ func newTestService(t *testing.T, db *preset.DB, llmSvc *mockLLM, sdSvc *mockSD)
 			SDPromptModel: "test-model",
 			VisionModel:   "test-vision",
 		},
-		nil,
 		tmpDir,
 		emitter,
 		kidsMgr,
@@ -1097,120 +1096,6 @@ func TestClearLastImage(t *testing.T) {
 	assert.True(t, os.IsNotExist(err))
 	_, err = os.Stat(filepath.Join(tmpDir, "last_image.json"))
 	assert.True(t, os.IsNotExist(err))
-}
-
-func TestDecomposeScene_EmptyDescription(t *testing.T) {
-	t.Parallel()
-	db := openTestDB(t)
-	svc := newTestService(t, db, &mockLLM{}, &mockSD{})
-
-	_, err := svc.DecomposeScene(DecomposeSceneParams{Description: "", PresetID: 1})
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "description is required")
-}
-
-func TestDecomposeScene_NoPreset(t *testing.T) {
-	t.Parallel()
-	db := openTestDB(t)
-	svc := newTestService(t, db, &mockLLM{}, &mockSD{})
-
-	_, err := svc.DecomposeScene(DecomposeSceneParams{Description: "two warriors fighting", PresetID: 0})
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "preset is required")
-}
-
-func TestDecomposeScene_PresetNotFound(t *testing.T) {
-	t.Parallel()
-	db := openTestDB(t)
-	svc := newTestService(t, db, &mockLLM{}, &mockSD{})
-
-	_, err := svc.DecomposeScene(DecomposeSceneParams{Description: "scene", PresetID: 999})
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "preset not found")
-}
-
-func TestDecomposeScene_Success(t *testing.T) {
-	t.Parallel()
-	db := openTestDB(t)
-	makeTestPreset(t, db, &preset.Preset{
-		Name:           "scene-preset",
-		Prompt:         "masterpiece, best quality",
-		NegativePrompt: "lowres",
-		Sampler:        "Euler a",
-		Steps:          20,
-		CfgScale:       7.0,
-	})
-
-	llmSvc := &mockLLM{
-		chatFn: func(model, systemPrompt, userMessage string, temperature float64, maxTokens int) (string, error) {
-			return `{
-				"background_prompt": "battlefield, smoke, fire",
-				"negative_prompt": "blurry, low quality",
-				"characters": [
-					{"name": "warrior1", "prompt": "warrior, heavy armor, sword", "position": {"x": 0.3, "y": 0.5}, "scale": 0.4},
-					{"name": "warrior2", "prompt": "warrior, dark armor, axe", "position": {"x": 0.7, "y": 0.5}, "scale": 0.4}
-				],
-				"width": 768,
-				"height": 512
-			}`, nil
-		},
-	}
-
-	svc := newTestService(t, db, llmSvc, &mockSD{})
-
-	scene, err := svc.DecomposeScene(DecomposeSceneParams{
-		Description: "two warriors fighting on a battlefield",
-		PresetID:    1,
-	})
-	require.NoError(t, err)
-	require.NotNil(t, scene)
-	assert.Len(t, scene.Characters, 2)
-	assert.Equal(t, "battlefield, smoke, fire", scene.BackgroundPrompt)
-	assert.Equal(t, int64(1), scene.PresetID)
-	assert.Equal(t, 768, scene.Width)
-	assert.Equal(t, 512, scene.Height)
-}
-
-func TestDecomposeScene_LLMError(t *testing.T) {
-	t.Parallel()
-	db := openTestDB(t)
-	makeTestPreset(t, db, nil)
-
-	llmSvc := &mockLLM{
-		chatFn: func(model, systemPrompt, userMessage string, temperature float64, maxTokens int) (string, error) {
-			return "", fmt.Errorf("LLM unavailable")
-		},
-	}
-
-	svc := newTestService(t, db, llmSvc, &mockSD{})
-
-	_, err := svc.DecomposeScene(DecomposeSceneParams{
-		Description: "scene",
-		PresetID:    1,
-	})
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "LLM decomposition failed")
-}
-
-func TestDecomposeScene_InvalidJSONResponse(t *testing.T) {
-	t.Parallel()
-	db := openTestDB(t)
-	makeTestPreset(t, db, nil)
-
-	llmSvc := &mockLLM{
-		chatFn: func(model, systemPrompt, userMessage string, temperature float64, maxTokens int) (string, error) {
-			return "not valid json for a scene", nil
-		},
-	}
-
-	svc := newTestService(t, db, llmSvc, &mockSD{})
-
-	_, err := svc.DecomposeScene(DecomposeSceneParams{
-		Description: "scene",
-		PresetID:    1,
-	})
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to parse scene")
 }
 
 func TestAnalyzeImage_EmptyImage(t *testing.T) {
