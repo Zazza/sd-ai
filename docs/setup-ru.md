@@ -50,6 +50,8 @@ webui.bat --listen --api --enable-insecure-extension-access
 
 > **Известная проблема Forge:** Hires Fix может вызывать ошибку `argument of type 'NoneType' is not iterable`. SD Studio автоматически повторит генерацию без Hires Fix и покажет предупреждение. Для полноценной работы Hires Fix используйте A1111.
 
+> **Модели Z-Image:** бандл-семейство пресетов `(Z-Image)` использует чекпоинты `z-image-turbo`. Оригинальный Forge эту архитектуру **не поддерживает** — нужен форк с поддержкой Z-Image (например, [sd-webui-forge-classic, ветка `neo`](https://github.com/Haoming02/sd-webui-forge-classic)); это замена «как есть» с тем же REST API. Остальные бандл-семейства работают на любом из бэкендов выше.
+
 ### Флаги
 
 | Флаг | Описание |

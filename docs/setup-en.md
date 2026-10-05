@@ -50,6 +50,8 @@ webui.bat --listen --api --enable-insecure-extension-access
 
 > **Known Forge issue:** Hires Fix may trigger `argument of type 'NoneType' is not iterable` error. SD Studio automatically retries generation without Hires Fix and shows a warning. For full Hires Fix support, use A1111.
 
+> **Z-Image models:** the bundled `(Z-Image)` preset family uses `z-image-turbo` checkpoints. The original Forge does **not** support this architecture — use a fork with Z-Image support (e.g. [sd-webui-forge-classic, `neo` branch](https://github.com/Haoming02/sd-webui-forge-classic)); it is a drop-in replacement speaking the same REST API. All other bundled preset families work on any of the backends above.
+
 ### Flags
 
 | Flag | Description |
