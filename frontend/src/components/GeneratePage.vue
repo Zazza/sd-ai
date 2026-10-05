@@ -3,6 +3,7 @@ import { ref, computed, onMounted, onUnmounted, watch, inject } from 'vue'
 import { EventsOn } from '../wailsjs/runtime/runtime'
 import { api } from '../api.js'
 import { parseSeedInput } from '../seed.js'
+import { parseLoras } from '../loraOverride.js'
 import { t } from '../i18n/index.js'
 import { useGenerationProgress } from '../composables/useGenerationProgress.js'
 import { useKidsMode } from '../composables/useKidsMode.js'
@@ -81,6 +82,11 @@ const isDesktop = ref(window.innerWidth > 1024)
 const filteredPresets = computed(() => {
   if (!selectedTypeId.value) return presets.value
   return presets.value.filter(p => p.type_id === selectedTypeId.value)
+})
+
+const selectedPresetLoras = computed(() => {
+  const p = presets.value.find(p => p.id === selectedPresetId.value)
+  return p ? parseLoras(p.loras) : []
 })
 
 const imageSrc = computed(() => {
@@ -865,7 +871,7 @@ function onKeydown(e) {
                     <input class="form-input" type="number" v-model="seedInput" min="0" step="1" :placeholder="t('generate.seed_placeholder')" />
                     <div style="font-size: 11px; color: var(--text-dim); margin-top: 4px;">{{ t('generate.seed_hint') }}</div>
                   </div>
-                  <PresetOverridesPanel v-if="genMode === 'preset' && !kidsModeActive" ref="overridesPanel" v-model="presetOverrides" />
+                  <PresetOverridesPanel v-if="genMode === 'preset' && !kidsModeActive" ref="overridesPanel" v-model="presetOverrides" :preset-loras="selectedPresetLoras" />
                 </div>
               </div>
             </div>

@@ -487,6 +487,7 @@ func (a *App) GetSDModels() ([]sd.SDModel, error) {
 	return a.sd.GetModels()
 }
 
+
 func (a *App) GetSDSamplers() ([]sd.Sampler, error) {
 	return a.sd.GetSamplers()
 }

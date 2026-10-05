@@ -2,9 +2,11 @@
 import { ref, watch } from 'vue'
 import { api } from '../api.js'
 import { t } from '../i18n/index.js'
+import { buildLorasOverride, sanitizeWeight, sameLoras } from '../loraOverride.js'
 
 const props = defineProps({
   modelValue: { type: Object, default: null },
+  presetLoras: { type: Array, default: () => [] },
 })
 const emit = defineEmits(['update:modelValue'])
 
@@ -16,14 +18,22 @@ const ovCfg = ref('')
 const ovClipSkip = ref('')
 const ovIgnoreLoras = ref(false)
 
+const loraRows = ref([])
+let loraSource = []
+const serverLoras = ref([])
+
 const models = ref([])
 const samplers = ref([])
 const schedulers = ref([])
 const loaded = ref(false)
 const loadError = ref(false)
 
+function lorasTouched() {
+  return !sameLoras(loraRows.value, loraSource)
+}
+
 function hasAnyValue() {
-  return !!(ovModel.value || ovSampler.value || ovScheduler.value || ovSteps.value !== '' || ovCfg.value !== '' || ovClipSkip.value !== '' || ovIgnoreLoras.value)
+  return !!(ovModel.value || ovSampler.value || ovScheduler.value || ovSteps.value !== '' || ovCfg.value !== '' || ovClipSkip.value !== '' || ovIgnoreLoras.value || lorasTouched())
 }
 
 function buildOverrides() {
@@ -37,12 +47,36 @@ function buildOverrides() {
   if (ovCfg.value !== '' && Number.isFinite(cfg) && cfg > 0) ov.cfg_scale = Math.min(30, cfg)
   const clip = Number(ovClipSkip.value)
   if (ovClipSkip.value !== '' && Number.isFinite(clip) && clip > 0) ov.clip_skip = Math.min(12, Math.round(clip))
-  if (ovIgnoreLoras.value) ov.loras = '[]'
+  const loras = buildLorasOverride(loraSource, loraRows.value, ovIgnoreLoras.value)
+  if (loras !== null) ov.loras = loras
   return Object.keys(ov).length > 0 ? ov : null
+}
+
+function syncLoraRows() {
+  const src = Array.isArray(props.presetLoras) ? props.presetLoras : []
+  loraRows.value = src.map((l) => ({ name: l?.name || '', weight: sanitizeWeight(l?.weight) }))
+  loraSource = src
+}
+
+function addLora() {
+  loraRows.value.push({ name: '', weight: 0.6 })
+}
+
+function removeLora(idx) {
+  loraRows.value.splice(idx, 1)
 }
 
 watch([ovModel, ovSampler, ovScheduler, ovSteps, ovCfg, ovClipSkip, ovIgnoreLoras], () => {
   emit('update:modelValue', buildOverrides())
+})
+
+watch(loraRows, () => {
+  if (ovIgnoreLoras.value) ovIgnoreLoras.value = false
+  emit('update:modelValue', buildOverrides())
+}, { deep: true })
+
+watch(() => props.presetLoras, () => {
+  if (!lorasTouched()) syncLoraRows()
 })
 
 watch(() => props.modelValue, (v) => {
@@ -57,6 +91,7 @@ function reset() {
   ovCfg.value = ''
   ovClipSkip.value = ''
   ovIgnoreLoras.value = false
+  syncLoraRows()
 }
 
 async function loadLists() {
@@ -64,14 +99,16 @@ async function loadLists() {
   loaded.value = true
   loadError.value = false
   try {
-    const [m, s, sch] = await Promise.all([
+    const [m, s, sch, lor] = await Promise.all([
       api.getModels(),
       api.getSamplers(),
       api.getSchedulers(),
+      api.getLoRAs(),
     ])
     models.value = m || []
     samplers.value = s || []
     schedulers.value = sch || []
+    serverLoras.value = lor || []
   } catch (e) {
     loadError.value = true
     loaded.value = false
@@ -81,6 +118,8 @@ async function loadLists() {
 function onToggle(e) {
   if (e.target.open) loadLists()
 }
+
+syncLoraRows()
 
 defineExpose({ reset })
 </script>
@@ -131,6 +170,21 @@ defineExpose({ reset })
         <input type="checkbox" v-model="ovIgnoreLoras" />
         <span>{{ t('overrides.ignore_loras') }}</span>
       </label>
+      <div class="form-group lora-section" :class="{ 'lora-disabled': ovIgnoreLoras }">
+        <div class="lora-head">
+          <label class="form-label">{{ t('overrides.loras') }}</label>
+          <button type="button" class="btn btn-sm btn-secondary" :disabled="ovIgnoreLoras" @click="addLora">{{ t('overrides.loras_add') }}</button>
+        </div>
+        <div v-for="(row, idx) in loraRows" :key="idx" class="lora-row">
+          <input class="form-input" type="text" v-model="row.name" list="overrides-lora-names" :placeholder="t('overrides.loras_name')" :disabled="ovIgnoreLoras" />
+          <input class="form-input" type="number" v-model.number="row.weight" min="0" max="2" step="0.05" :placeholder="0.6" :disabled="ovIgnoreLoras" />
+          <button type="button" class="btn btn-sm btn-secondary lora-remove" :disabled="ovIgnoreLoras" @click="removeLora(idx)" :aria-label="t('overrides.loras_remove')">&times;</button>
+        </div>
+        <div class="lora-empty">{{ t('overrides.loras_hint') }}</div>
+      </div>
+      <datalist id="overrides-lora-names">
+        <option v-for="l in serverLoras" :key="l.name" :value="l.name" />
+      </datalist>
       <div class="overrides-hint">{{ t('overrides.hint') }}</div>
     </div>
   </details>
@@ -173,6 +227,40 @@ defineExpose({ reset })
 }
 .overrides-check span {
   font-size: 12px;
+}
+.lora-section {
+  margin-top: 10px;
+}
+.lora-disabled {
+  opacity: 0.5;
+}
+.lora-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+.lora-head .form-label {
+  margin-bottom: 0;
+}
+.lora-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 6px;
+}
+.lora-row .form-input[type='text'] {
+  flex: 1;
+}
+.lora-row .form-input[type='number'] {
+  flex: 0 0 90px;
+}
+.lora-remove {
+  padding: 4px 10px;
+}
+.lora-empty {
+  font-size: 11px;
+  color: var(--text-dim);
 }
 .overrides-hint {
   margin-top: 8px;

@@ -2,6 +2,7 @@
 import { ref, computed, nextTick, watch, onMounted, onUnmounted, inject } from 'vue'
 import { api } from '../api.js'
 import { parseSeedInput } from '../seed.js'
+import { parseLoras } from '../loraOverride.js'
 import { t } from '../i18n/index.js'
 import { MAX_IMAGE_SIZE } from '../constants.js'
 import { EventsOn } from '../wailsjs/runtime/runtime'
@@ -91,6 +92,11 @@ const fsHistory = ref([])
 const filteredPresets = computed(() => {
   if (!selectedTypeId.value) return presets.value
   return presets.value.filter(p => p.type_id === selectedTypeId.value)
+})
+
+const selectedPresetLoras = computed(() => {
+  const p = presets.value.find(p => p.id === selectedPresetId.value)
+  return p ? parseLoras(p.loras) : []
 })
 
 const imageSrc = computed(() => {
@@ -1017,7 +1023,7 @@ function onKeydown(e) {
             </select>
           </div>
 
-          <PresetOverridesPanel v-if="mode !== 'remove' && genMode === 'preset' && !kidsModeActive" ref="overridesPanel" v-model="presetOverrides" />
+          <PresetOverridesPanel v-if="mode !== 'remove' && genMode === 'preset' && !kidsModeActive" ref="overridesPanel" v-model="presetOverrides" :preset-loras="selectedPresetLoras" />
 
           <div v-if="mode !== 'remove'" class="form-group" style="margin-top: 12px;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">

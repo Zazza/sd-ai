@@ -94,6 +94,12 @@ export const ru = {
   'overrides.cfg': 'CFG Scale',
   'overrides.clip_skip': 'Clip Skip',
   'overrides.ignore_loras': 'Игнорировать LoRA пресета',
+  'overrides.loras': 'LoRA',
+  'overrides.loras_add': '+ Добавить LoRA',
+  'overrides.loras_name': 'Имя',
+  'overrides.loras_weight': 'Вес',
+  'overrides.loras_hint': 'Список заменяет LoRA пресета целиком; пусто = как в пресете',
+  'overrides.loras_remove': 'Удалить LoRA',
   'overrides.hint': 'Пустые поля берутся из стиля; сэмплер и шедулер заменяются независимо. LoRA стиля сохраняются при смене модели — чекбокс ниже убирает их.',
   'overrides.load_error': 'Не удалось загрузить списки — попробуйте закрыть и открыть панель.',
 

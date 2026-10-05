@@ -2,6 +2,11 @@
 
 All notable changes to SD Studio are documented here.
 
+## [0.9.2] — 2026-10-05
+
+### Added
+- **LoRA editor in the preset-override panel**: the "Override preset parameters" panel now has a LoRA section pre-filled with the selected preset's LoRAs — edit a weight, remove a row, or add LoRAs (name autocomplete from the server's installed list, free text allowed; weight 0–2). Untouched rows send nothing (the preset's LoRAs ride along as before); any edit sends the full replacement list, and the existing "Ignore LoRAs" checkbox still means "drop them all" and disables the table. Same semantics as every other override: one-shot, never persisted, reset on preset change; works on Generate and From Image.
+
 ## [0.9.0] — 2026-10-05
 
 ### Added

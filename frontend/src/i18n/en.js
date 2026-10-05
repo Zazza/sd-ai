@@ -97,6 +97,12 @@ export const en = {
   'overrides.cfg': 'CFG Scale',
   'overrides.clip_skip': 'Clip Skip',
   'overrides.ignore_loras': 'Ignore preset LoRAs',
+  'overrides.loras': 'LoRA',
+  'overrides.loras_add': '+ Add LoRA',
+  'overrides.loras_name': 'Name',
+  'overrides.loras_weight': 'Weight',
+  'overrides.loras_hint': 'The list replaces the preset LoRAs entirely; empty = as in the preset',
+  'overrides.loras_remove': 'Remove LoRA',
   'overrides.hint': 'Empty fields fall back to the style; sampler and scheduler are replaced independently. The style\'s LoRAs survive a model change — the checkbox below drops them.',
   'overrides.load_error': 'Failed to load lists — try reopening the panel.',
 
