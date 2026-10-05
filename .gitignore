@@ -1,8 +1,12 @@
 # Runtime data
 *.db
 
-# Build output
-build/
+# Build output (appicon.png и windows/icon.ico — исключения: нужны для иконки)
+build/*
+!build/appicon.png
+!build/windows
+build/windows/*
+!build/windows/icon.ico
 web_dist/
 frontend/dist/
 
