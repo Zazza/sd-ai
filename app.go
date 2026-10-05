@@ -298,6 +298,7 @@ type UpscalePreviewParams = generation.UpscalePreviewParams
 type GenerateCompoundImageParams = generation.GenerateCompoundImageParams
 type GenerateFromImageParams = generation.GenerateFromImageParams
 type TestCompoundGenerateParams = generation.TestCompoundGenerateParams
+type PresetOverrides = generation.PresetOverrides
 
 func (a *App) GenerateSDPrompt(params GenerateSDPromptParams) (*GenerateSDPromptResult, error) {
 	return a.gen.GenerateSDPrompt(params)

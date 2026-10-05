@@ -65,6 +65,7 @@ type GenerateSDPromptParams struct {
 	PresetID    int64            `json:"preset_id"`
 	Description string           `json:"description"`
 	Negative    string           `json:"negative"`
+	Overrides   *PresetOverrides `json:"overrides,omitempty"`
 }
 
 type GenerateSDPromptResult struct {
@@ -86,6 +87,7 @@ type GenerateImageParams struct {
 	HiresProfileID      *int64           `json:"hires_profile_id,omitempty"`
 	Seed                *int64           `json:"seed,omitempty"`
 	FullSize            bool             `json:"full_size,omitempty"`
+	Overrides           *PresetOverrides `json:"overrides,omitempty"`
 }
 
 type GenerateImageResult struct {
@@ -167,6 +169,8 @@ type GenerateFromImageParams struct {
 	RemoveObject        bool             `json:"remove_object"`
 	ResolutionID        *int64           `json:"resolution_id,omitempty"`
 	HiresProfileID      *int64           `json:"hires_profile_id,omitempty"`
+	Seed                *int64           `json:"seed,omitempty"`
+	Overrides           *PresetOverrides `json:"overrides,omitempty"`
 }
 
 type TestCompoundGenerateParams struct {
@@ -734,6 +738,8 @@ func (s *Service) GenerateSDPrompt(params GenerateSDPromptParams) (*GenerateSDPr
 	if err != nil {
 		return nil, fmt.Errorf("preset not found: %w", err)
 	}
+	ApplyPresetOverrides(p, params.Overrides)
+
 	description := strings.TrimSpace(params.Description)
 	negative := strings.TrimSpace(params.Negative)
 
@@ -831,7 +837,7 @@ func (s *Service) GenerateImage(params GenerateImageParams) (*GenerateImageResul
 	if params.PresetID <= 0 {
 		return nil, fmt.Errorf("preset is required")
 	}
-	s.log.UserAction("Generate image (preset_id=%d)", params.PresetID)
+	s.log.UserAction("Generate image (preset_id=%d, override_model=%q)", params.PresetID, OverrideModelName(params.Overrides))
 	if err := s.sd.HealthCheck(); err != nil {
 		return nil, fmt.Errorf("SD is not available: %w", err)
 	}
@@ -842,6 +848,8 @@ func (s *Service) GenerateImage(params GenerateImageParams) (*GenerateImageResul
 		s.log.Error("Generate image: preset not found: %s", err)
 		return nil, fmt.Errorf("preset not found: %w", err)
 	}
+	ApplyPresetOverrides(p, params.Overrides)
+
 	bp := s.buildPrompts(p.Prompt, p.NegativePrompt, p.Loras, params.ExtraPrompt, params.ExtraNegativePrompt)
 	prompt := bp.Prompt
 	negativePrompt := bp.NegativePrompt

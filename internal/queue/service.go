@@ -29,6 +29,10 @@ func (s *Service) Start(ctx context.Context) {
 }
 
 func (s *Service) Enqueue(jobType JobType, params any, source string) (int64, error) {
+	if err := validateJobParams(jobType, params); err != nil {
+		return 0, err
+	}
+
 	paramsJSON, err := json.Marshal(params)
 	if err != nil {
 		return 0, fmt.Errorf("marshal params: %w", err)

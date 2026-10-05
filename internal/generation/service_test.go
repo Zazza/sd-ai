@@ -2160,3 +2160,220 @@ func TestPromptTruncateLimit(t *testing.T) {
 		})
 	}
 }
+
+func TestGenerateImage_AppliesOverrides(t *testing.T) {
+	t.Parallel()
+	db := openTestDB(t)
+	makeTestPreset(t, db, &preset.Preset{
+		Name:           "override-preset",
+		Prompt:         "1girl",
+		NegativePrompt: "lowres",
+		Sampler:        "Euler a",
+		ScheduleType:   "Karras",
+		Steps:          20,
+		CfgScale:       7.0,
+		ClipSkip:       intPtr(1),
+	})
+
+	var capturedReq sd.Txt2ImgRequest
+	sdSvc := &mockSD{
+		txt2img: func(req sd.Txt2ImgRequest) (*sd.Txt2ImgResponse, error) {
+			capturedReq = req
+			return &sd.Txt2ImgResponse{Images: []string{"img"}}, nil
+		},
+	}
+
+	svc := newTestService(t, db, &mockLLM{}, sdSvc)
+	svc.ctx = context.Background()
+
+	_, err := svc.GenerateImage(GenerateImageParams{
+		PresetID: 1,
+		Overrides: &PresetOverrides{
+			Sampler:      strPtr("DPM++ 2M"),
+			ScheduleType: strPtr("Exponential"),
+			Steps:        intPtr(33),
+			CfgScale:     floatPtr(4.5),
+			ClipSkip:     intPtr(3),
+		},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "DPM++ 2M Exponential", capturedReq.SamplerName)
+	assert.Equal(t, "Exponential", capturedReq.Scheduler)
+	assert.Equal(t, 33, capturedReq.Steps)
+	assert.Equal(t, 4.5, capturedReq.CfgScale)
+	require.NotNil(t, capturedReq.ClipSkip)
+	assert.Equal(t, 3, *capturedReq.ClipSkip)
+}
+
+func TestGenerateImage_OverrideModel_SetsModel(t *testing.T) {
+	t.Parallel()
+	db := openTestDB(t)
+	makeTestPreset(t, db, &preset.Preset{
+		Name:           "model-override-preset",
+		Prompt:         "1girl",
+		NegativePrompt: "lowres",
+		Sampler:        "Euler a",
+		Steps:          20,
+		CfgScale:       7.0,
+		ModelName:      "sd-xl",
+	})
+
+	var setModels []string
+	sdSvc := &mockSD{
+		setModel: func(modelName string) error {
+			setModels = append(setModels, modelName)
+			return nil
+		},
+		txt2img: func(req sd.Txt2ImgRequest) (*sd.Txt2ImgResponse, error) {
+			return &sd.Txt2ImgResponse{Images: []string{"img"}}, nil
+		},
+	}
+
+	svc := newTestService(t, db, &mockLLM{}, sdSvc)
+	svc.ctx = context.Background()
+
+	_, err := svc.GenerateImage(GenerateImageParams{
+		PresetID: 1,
+		Overrides: &PresetOverrides{
+			ModelName: strPtr("flux1-dev-fp8"),
+		},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"flux1-dev-fp8"}, setModels)
+}
+
+func TestGenerateFromImage_AppliesOverrides(t *testing.T) {
+	t.Parallel()
+	db := openTestDB(t)
+	makeTestPreset(t, db, &preset.Preset{
+		Name:           "from-image-override-preset",
+		Prompt:         "1girl",
+		NegativePrompt: "lowres",
+		Sampler:        "Euler a",
+		ScheduleType:   "Karras",
+		Steps:          20,
+		CfgScale:       7.0,
+		ClipSkip:       intPtr(1),
+		Loras:          `[{"name":"test-lora","weight":0.8}]`,
+	})
+
+	var capturedReq sd.Img2ImgRequest
+	sdSvc := &mockSD{
+		img2img: func(req sd.Img2ImgRequest) (*sd.Txt2ImgResponse, error) {
+			capturedReq = req
+			return &sd.Txt2ImgResponse{Images: []string{"remix-img"}}, nil
+		},
+	}
+
+	svc := newTestService(t, db, &mockLLM{}, sdSvc)
+	svc.ctx = context.Background()
+
+	_, err := svc.GenerateFromImage(GenerateFromImageParams{
+		ImageBase64:       makePNGBase64(t, 64, 64),
+		GenMode:           "preset",
+		Mode:              "img2img",
+		PresetID:          1,
+		DenoisingStrength: 0.6,
+		Overrides: &PresetOverrides{
+			Sampler:      strPtr("DPM++ 2M"),
+			ScheduleType: strPtr("Exponential"),
+			Steps:        intPtr(33),
+			CfgScale:     floatPtr(4.5),
+			ClipSkip:     intPtr(3),
+			Loras:        strPtr("[]"),
+		},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "DPM++ 2M Exponential", capturedReq.SamplerName)
+	assert.Equal(t, "Exponential", capturedReq.Scheduler)
+	assert.Equal(t, 33, capturedReq.Steps)
+	assert.Equal(t, 4.5, capturedReq.CfgScale)
+	require.NotNil(t, capturedReq.ClipSkip)
+	assert.Equal(t, 3, *capturedReq.ClipSkip)
+	assert.NotContains(t, capturedReq.Prompt, "<lora:")
+}
+
+func TestGenerateSDPrompt_OverrideModel_UsesProseInstruction(t *testing.T) {
+	t.Parallel()
+	db := openTestDB(t)
+	makeTestPreset(t, db, &preset.Preset{
+		Name:           "prose-override-preset",
+		PresetType:     "anime",
+		Prompt:         "masterpiece, best quality, 1girl",
+		NegativePrompt: "lowres, bad anatomy",
+		Sampler:        "Euler a",
+		Steps:          20,
+		CfgScale:       7.0,
+		ModelName:      "epicrealismXL_pureFix",
+	})
+
+	var capturedSystemPrompt, capturedUserMessage string
+	llmSvc := &mockLLM{
+		genSDPromptFn: func(systemPrompt, userMessage, presetType, model string, maxTokens int) (string, error) {
+			capturedSystemPrompt = systemPrompt
+			capturedUserMessage = userMessage
+			return `{"prompt": "a woman standing in a garden", "negative_prompt": "lowres"}`, nil
+		},
+	}
+
+	svc := newTestService(t, db, llmSvc, &mockSD{})
+
+	_, err := svc.GenerateSDPrompt(GenerateSDPromptParams{
+		PresetID:    1,
+		Description: "a woman standing in a garden",
+		Overrides: &PresetOverrides{
+			ModelName: strPtr("flux1-dev-fp8"),
+		},
+	})
+	require.NoError(t, err)
+	assert.True(t, strings.HasPrefix(capturedSystemPrompt, config.DefaultSDPromptInstructionProse))
+	assert.Contains(t, capturedUserMessage, "connected English paragraph")
+}
+
+func int64Ptr(v int64) *int64 { return &v }
+
+func TestGenerateFromImage_ExplicitSeed(t *testing.T) {
+	t.Parallel()
+	db := openTestDB(t)
+	makeTestPreset(t, db, &preset.Preset{
+		Name:     "seed-preset",
+		Prompt:   "1girl",
+		Sampler:  "Euler a",
+		Steps:    20,
+		CfgScale: 7.0,
+		Seed:     int64Ptr(111),
+	})
+
+	var capturedReq sd.Img2ImgRequest
+	sdSvc := &mockSD{
+		img2img: func(req sd.Img2ImgRequest) (*sd.Txt2ImgResponse, error) {
+			capturedReq = req
+			return &sd.Txt2ImgResponse{Images: []string{"img"}}, nil
+		},
+	}
+	svc := newTestService(t, db, &mockLLM{}, sdSvc)
+	svc.ctx = context.Background()
+
+	_, err := svc.GenerateFromImage(GenerateFromImageParams{
+		ImageBase64:       makePNGBase64(t, 64, 64),
+		GenMode:           "preset",
+		Mode:              "img2img",
+		PresetID:          1,
+		DenoisingStrength: 0.6,
+		Seed:              int64Ptr(9999),
+	})
+	require.NoError(t, err)
+	require.NotNil(t, capturedReq.Seed)
+	assert.Equal(t, int64(9999), *capturedReq.Seed)
+
+	_, err = svc.GenerateFromImage(GenerateFromImageParams{
+		ImageBase64:       makePNGBase64(t, 64, 64),
+		GenMode:           "preset",
+		Mode:              "img2img",
+		PresetID:          1,
+		DenoisingStrength: 0.6,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, capturedReq.Seed)
+	assert.Equal(t, int64(111), *capturedReq.Seed)
+}

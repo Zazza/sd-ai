@@ -43,8 +43,8 @@ export const api = {
   updatePreset: (id, data) => UpdatePreset({ ...data, id }),
   deletePreset: (id) => DeletePreset(id),
   generateSdPrompt: (params) => GenerateSDPrompt(params),
-  generateImage: (presetId, extraPrompt, extraNegativePrompt, resolutionId, hiresProfileId) =>
-    GenerateImage({ preset_id: presetId, extra_prompt: extraPrompt, extra_negative_prompt: extraNegativePrompt, resolution_id: resolutionId || null, hires_profile_id: hiresProfileId || null }),
+  generateImage: (presetId, extraPrompt, extraNegativePrompt, resolutionId, hiresProfileId, overrides, seed) =>
+    GenerateImage({ preset_id: presetId, extra_prompt: extraPrompt, extra_negative_prompt: extraNegativePrompt, resolution_id: resolutionId || null, hires_profile_id: hiresProfileId || null, overrides: overrides || null, seed: seed ?? null }),
   upscalePreview: (previewImageBase64, presetId, seed, resolutionId, hiresProfileId) =>
     UpscalePreview({ preview_image_base64: previewImageBase64, preset_id: presetId, seed, resolution_id: resolutionId || null, hires_profile_id: hiresProfileId || null }),
   upscaleImage: (imageBase64, genInfo, presetId) =>

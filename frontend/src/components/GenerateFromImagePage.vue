@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, nextTick, watch, onMounted, onUnmounted, inject } from 'vue'
 import { api } from '../api.js'
+import { parseSeedInput } from '../seed.js'
 import { t } from '../i18n/index.js'
 import { MAX_IMAGE_SIZE } from '../constants.js'
 import { EventsOn } from '../wailsjs/runtime/runtime'
@@ -8,6 +9,7 @@ import { useGenerationProgress } from '../composables/useGenerationProgress.js'
 import { useKidsMode } from '../composables/useKidsMode.js'
 import { usePresets } from '../composables/usePresets.js'
 import ImageViewer from './ImageViewer.vue'
+import PresetOverridesPanel from './PresetOverridesPanel.vue'
 
 const props = defineProps({
   droppedImage: { type: String, default: null }
@@ -36,6 +38,7 @@ const selectedCompoundPresetId = ref(null)
 const genMode = ref('preset')
 const mode = ref('img2img')
 const denoisingStrength = ref(0.5)
+const seedInput = ref('')
 const extraNegativePrompt = ref('')
 
 const generatedImage = ref('')
@@ -63,6 +66,9 @@ const showViewer = ref(false)
 const shared = inject('sharedGenState', null)
 
 const isDragOver = ref(false)
+
+const presetOverrides = ref(null)
+const overridesPanel = ref(null)
 
 const removeStage = ref('')
 const brushSize = ref(30)
@@ -438,6 +444,16 @@ watch(uploadedImage, () => {
   }
 })
 
+watch(selectedPresetId, () => {
+  presetOverrides.value = null
+  overridesPanel.value?.reset()
+})
+
+watch([genMode, mode, kidsModeActive], () => {
+  presetOverrides.value = null
+  overridesPanel.value?.reset()
+})
+
 async function generate() {
   if (!uploadedImage.value) {
     error.value = t('fi.error_upload_first')
@@ -480,6 +496,7 @@ async function generate() {
       tags: mode.value === 'remove' ? '' : tags.value,
       extra_negative_prompt: extraNegativePrompt.value,
       remove_object: mode.value === 'remove',
+      overrides: (genMode.value === 'preset' && mode.value !== 'remove') ? presetOverrides.value : null,
     }
     if (mode.value === 'inpaint' || mode.value === 'remove') {
       params.mask_base64 = maskB64
@@ -487,10 +504,11 @@ async function generate() {
       params.inpaint_fill = inpaintFill.value
       params.inpaint_full_res = inpaintFullRes.value
     }
+    const seedVal = parseSeedInput(seedInput.value)
     const count = Math.max(1, Math.min(100, genCount.value || 1))
     batchTotal.value = count
     for (let i = 0; i < count; i++) {
-      const jobId = await api.enqueueFromImage(params)
+      const jobId = await api.enqueueFromImage({ ...params, seed: seedVal !== null ? seedVal + i : null })
       if (jobId) enqueuedJobIds.value.add(jobId)
     }
     error.value = ''
@@ -905,6 +923,12 @@ function onKeydown(e) {
             </div>
           </div>
 
+          <div v-if="mode !== 'remove' && genMode === 'preset'" class="form-group" style="margin-top: 4px;">
+            <label class="form-label">{{ t('fi.seed_label') }}</label>
+            <input class="form-input" type="number" v-model="seedInput" min="0" step="1" :placeholder="t('fi.seed_placeholder')" />
+            <div style="font-size: 11px; color: var(--text-dim); margin-top: 4px;">{{ t('fi.seed_hint') }}</div>
+          </div>
+
           <div v-if="mode === 'remove'" class="form-group" style="margin-top: 4px;">
             <div style="font-size: 11px; color: var(--text-dim);">
               {{ t('fi.remove_params', { denoising: denoisingStrength.toFixed(2), blur: maskBlur }) }}
@@ -992,6 +1016,8 @@ function onKeydown(e) {
               <option v-for="c in compoundPresets" :key="c.id" :value="c.id">{{ c.name }} ({{ c.steps.length }} steps)</option>
             </select>
           </div>
+
+          <PresetOverridesPanel v-if="mode !== 'remove' && genMode === 'preset' && !kidsModeActive" ref="overridesPanel" v-model="presetOverrides" />
 
           <div v-if="mode !== 'remove'" class="form-group" style="margin-top: 12px;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">

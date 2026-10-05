@@ -83,6 +83,22 @@ export const en = {
   'generate.using_workflows': 'Using multi-step workflows?',
   'generate.shortcut_hint': 'Ctrl+Enter to generate',
   'generate.saved_ideas': 'Saved Ideas',
+  'generate.seed_label': 'Seed',
+  'generate.seed_placeholder': 'Random',
+  'generate.seed_hint': 'Empty = random; a batch uses seed+1, seed+2…',
+
+  // PresetOverridesPanel.vue (Generate + Remix)
+  'overrides.title': 'Override Preset Parameters',
+  'overrides.as_preset': 'From preset',
+  'overrides.model': 'Model',
+  'overrides.sampler': 'Sampler',
+  'overrides.scheduler': 'Scheduler',
+  'overrides.steps': 'Steps',
+  'overrides.cfg': 'CFG Scale',
+  'overrides.clip_skip': 'Clip Skip',
+  'overrides.ignore_loras': 'Ignore preset LoRAs',
+  'overrides.hint': 'Empty fields fall back to the style; sampler and scheduler are replaced independently. The style\'s LoRAs survive a model change — the checkbox below drops them.',
+  'overrides.load_error': 'Failed to load lists — try reopening the panel.',
 
   // GenerateFromImagePage.vue
   'fi.title': 'Remix',
@@ -99,6 +115,9 @@ export const en = {
   'fi.label_denoising': 'Denoising Strength: {value}',
   'fi.keep_original': 'Keep original',
   'fi.full_redraw': 'Full redraw',
+  'fi.seed_label': 'Seed',
+  'fi.seed_placeholder': 'Random',
+  'fi.seed_hint': 'Empty = random; a batch uses seed+1, seed+2…',
   'fi.remove_params': 'Denoising: {denoising} | Mask Blur: {blur} | Fill: Fill | Full Res: on',
   'fi.label_brush_size': 'Brush Size: {value}px',
   'fi.btn_clear_mask': 'Clear Mask',

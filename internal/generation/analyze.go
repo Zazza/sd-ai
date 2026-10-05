@@ -442,6 +442,12 @@ func (s *Service) GenerateFromImage(params GenerateFromImageParams) (*GenerateIm
 	if err != nil {
 		return nil, fmt.Errorf("preset not found: %w", err)
 	}
+	ApplyPresetOverrides(p, params.Overrides)
+
+	seed := p.Seed
+	if params.Seed != nil {
+		seed = params.Seed
+	}
 
 	var prompt, negativePrompt string
 	if tags == "" {
@@ -504,7 +510,7 @@ func (s *Service) GenerateFromImage(params GenerateFromImageParams) (*GenerateIm
 			CfgScale:              p.CfgScale,
 			Width:                 imgW,
 			Height:                imgH,
-			Seed:                  p.Seed,
+			Seed:                  seed,
 			DenoisingStrength:     &denoising,
 			ClipSkip:              &clipSkip,
 			BatchSize:             &batchSize,
@@ -560,7 +566,7 @@ func (s *Service) GenerateFromImage(params GenerateFromImageParams) (*GenerateIm
 		CfgScale:               p.CfgScale,
 		Width:                  width,
 		Height:                 height,
-		Seed:                   p.Seed,
+		Seed:                   seed,
 		DenoisingStrength:      hiresDenoising,
 		ClipSkip:               &clipSkip,
 		BatchSize:              &batchSize,
@@ -689,6 +695,9 @@ func (s *Service) generateFromImageCompound(params GenerateFromImageParams, tags
 // --- GenerateCompoundImage ---
 
 func (s *Service) GenerateCompoundImage(params GenerateCompoundImageParams) (*GenerateImageResult, error) {
+	if params.CompoundPresetID <= 0 {
+		return nil, fmt.Errorf("compound preset is required")
+	}
 	s.StartSDPolling()
 	defer s.StopSDPolling()
 	cp, err := s.db.GetCompoundPreset(params.CompoundPresetID)

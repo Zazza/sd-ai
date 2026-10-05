@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, onUnmounted, watch, inject } from 'vue'
 import { EventsOn } from '../wailsjs/runtime/runtime'
 import { api } from '../api.js'
+import { parseSeedInput } from '../seed.js'
 import { t } from '../i18n/index.js'
 import { useGenerationProgress } from '../composables/useGenerationProgress.js'
 import { useKidsMode } from '../composables/useKidsMode.js'
@@ -10,6 +11,7 @@ import SavedDescriptionsModal from './SavedDescriptionsModal.vue'
 import ImageViewer from './ImageViewer.vue'
 import ResolutionSelector from './ResolutionSelector.vue'
 import HiresProfileSelector from './HiresProfileSelector.vue'
+import PresetOverridesPanel from './PresetOverridesPanel.vue'
 
 const { presets, presetTypes, compoundPresets, loadPresets } = usePresets()
 
@@ -59,6 +61,7 @@ const selectedHiresProfileId = ref(null)
 const shared = inject('sharedGenState', null)
 
 const genCount = ref(1)
+const seedInput = ref('')
 const enqueuedJobIds = ref(new Set())
 const batchTotal = ref(0)
 const batchDone = ref(0)
@@ -69,6 +72,9 @@ const showViewer = ref(false)
 
 const moreOptionsOpen = ref(false)
 const showWorkflowLink = ref(false)
+
+const presetOverrides = ref(null)
+const overridesPanel = ref(null)
 
 const isDesktop = ref(window.innerWidth > 1024)
 
@@ -93,7 +99,7 @@ const formattedGenInfo = computed(() => {
   }
 })
 
-watch([description, negative, selectedPresetId, selectedCompoundPresetId], () => {
+watch([description, negative, selectedPresetId, selectedCompoundPresetId, () => presetOverrides.value?.model_name], () => {
   promptDirty = true
 })
 
@@ -112,6 +118,16 @@ watch(selectedTypeId, () => {
     selectedPresetId.value = null
   }
   api.updateSettings({ gen_type_id: String(selectedTypeId.value || '') }).catch(() => {})
+})
+
+watch(selectedPresetId, () => {
+  presetOverrides.value = null
+  overridesPanel.value?.reset()
+})
+
+watch([genMode, kidsModeActive], () => {
+  presetOverrides.value = null
+  overridesPanel.value?.reset()
 })
 
 watch([selectedResolutionId, selectedHiresProfileId], () => {
@@ -172,7 +188,8 @@ async function sendToSD() {
         hires_profile_id: selectedHiresProfileId.value,
       })
     } else {
-      result = await api.generateImage(selectedPresetId.value, extraPrompt.value, extraNegativePrompt.value, selectedResolutionId.value, selectedHiresProfileId.value)
+      const seedVal = parseSeedInput(seedInput.value)
+      result = await api.generateImage(selectedPresetId.value, extraPrompt.value, extraNegativePrompt.value, selectedResolutionId.value, selectedHiresProfileId.value, presetOverrides.value, seedVal)
     }
     if (!result || !result.image) {
       error.value = t('generate.error_no_image')
@@ -218,15 +235,20 @@ async function generateImage() {
   batchTotal.value = 0
   batchDone.value = 0
 
+  const mode = genMode.value
+  const presetId = selectedPresetId.value
+  const compoundId = selectedCompoundPresetId.value
+  const ov = presetOverrides.value
+
   if (promptDirty) {
-    let llmPresetId = selectedPresetId.value
-    if (genMode.value === 'compound') {
-      const cp = compoundPresets.value.find(c => c.id === selectedCompoundPresetId.value)
+    let llmPresetId = presetId
+    if (mode === 'compound') {
+      const cp = compoundPresets.value.find(c => c.id === compoundId)
       if (cp && cp.steps && cp.steps.length > 0) {
         llmPresetId = cp.steps[0].preset_id
       }
     }
-    if (llmPresetId && (genMode.value === 'preset' || genMode.value === 'compound')) {
+    if (llmPresetId && (mode === 'preset' || mode === 'compound')) {
       generationStage.value = 'prompt'
       error.value = ''
       try {
@@ -234,6 +256,7 @@ async function generateImage() {
           preset_id: llmPresetId,
           description: description.value,
           negative: negative.value,
+          overrides: mode === 'preset' ? ov : null,
         })
         if (promptResult && promptResult.prompt) {
           extraPrompt.value = promptResult.prompt
@@ -258,26 +281,34 @@ async function generateImage() {
 
   generatingImage.value = true
   generationStage.value = 'image'
+  const extraP = extraPrompt.value
+  const extraN = extraNegativePrompt.value
+  const resId = selectedResolutionId.value
+  const hiresId = selectedHiresProfileId.value
+  const seedVal = parseSeedInput(seedInput.value)
+
   try {
     const count = Math.max(1, Math.min(100, genCount.value || 1))
     batchTotal.value = count
     for (let i = 0; i < count; i++) {
       let jobId
-      if (genMode.value === 'compound') {
+      if (mode === 'compound') {
         jobId = await api.enqueueCompound({
-          compound_preset_id: selectedCompoundPresetId.value,
-          extra_prompt: extraPrompt.value,
-          extra_negative_prompt: extraNegativePrompt.value,
-          resolution_id: selectedResolutionId.value,
-          hires_profile_id: selectedHiresProfileId.value,
+          compound_preset_id: compoundId,
+          extra_prompt: extraP,
+          extra_negative_prompt: extraN,
+          resolution_id: resId,
+          hires_profile_id: hiresId,
         })
       } else {
         jobId = await api.enqueueTxt2Img({
-          preset_id: selectedPresetId.value,
-          extra_prompt: extraPrompt.value,
-          extra_negative_prompt: extraNegativePrompt.value,
-          resolution_id: selectedResolutionId.value,
-          hires_profile_id: selectedHiresProfileId.value,
+          preset_id: presetId,
+          extra_prompt: extraP,
+          extra_negative_prompt: extraN,
+          resolution_id: resId,
+          hires_profile_id: hiresId,
+          overrides: ov,
+          seed: seedVal !== null ? seedVal + i : null,
         })
       }
       if (jobId) enqueuedJobIds.value.add(jobId)
@@ -829,6 +860,12 @@ function onKeydown(e) {
                     <ResolutionSelector v-model="selectedResolutionId" />
                   </div>
                   <HiresProfileSelector v-model="selectedHiresProfileId" />
+                  <div v-if="genMode === 'preset'" class="form-group">
+                    <label class="form-label">{{ t('generate.seed_label') }}</label>
+                    <input class="form-input" type="number" v-model="seedInput" min="0" step="1" :placeholder="t('generate.seed_placeholder')" />
+                    <div style="font-size: 11px; color: var(--text-dim); margin-top: 4px;">{{ t('generate.seed_hint') }}</div>
+                  </div>
+                  <PresetOverridesPanel v-if="genMode === 'preset' && !kidsModeActive" ref="overridesPanel" v-model="presetOverrides" />
                 </div>
               </div>
             </div>
