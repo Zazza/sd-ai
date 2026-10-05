@@ -2,7 +2,6 @@ package main
 
 import (
 	"embed"
-	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -21,6 +20,7 @@ import (
 	"go-sd/internal/preset"
 	"go-sd/internal/sd"
 	"go-sd/internal/serverclient"
+	"go-sd/internal/settings"
 )
 
 var version = "dev"
@@ -62,56 +62,7 @@ func main() {
 	sdClient := sd.New(cfg.SDUrl)
 	srvClient := serverclient.NewClient()
 
-	if v, _ := presets.GetSetting("llm_url"); v != "" {
-		cfg.LLMUrl = v
-		llmClient.SetURL(v)
-	}
-	if v, _ := presets.GetSetting("sd_url"); v != "" {
-		cfg.SDUrl = v
-		sdClient.SetURL(v)
-	}
-	if v, _ := presets.GetSetting("llm_model"); v != "" {
-		cfg.LLMModel = v
-	}
-	if v, _ := presets.GetSetting("sd_prompt_model"); v != "" {
-		cfg.SDPromptModel = v
-	}
-	if v, _ := presets.GetSetting("vision_model"); v != "" {
-		cfg.VisionModel = v
-	}
-	if v, _ := presets.GetSetting("llm_backend"); v != "" {
-		cfg.LLMBackend = v
-		llmClient.SetBackend(v)
-	}
-
-	// Server mode: override URLs to proxy through server
-	if mode, _ := presets.GetSetting("connection_mode"); mode == "server" {
-		if serverURL, _ := presets.GetSetting("server_url"); serverURL != "" {
-			srvClient.SetBaseURL(serverURL)
-			sdURL, llmURL := srvClient.ProxyURLs()
-			cfg.SDUrl = sdURL
-			cfg.LLMUrl = llmURL
-			sdClient.SetURL(sdURL)
-			llmClient.SetURL(llmURL)
-			llmClient.SetBackend("ollama")
-		}
-	}
-
-	var backendCfg llm.BackendConfig
-	if v, _ := presets.GetSetting("llm_keep_alive"); v != "" {
-		backendCfg.KeepAlive = v
-	} else {
-		backendCfg.KeepAlive = "5m"
-	}
-	if v, _ := presets.GetSetting("llm_num_ctx"); v != "" {
-		fmt.Sscanf(v, "%d", &backendCfg.NumCtx)
-	} else {
-		backendCfg.NumCtx = 4096
-	}
-	if v, _ := presets.GetSetting("llm_num_gpu"); v != "" {
-		fmt.Sscanf(v, "%d", &backendCfg.NumGPU)
-	}
-	llmClient.SetBackendConfig(backendCfg)
+	settings.Restore(presets, cfg, llmClient, sdClient, srvClient)
 
 	app := NewApp(presets, llmClient, sdClient, srvClient, cfg)
 	imgHandler := &imageFileHandler{db: presets, dataDir: filepath.Dir(cfg.DBPath)}

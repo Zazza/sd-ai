@@ -443,7 +443,7 @@ func (a *App) FastSaveImage(base64Data, filename, format string) (string, error)
 	if format == "png" {
 		ext = ".png"
 	}
-	filename = sanitizeFilename(filename) + ext
+	filename = filebrowser.SanitizeFilename(filename) + ext
 
 	path := filepath.Join(dir, filename)
 	if _, err := os.Stat(path); err == nil {
@@ -478,18 +478,6 @@ func (a *App) FastSaveImage(base64Data, filename, format string) (string, error)
 
 	a.log.UserAction("Fast save: %s", path)
 	return path, nil
-}
-
-func sanitizeFilename(name string) string {
-	r := strings.NewReplacer(
-		"/", "_", "\\", "_", ":", "_", "*", "_",
-		"?", "_", "\"", "_", "<", "_", ">", "_", "|", "_",
-	)
-	result := r.Replace(name)
-	if len(result) > 200 {
-		result = result[:200]
-	}
-	return result
 }
 
 // --- SD Info ---
@@ -735,33 +723,11 @@ func (a *App) ImportCompoundPresets(items []CompoundExportData) ([]preset.Compou
 // --- Compound Presets ---
 
 func (a *App) ListCompoundPresets() ([]preset.CompoundPreset, error) {
-	items, err := a.presets.ListCompoundPresets()
-	if err != nil {
-		return nil, err
-	}
-	for i := range items {
-		for j := range items[i].Steps {
-			p, err := a.presets.Get(items[i].Steps[j].PresetID)
-			if err == nil {
-				items[i].Steps[j].Preset = p
-			}
-		}
-	}
-	return items, nil
+	return a.presets.ListCompoundPresetsFull()
 }
 
 func (a *App) GetCompoundPreset(id int64) (*preset.CompoundPreset, error) {
-	cp, err := a.presets.GetCompoundPreset(id)
-	if err != nil {
-		return nil, err
-	}
-	for i := range cp.Steps {
-		p, err := a.presets.Get(cp.Steps[i].PresetID)
-		if err == nil {
-			cp.Steps[i].Preset = p
-		}
-	}
-	return cp, nil
+	return a.presets.GetCompoundPresetFull(id)
 }
 
 func (a *App) CreateCompoundPreset(cp preset.CompoundPreset) (*preset.CompoundPreset, error) {

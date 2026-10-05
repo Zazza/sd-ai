@@ -45,8 +45,8 @@ type Message struct {
 }
 
 type ContentPart struct {
-	Type     string       `json:"type"`
-	Text     string       `json:"text,omitempty"`
+	Type     string        `json:"type"`
+	Text     string        `json:"text,omitempty"`
 	ImageURL *ImageURLPart `json:"image_url,omitempty"`
 }
 
@@ -60,15 +60,15 @@ type ChatOptions struct {
 }
 
 type ChatRequest struct {
-	Model           string          `json:"model"`
-	Messages        []Message       `json:"messages"`
-	Temperature     float64         `json:"temperature"`
-	MaxTokens       int             `json:"max_tokens"`
-	FrequencyPenalty float64        `json:"frequency_penalty,omitempty"`
-	PresencePenalty  float64        `json:"presence_penalty,omitempty"`
-	Stream          bool            `json:"stream"`
-	KeepAlive       string          `json:"keep_alive,omitempty"`
-	Options         *ChatOptions    `json:"options,omitempty"`
+	Model            string       `json:"model"`
+	Messages         []Message    `json:"messages"`
+	Temperature      float64      `json:"temperature"`
+	MaxTokens        int          `json:"max_tokens"`
+	FrequencyPenalty float64      `json:"frequency_penalty,omitempty"`
+	PresencePenalty  float64      `json:"presence_penalty,omitempty"`
+	Stream           bool         `json:"stream"`
+	KeepAlive        string       `json:"keep_alive,omitempty"`
+	Options          *ChatOptions `json:"options,omitempty"`
 }
 
 type ChatResponse struct {
@@ -107,8 +107,8 @@ func (c *Client) Chat(model, systemPrompt, userMessage string, temperature float
 
 func (c *Client) ChatVision(model, systemPrompt, userText, imageBase64 string, temperature float64, maxTokens int) (string, error) {
 	reqBody := ChatRequest{
-		Model:            model,
-		Messages:         []Message{
+		Model: model,
+		Messages: []Message{
 			{Role: "system", Content: systemPrompt},
 			{Role: "user", Content: []ContentPart{
 				{Type: "text", Text: userText},
@@ -279,7 +279,7 @@ func (c *Client) doChatRequest(reqBody ChatRequest, logMsg string) (string, erro
 		return "", fmt.Errorf("read response: %w", err)
 	}
 
-	log.Printf("[LLM] response status=%d body_len=%d body=%s", resp.StatusCode, len(respBody), string(respBody))
+	log.Printf("[LLM] response status=%d body_len=%d", resp.StatusCode, len(respBody))
 
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("API error %d: %s", resp.StatusCode, string(respBody))

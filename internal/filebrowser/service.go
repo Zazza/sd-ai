@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"unicode/utf8"
 
 	xdraw "golang.org/x/image/draw"
 )
@@ -158,4 +159,19 @@ func DecodeImageSize(b64 string) (int, int) {
 		return 0, 0
 	}
 	return cfg.Width, cfg.Height
+}
+
+func SanitizeFilename(name string) string {
+	r := strings.NewReplacer(
+		"/", "_", "\\", "_", ":", "_", "*", "_",
+		"?", "_", "\"", "_", "<", "_", ">", "_", "|", "_",
+	)
+	result := r.Replace(name)
+	if len(result) > 200 {
+		result = result[:200]
+		for !utf8.ValidString(result) {
+			result = result[:len(result)-1]
+		}
+	}
+	return result
 }

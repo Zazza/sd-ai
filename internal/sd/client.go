@@ -15,9 +15,9 @@ import (
 )
 
 const (
-	retryMaxAttempts   = 3
-	retryInitialDelay  = 2 * time.Second
-	generationTimeout  = 600 * time.Second
+	retryMaxAttempts    = 3
+	retryInitialDelay   = 2 * time.Second
+	generationTimeout   = 600 * time.Second
 	maxResponseBodySize = 50 * 1024 * 1024
 )
 
@@ -256,7 +256,11 @@ func (c *Client) doPost(url string, body []byte) (*Txt2ImgResponse, error) {
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("API error %d: %s\nRequest: %s", resp.StatusCode, string(respBody), string(body))
+		reqSnippet := string(body)
+		if len(reqSnippet) > 512 {
+			reqSnippet = reqSnippet[:512] + fmt.Sprintf("... (%d bytes total)", len(body))
+		}
+		return nil, fmt.Errorf("API error %d: %s\nRequest: %s", resp.StatusCode, string(respBody), reqSnippet)
 	}
 
 	var result Txt2ImgResponse
@@ -370,27 +374,27 @@ func (c *Client) GetVAEs() ([]VAE, error) {
 }
 
 type Img2ImgRequest struct {
-	InitImages        []string `json:"init_images"`
-	Prompt            string   `json:"prompt"`
-	NegativePrompt    string   `json:"negative_prompt"`
-	SamplerName       string   `json:"sampler_name"`
-	Scheduler         string   `json:"scheduler,omitempty"`
-	Steps             int      `json:"steps"`
-	CfgScale          float64  `json:"cfg_scale"`
-	Width             int      `json:"width"`
-	Height            int      `json:"height"`
-	Seed              *int64   `json:"seed,omitempty"`
-	DenoisingStrength *float64 `json:"denoising_strength,omitempty"`
-	ClipSkip          *int     `json:"clip_skip,omitempty"`
-	BatchSize         *int     `json:"batch_size,omitempty"`
-	BatchCount        *int     `json:"n_iter,omitempty"`
-	Mask                  string `json:"mask,omitempty"`
-	MaskBlur              int    `json:"mask_blur,omitempty"`
-	InpaintingFill        int    `json:"inpainting_fill,omitempty"`
-	InpaintFullRes        bool   `json:"inpaint_full_res,omitempty"`
-	InpaintFullResPadding int    `json:"inpaint_full_res_padding,omitempty"`
-	DoNotSaveImages       bool   `json:"do_not_save_images"`
-	DoNotSaveGrid         bool   `json:"do_not_save_grid"`
+	InitImages            []string `json:"init_images"`
+	Prompt                string   `json:"prompt"`
+	NegativePrompt        string   `json:"negative_prompt"`
+	SamplerName           string   `json:"sampler_name"`
+	Scheduler             string   `json:"scheduler,omitempty"`
+	Steps                 int      `json:"steps"`
+	CfgScale              float64  `json:"cfg_scale"`
+	Width                 int      `json:"width"`
+	Height                int      `json:"height"`
+	Seed                  *int64   `json:"seed,omitempty"`
+	DenoisingStrength     *float64 `json:"denoising_strength,omitempty"`
+	ClipSkip              *int     `json:"clip_skip,omitempty"`
+	BatchSize             *int     `json:"batch_size,omitempty"`
+	BatchCount            *int     `json:"n_iter,omitempty"`
+	Mask                  string   `json:"mask,omitempty"`
+	MaskBlur              int      `json:"mask_blur,omitempty"`
+	InpaintingFill        int      `json:"inpainting_fill,omitempty"`
+	InpaintFullRes        bool     `json:"inpaint_full_res,omitempty"`
+	InpaintFullResPadding int      `json:"inpaint_full_res_padding,omitempty"`
+	DoNotSaveImages       bool     `json:"do_not_save_images"`
+	DoNotSaveGrid         bool     `json:"do_not_save_grid"`
 }
 
 func (c *Client) Img2Img(req Img2ImgRequest) (*Txt2ImgResponse, error) {
@@ -451,17 +455,17 @@ type ExtraImageResponse struct {
 
 func (c *Client) UpscaleImage(base64Img string, upscaler string, scale float64) (string, error) {
 	body, _ := json.Marshal(map[string]any{
-		"image":                          base64Img,
-		"resize_mode":                    0,
-		"show_extras":                    true,
-		"gfpgan_visibility":              0,
-		"codeformer_visibility":          0,
-		"codeformer_weight":              0,
-		"upscaling_resize":               scale,
-		"upscaler_1":                     upscaler,
-		"upscaler_2":                     "None",
-		"extras_upscaler_2_visibility":   0,
-		"upscale_first":                  false,
+		"image":                        base64Img,
+		"resize_mode":                  0,
+		"show_extras":                  true,
+		"gfpgan_visibility":            0,
+		"codeformer_visibility":        0,
+		"codeformer_weight":            0,
+		"upscaling_resize":             scale,
+		"upscaler_1":                   upscaler,
+		"upscaler_2":                   "None",
+		"extras_upscaler_2_visibility": 0,
+		"upscale_first":                false,
 	})
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, c.baseURL+"/sdapi/v1/extra-single-img", bytes.NewReader(body))
 	if err != nil {

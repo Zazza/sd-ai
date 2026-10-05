@@ -62,9 +62,9 @@ type SDProgressEvent struct {
 }
 
 type GenerateSDPromptParams struct {
-	PresetID    int64  `json:"preset_id"`
-	Description string `json:"description"`
-	Negative    string `json:"negative"`
+	PresetID    int64            `json:"preset_id"`
+	Description string           `json:"description"`
+	Negative    string           `json:"negative"`
 }
 
 type GenerateSDPromptResult struct {
@@ -79,11 +79,13 @@ type AnalyzePrompts struct {
 }
 
 type GenerateImageParams struct {
-	PresetID            int64  `json:"preset_id"`
-	ExtraPrompt         string `json:"extra_prompt"`
-	ExtraNegativePrompt string `json:"extra_negative_prompt"`
-	ResolutionID        *int64 `json:"resolution_id,omitempty"`
-	HiresProfileID      *int64 `json:"hires_profile_id,omitempty"`
+	PresetID            int64            `json:"preset_id"`
+	ExtraPrompt         string           `json:"extra_prompt"`
+	ExtraNegativePrompt string           `json:"extra_negative_prompt"`
+	ResolutionID        *int64           `json:"resolution_id,omitempty"`
+	HiresProfileID      *int64           `json:"hires_profile_id,omitempty"`
+	Seed                *int64           `json:"seed,omitempty"`
+	FullSize            bool             `json:"full_size,omitempty"`
 }
 
 type GenerateImageResult struct {
@@ -162,9 +164,9 @@ type GenerateFromImageParams struct {
 	MaskBlur            int     `json:"mask_blur"`
 	InpaintFill         int     `json:"inpaint_fill"`
 	InpaintFullRes      bool    `json:"inpaint_full_res"`
-	RemoveObject        bool    `json:"remove_object"`
-	ResolutionID        *int64  `json:"resolution_id,omitempty"`
-	HiresProfileID      *int64  `json:"hires_profile_id,omitempty"`
+	RemoveObject        bool             `json:"remove_object"`
+	ResolutionID        *int64           `json:"resolution_id,omitempty"`
+	HiresProfileID      *int64           `json:"hires_profile_id,omitempty"`
 }
 
 type TestCompoundGenerateParams struct {
@@ -226,6 +228,7 @@ func New(
 		settings: settings,
 		log:      log,
 		guard:    NewMemoryGuard(llmSvc, sdSvc, db, log),
+		ctx:      context.Background(),
 	}
 }
 
@@ -731,7 +734,6 @@ func (s *Service) GenerateSDPrompt(params GenerateSDPromptParams) (*GenerateSDPr
 	if err != nil {
 		return nil, fmt.Errorf("preset not found: %w", err)
 	}
-
 	description := strings.TrimSpace(params.Description)
 	negative := strings.TrimSpace(params.Negative)
 
@@ -840,7 +842,6 @@ func (s *Service) GenerateImage(params GenerateImageParams) (*GenerateImageResul
 		s.log.Error("Generate image: preset not found: %s", err)
 		return nil, fmt.Errorf("preset not found: %w", err)
 	}
-
 	bp := s.buildPrompts(p.Prompt, p.NegativePrompt, p.Loras, params.ExtraPrompt, params.ExtraNegativePrompt)
 	prompt := bp.Prompt
 	negativePrompt := bp.NegativePrompt
@@ -876,14 +877,21 @@ func (s *Service) GenerateImage(params GenerateImageParams) (*GenerateImageResul
 		denoisingStrength = &ds
 	}
 
+	seed := p.Seed
+	if params.Seed != nil {
+		seed = params.Seed
+	}
+
 	width, height := s.resolveResolution(p, params.ResolutionID)
 
 	isPreview := false
-	if pw, ph, preview := s.getPreviewDimensions(width, height); preview {
-		isPreview = true
-		width = pw
-		height = ph
-		hiresFix = nil
+	if !params.FullSize {
+		if pw, ph, preview := s.getPreviewDimensions(width, height); preview {
+			isPreview = true
+			width = pw
+			height = ph
+			hiresFix = nil
+		}
 	}
 
 	req := sd.Txt2ImgRequest{
@@ -895,7 +903,7 @@ func (s *Service) GenerateImage(params GenerateImageParams) (*GenerateImageResul
 		CfgScale:               p.CfgScale,
 		Width:                  width,
 		Height:                 height,
-		Seed:                   p.Seed,
+		Seed:                   seed,
 		DenoisingStrength:      denoisingStrength,
 		ClipSkip:               &clipSkip,
 		BatchSize:              &batchSize,

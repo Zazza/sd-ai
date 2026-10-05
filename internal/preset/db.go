@@ -28,6 +28,17 @@ func Open(dbPath string) (*DB, error) {
 
 	db.SetMaxOpenConns(1)
 
+	for _, pragma := range []string{
+		"PRAGMA busy_timeout(5000)",
+		"PRAGMA journal_mode(WAL)",
+		"PRAGMA synchronous(NORMAL)",
+	} {
+		if _, err := db.Exec(pragma); err != nil {
+			db.Close()
+			return nil, fmt.Errorf("%s: %w", pragma, err)
+		}
+	}
+
 	if err := migrate(db); err != nil {
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
@@ -214,8 +225,8 @@ func migrateV3(db *sql.DB) error {
 
 func migrateV4(db *sql.DB) error {
 	fixes := map[string]string{
-		"karras":        "Karras",
-		"exponential":   "Exponential",
+		"karras":          "Karras",
+		"exponential":     "Exponential",
 		"polyexponential": "Polyexponential",
 	}
 	for lower, proper := range fixes {
@@ -280,7 +291,7 @@ func scanPreset(scanner interface{ Scan(...any) error }, p *Preset) error {
 }
 
 func (d *DB) List() ([]Preset, error) {
-	rows, err := d.db.Query(`SELECT `+presetColumns+` FROM presets ORDER BY created_at DESC`)
+	rows, err := d.db.Query(`SELECT ` + presetColumns + ` FROM presets ORDER BY created_at DESC`)
 	if err != nil {
 		return nil, err
 	}
@@ -763,6 +774,35 @@ func (d *DB) GetCompoundPreset(id int64) (*CompoundPreset, error) {
 	return &cp, nil
 }
 
+func (d *DB) ListCompoundPresetsFull() ([]CompoundPreset, error) {
+	items, err := d.ListCompoundPresets()
+	if err != nil {
+		return nil, err
+	}
+	for i := range items {
+		d.enrichCompoundSteps(items[i].Steps)
+	}
+	return items, nil
+}
+
+func (d *DB) GetCompoundPresetFull(id int64) (*CompoundPreset, error) {
+	cp, err := d.GetCompoundPreset(id)
+	if err != nil {
+		return nil, err
+	}
+	d.enrichCompoundSteps(cp.Steps)
+	return cp, nil
+}
+
+func (d *DB) enrichCompoundSteps(steps []CompoundPresetStep) {
+	for i := range steps {
+		p, err := d.Get(steps[i].PresetID)
+		if err == nil {
+			steps[i].Preset = p
+		}
+	}
+}
+
 func (d *DB) getCompoundSteps(compoundPresetID int64) ([]CompoundPresetStep, error) {
 	rows, err := d.db.Query(
 		`SELECT id, compound_preset_id, step_order, preset_id, denoising_strength, resolution_id FROM compound_preset_steps WHERE compound_preset_id = ? ORDER BY step_order`,
@@ -1024,8 +1064,8 @@ func migrateV10(db *sql.DB) error {
 }
 
 type bundledPresetsFile struct {
-	Version  int              `json:"version"`
-	Presets  []bundledPreset  `json:"presets"`
+	Version int             `json:"version"`
+	Presets []bundledPreset `json:"presets"`
 }
 
 type bundledPreset struct {
@@ -1048,7 +1088,6 @@ type bundledPreset struct {
 func migrateV11(db *sql.DB) error {
 	return addColumnIfNotExists(db, "presets", "is_bundled", "INTEGER NOT NULL DEFAULT 0")
 }
-
 
 func migrateV12(db *sql.DB) error {
 	_, err := db.Exec(`

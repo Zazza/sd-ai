@@ -1,4 +1,4 @@
-.PHONY: setup dev build test lint tidy clean
+.PHONY: setup dev build test lint tidy clean mcp
 
 setup:
 	go mod download
@@ -31,3 +31,6 @@ build-server:
 
 test-server:
 	cd server && go test ./... -v
+
+mcp:
+	go build -o build/bin/sd-mcp ./cmd/sd-mcp
