@@ -445,6 +445,8 @@ export const ru = {
   'compound.select_all': 'Выбрать все',
   'compound.selected_count': 'Выбрано: {count}',
 
+  'searchable.no_results': 'Ничего не найдено',
+
   'preset.edit_title': 'Редактирование стиля',
   'preset.new_title': 'Новый стиль',
   'preset.label_name': 'Название',

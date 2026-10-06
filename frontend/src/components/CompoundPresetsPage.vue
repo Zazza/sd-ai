@@ -3,9 +3,11 @@ import { ref, computed, onMounted } from 'vue'
 import { api } from '../api.js'
 import { t } from '../i18n/index.js'
 import PipelineImportModal from './PipelineImportModal.vue'
+import SearchableSelect from './SearchableSelect.vue'
 
 const compounds = ref([])
 const presets = ref([])
+const presetTypes = ref([])
 const editing = ref(null)
 const showForm = ref(false)
 const error = ref('')
@@ -19,6 +21,13 @@ const showImport = ref(false)
 const importPipelines = ref([])
 
 const selectedCount = computed(() => selectedIds.value.size)
+
+const presetItems = computed(() => presets.value.map(p => {
+  const pt = presetTypes.value.find(pt => pt.id === p.type_id)
+  const item = { value: p.id, label: p.name }
+  if (pt) item.hint = pt.name
+  return item
+}))
 
 function toggleSelect(id) {
   const s = new Set(selectedIds.value)
@@ -36,9 +45,10 @@ function toggleSelectAll() {
 
 async function loadData() {
   try {
-    const [c, p] = await Promise.all([api.listCompoundPresets(), api.listPresets()])
+    const [c, p, pt] = await Promise.all([api.listCompoundPresets(), api.listPresets(), api.listPresetTypes()])
     compounds.value = c || []
     presets.value = p || []
+    presetTypes.value = pt || []
   } catch (e) {
     error.value = String(e)
   }
@@ -240,10 +250,12 @@ onMounted(loadData)
           <div style="display: grid; grid-template-columns: 1fr; gap: 8px;">
             <div class="form-group" style="margin: 0;">
               <label class="form-label">{{ t('compound.label_style') }}</label>
-              <select class="form-select" v-model="step.preset_id">
-                <option :value="null" disabled>{{ t('compound.select_style') }}</option>
-                <option v-for="p in presets" :key="p.id" :value="p.id">{{ p.name }}</option>
-              </select>
+              <SearchableSelect
+                v-model="step.preset_id"
+                :items="presetItems"
+                :placeholder="t('compound.select_style')"
+                :empty-text="t('searchable.no_results')"
+              />
             </div>
 
             <div v-if="idx > 0" class="form-group" style="margin: 0;">

@@ -463,6 +463,8 @@ export const en = {
   'compound.select_all': 'Select all',
   'compound.selected_count': '{count} selected',
 
+  'searchable.no_results': 'No matches found',
+
   // PresetForm.vue
   'preset.edit_title': 'Edit Style',
   'preset.new_title': 'New Style',
