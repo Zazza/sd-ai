@@ -528,6 +528,10 @@ export const en = {
   'descriptions.btn_edit': 'Edit',
   'descriptions.btn_del': 'Del',
   'descriptions.no_saved': 'No saved ideas',
+  'descriptions.sort_new': 'Newest',
+  'descriptions.sort_old': 'Oldest',
+  'descriptions.sort_name': 'By name',
+  'descriptions.found_of': '{found} / {total}',
 
   // PinModal.vue
   'pin.set_pin': 'Set PIN',

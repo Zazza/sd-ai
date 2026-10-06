@@ -507,6 +507,10 @@ export const ru = {
   'descriptions.btn_edit': 'Изменить',
   'descriptions.btn_del': 'Удалить',
   'descriptions.no_saved': 'Нет сохранённых идей',
+  'descriptions.sort_new': 'Новые',
+  'descriptions.sort_old': 'Старые',
+  'descriptions.sort_name': 'По имени',
+  'descriptions.found_of': '{found} / {total}',
 
   'pin.set_pin': 'Установка PIN',
   'pin.enter_pin': 'Введите PIN',
