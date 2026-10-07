@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -27,6 +28,7 @@ type Client struct {
 
 	retryMaxAttempts int
 	retryDelay       time.Duration
+	recoverMu        sync.Mutex
 }
 
 var _ Service = (*Client)(nil)
@@ -227,6 +229,67 @@ func (c *Client) doWithRetry(fn func() (*http.Response, error)) (*http.Response,
 }
 
 func (c *Client) doPost(url string, body []byte) (*Txt2ImgResponse, error) {
+	result, err := c.doPostOnce(url, body)
+	if err == nil || !isForgeLazyStateError(err) {
+		return result, err
+	}
+	if recErr := c.recoverForgeState(); recErr != nil {
+		return result, fmt.Errorf("%w\nforge state recovery failed: %v", err, recErr)
+	}
+	result2, err2 := c.doPostOnce(url, body)
+	if err2 != nil {
+		return result2, fmt.Errorf("%w\nstill failing after forge state recovery: %v", err2, err)
+	}
+	return result2, nil
+}
+
+func isForgeLazyStateError(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "'NoneType' object")
+}
+
+func (c *Client) recoverForgeState() error {
+	c.recoverMu.Lock()
+	defer c.recoverMu.Unlock()
+
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, c.baseURL+"/sdapi/v1/options", nil)
+	if err != nil {
+		return fmt.Errorf("build options request: %w", err)
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("get options: %w", err)
+	}
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, maxResponseBodySize))
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("get options: status %d", resp.StatusCode)
+	}
+	var opts struct {
+		SDModelCheckpoint string `json:"sd_model_checkpoint"`
+	}
+	if err := json.Unmarshal(body, &opts); err != nil {
+		return fmt.Errorf("decode options: %w", err)
+	}
+
+	unloadReq, err := http.NewRequestWithContext(context.Background(), http.MethodPost, c.baseURL+"/sdapi/v1/unload-checkpoint", nil)
+	if err != nil {
+		return fmt.Errorf("build unload request: %w", err)
+	}
+	unloadResp, err := c.httpClient.Do(unloadReq)
+	if err != nil {
+		return fmt.Errorf("unload checkpoint: %w", err)
+	}
+	unloadResp.Body.Close()
+
+	if opts.SDModelCheckpoint != "" {
+		if err := c.SetModel(opts.SDModelCheckpoint); err != nil {
+			return fmt.Errorf("restore checkpoint %q: %w", opts.SDModelCheckpoint, err)
+		}
+	}
+	return nil
+}
+
+func (c *Client) doPostOnce(url string, body []byte) (*Txt2ImgResponse, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), generationTimeout)
 	defer cancel()
 

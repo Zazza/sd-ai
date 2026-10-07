@@ -1,6 +1,7 @@
 package sd
 
 import (
+	"fmt"
 	"encoding/json"
 	"errors"
 	"io"
@@ -9,10 +10,33 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 )
+
+func TestIsForgeLazyStateError_Variants(t *testing.T) {
+	cases := []struct {
+		msg  string
+		want bool
+	}{
+		{"status 500\nSD response: {\"message\":\"'NoneType' object is not callable\"}", true},
+		{"status 500\nSD response: {\"message\":\"'NoneType' object has no attribute 'model_size'\"}", true},
+		{"API error 500: {\"message\":\"'NoneType' object has no attribute 'model'\"}", true},
+		{"API error 500: {\"message\":\"out of memory\"}", false},
+		{"request failed after 3 attempts: connection refused", false},
+	}
+	for _, tc := range cases {
+		err := fmt.Errorf("%s", tc.msg)
+		if got := isForgeLazyStateError(err); got != tc.want {
+			t.Errorf("isForgeLazyStateError(%q) = %v, want %v", tc.msg, got, tc.want)
+		}
+	}
+	if isForgeLazyStateError(nil) {
+		t.Error("nil error must not be lazy-state")
+	}
+}
 
 func TestIsRetryableError_RetryableStatusCodes(t *testing.T) {
 	t.Parallel()
@@ -947,5 +971,88 @@ func TestDoPost_RetryExhausted_ContainsResponseBody(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "CUDA out of memory") {
 		t.Errorf("error should contain SD response body, got: %v", err)
+	}
+}
+
+func TestDoPost_RecoversAfterForgeLazyStateError(t *testing.T) {
+	var mu sync.Mutex
+	calls := map[string]int{}
+	recovered := false
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		calls[r.Method+" "+r.URL.Path]++
+		mu.Unlock()
+
+		switch {
+		case r.URL.Path == "/sdapi/v1/txt2img":
+			mu.Lock()
+			ok := recovered
+			mu.Unlock()
+			if !ok {
+				w.WriteHeader(http.StatusInternalServerError)
+				_, _ = w.Write([]byte(`{"error":"TypeError","message":"'NoneType' object is not callable"}`))
+				return
+			}
+			_, _ = w.Write([]byte(`{"images":["ok"]}`))
+		case r.Method == "GET" && r.URL.Path == "/sdapi/v1/options":
+			_, _ = w.Write([]byte(`{"sd_model_checkpoint":"test-model.safetensors"}`))
+		case r.Method == "POST" && r.URL.Path == "/sdapi/v1/unload-checkpoint":
+			mu.Lock()
+			recovered = true
+			mu.Unlock()
+			w.WriteHeader(http.StatusOK)
+		case r.Method == "POST" && r.URL.Path == "/sdapi/v1/options":
+			w.WriteHeader(http.StatusOK)
+		default:
+			t.Errorf("unexpected call: %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer srv.Close()
+
+	c := New(srv.URL)
+	c.retryDelay = 0
+
+	resp, err := c.Txt2Img(Txt2ImgRequest{Prompt: "test"})
+	if err != nil {
+		t.Fatalf("expected recovery success, got error: %v", err)
+	}
+	if len(resp.Images) != 1 || resp.Images[0] != "ok" {
+		t.Fatalf("unexpected response: %+v", resp)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if calls["POST /sdapi/v1/txt2img"] != 4 {
+		t.Errorf("expected 4 txt2img calls (3 failed + 1 after recovery), got %d", calls["POST /sdapi/v1/txt2img"])
+	}
+	if calls["POST /sdapi/v1/unload-checkpoint"] != 1 {
+		t.Errorf("expected 1 unload call, got %d", calls["POST /sdapi/v1/unload-checkpoint"])
+	}
+	if calls["POST /sdapi/v1/options"] != 1 {
+		t.Errorf("expected 1 checkpoint restore call, got %d", calls["POST /sdapi/v1/options"])
+	}
+}
+
+func TestDoPost_NoRecoveryForRegular500(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/sdapi/v1/txt2img" {
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = w.Write([]byte(`{"error":"RuntimeError","message":"something else"}`))
+			return
+		}
+		t.Errorf("unexpected recovery call: %s %s", r.Method, r.URL.Path)
+	}))
+	defer srv.Close()
+
+	c := New(srv.URL)
+	c.retryDelay = 0
+
+	_, err := c.Txt2Img(Txt2ImgRequest{Prompt: "test"})
+	if err == nil {
+		t.Fatal("expected error for regular 500")
+	}
+	if strings.Contains(err.Error(), "recovery") {
+		t.Errorf("recovery should not trigger for regular 500: %v", err)
 	}
 }
