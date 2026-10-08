@@ -11,6 +11,7 @@ import { useKidsMode } from '../composables/useKidsMode.js'
 import { usePresets } from '../composables/usePresets.js'
 import ImageViewer from './ImageViewer.vue'
 import PresetOverridesPanel from './PresetOverridesPanel.vue'
+import ResolutionSelector from './ResolutionSelector.vue'
 
 const props = defineProps({
   droppedImage: { type: String, default: null }
@@ -41,6 +42,7 @@ const mode = ref('img2img')
 const denoisingStrength = ref(0.5)
 const seedInput = ref('')
 const extraNegativePrompt = ref('')
+const selectedResolutionId = ref(null)
 
 const generatedImage = ref('')
 const genInfo = ref(null)
@@ -501,6 +503,7 @@ async function generate() {
       denoising_strength: denoisingStrength.value,
       tags: mode.value === 'remove' ? '' : tags.value,
       extra_negative_prompt: extraNegativePrompt.value,
+      resolution_id: selectedResolutionId.value || null,
       remove_object: mode.value === 'remove',
       overrides: (genMode.value === 'preset' && mode.value !== 'remove') ? presetOverrides.value : null,
     }
@@ -933,6 +936,10 @@ function onKeydown(e) {
             <label class="form-label">{{ t('fi.seed_label') }}</label>
             <input class="form-input" type="number" v-model="seedInput" min="0" step="1" :placeholder="t('fi.seed_placeholder')" />
             <div style="font-size: 11px; color: var(--text-dim); margin-top: 4px;">{{ t('fi.seed_hint') }}</div>
+          </div>
+
+          <div v-if="mode !== 'remove'" class="form-group" style="margin-top: 4px;">
+            <ResolutionSelector v-model="selectedResolutionId" :none-label="t('fi.resolution_original')" />
           </div>
 
           <div v-if="mode === 'remove'" class="form-group" style="margin-top: 4px;">

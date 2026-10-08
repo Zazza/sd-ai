@@ -2377,3 +2377,38 @@ func TestGenerateFromImage_ExplicitSeed(t *testing.T) {
 	require.NotNil(t, capturedReq.Seed)
 	assert.Equal(t, int64(111), *capturedReq.Seed)
 }
+
+func TestFitImageToResolution(t *testing.T) {
+	t.Parallel()
+	db := openTestDB(t)
+	svc := newTestService(t, db, &mockLLM{}, &mockSD{})
+	svc.ctx = context.Background()
+
+	orig := &preset.Preset{Name: "r", Prompt: "x"}
+	r := &preset.Resolution{Width: 1024, Height: 1024}
+	if err := db.CreateResolution(r); err != nil {
+		t.Fatal(err)
+	}
+
+	cases := []struct {
+		name         string
+		w, h         int
+		resID        *int64
+		wantW, wantH int
+	}{
+		{"no resolution keeps original", 768, 1152, nil, 768, 1152},
+		{"landscape fits into square", 2048, 1024, &r.ID, 1024, 512},
+		{"portrait fits into square", 1024, 2048, &r.ID, 512, 1024},
+		{"smaller upscales to fit", 512, 512, &r.ID, 1024, 1024},
+		{"odd dims rounded to 8", 1000, 700, &r.ID, 1024, 712},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			w, h := svc.fitImageToResolution(tc.w, tc.h, tc.resID)
+			if w != tc.wantW || h != tc.wantH {
+				t.Errorf("got %dx%d, want %dx%d", w, h, tc.wantW, tc.wantH)
+			}
+			_ = orig
+		})
+	}
+}

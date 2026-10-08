@@ -492,6 +492,7 @@ func (s *Service) GenerateFromImage(params GenerateFromImageParams) (*GenerateIm
 			imgW = 512
 			imgH = 512
 		}
+		imgW, imgH = s.fitImageToResolution(imgW, imgH, params.ResolutionID)
 		denoising := params.DenoisingStrength
 		if denoising <= 0 {
 			denoising = 0.5

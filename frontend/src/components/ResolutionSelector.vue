@@ -4,6 +4,7 @@ import { api } from '../api.js'
 
 const props = defineProps({
   modelValue: { type: Number, default: null },
+  noneLabel: { type: String, default: 'From preset' },
 })
 const emit = defineEmits(['update:modelValue'])
 
@@ -115,7 +116,7 @@ onMounted(load)
       <button @click="showAdd = true; editing = false; newRes.name = ''; newRes.width = 512; newRes.height = 512" class="btn-icon" title="Add custom">+</button>
     </div>
     <select v-model="selectedId" @change="emitChange" class="form-select">
-      <option :value="null">From preset</option>
+      <option :value="null">{{ noneLabel }}</option>
       <option v-for="r in sorted" :key="r.id" :value="r.id">
         {{ r.name }} ({{ r.width }}x{{ r.height }})
       </option>

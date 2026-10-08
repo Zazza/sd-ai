@@ -630,6 +630,27 @@ func (s *Service) resolveResolution(p *preset.Preset, resolutionID *int64) (widt
 	return r.Width, r.Height
 }
 
+func (s *Service) fitImageToResolution(imgW, imgH int, resolutionID *int64) (int, int) {
+	if resolutionID == nil || *resolutionID <= 0 || imgW <= 0 || imgH <= 0 {
+		return imgW, imgH
+	}
+	r, err := s.db.GetResolution(*resolutionID)
+	if err != nil || r.Width <= 0 || r.Height <= 0 {
+		s.log.Warn("fitImageToResolution: failed to load resolution %d: %s", *resolutionID, err)
+		return imgW, imgH
+	}
+	scale := float64(r.Width) / float64(imgW)
+	if h := float64(r.Height) / float64(imgH); h < scale {
+		scale = h
+	}
+	w := int(float64(imgW)*scale) / 8 * 8
+	h := int(float64(imgH)*scale) / 8 * 8
+	if w < 8 || h < 8 {
+		return imgW, imgH
+	}
+	return w, h
+}
+
 func (s *Service) resolveHires(hiresProfileID *int64) (enabled bool, upscale *float64, denoising *float64, upscaler string) {
 	if hiresProfileID == nil || *hiresProfileID <= 0 {
 		return false, nil, nil, ""
