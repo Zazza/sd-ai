@@ -22,6 +22,8 @@ const sortedJobs = computed(() => {
 
 const confirmClear = ref(false)
 let clearTimer = null
+const confirmCancel = ref(false)
+let cancelTimer = null
 
 const typeLabels = {
   txt2img: 'Generate',
@@ -57,6 +59,14 @@ async function togglePause() {
 }
 
 async function cancelAll() {
+  if (!confirmCancel.value) {
+    confirmCancel.value = true
+    clearTimeout(cancelTimer)
+    cancelTimer = setTimeout(() => { confirmCancel.value = false }, 3000)
+    return
+  }
+  confirmCancel.value = false
+  clearTimeout(cancelTimer)
   try {
     await api.cancelQueue()
     await refresh()
@@ -116,10 +126,10 @@ function formatTime(ts) {
         <button v-if="hasPausedJobs" class="q-btn q-btn-resume" @click="resumePausedJobs" :title="t('queue.resume_paused')">
           <RotateCcw :size="12" /> {{ t('queue.resume_paused') }}
         </button>
-        <button class="q-btn q-btn-danger" @click="cancelAll" :disabled="!hasActiveJobs" :title="t('queue.cancel_all')">
-          <X :size="12" /> {{ t('queue.cancel_all') }}
+        <button class="q-btn q-btn-danger" :class="{ confirm: confirmCancel }" @click="cancelAll" :disabled="!hasActiveJobs" :title="t('queue.cancel_all')">
+          <X :size="12" /> {{ confirmCancel ? t('queue.confirm_cancel') : t('queue.cancel_all') }}
         </button>
-        <button class="q-btn" :class="{ confirm: confirmClear }" @click="clearCompleted" :disabled="completed.length === 0 && failed.length === 0">
+        <button class="q-btn q-btn-clear" :class="{ confirm: confirmClear }" @click="clearCompleted" :disabled="completed.length === 0 && failed.length === 0">
           <Trash2 :size="12" />
           {{ confirmClear ? t('queue.confirm_clear') : t('queue.clear_done') }}
         </button>
@@ -232,6 +242,7 @@ export default { name: 'QueuePanel' }
 .q-btn {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 4px;
   background: transparent;
   border: 1px solid var(--border);
@@ -241,6 +252,12 @@ export default { name: 'QueuePanel' }
   font-size: 11px;
   padding: 2px 8px;
   height: 24px;
+  min-width: 112px;
+  white-space: nowrap;
+}
+
+.q-btn-clear {
+  min-width: 164px;
 }
 
 .q-btn:hover:not(:disabled) {

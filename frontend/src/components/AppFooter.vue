@@ -280,6 +280,7 @@ async function doDeleteSession() {
   }
   clearTimeout(confirmDeleteTimer)
   confirmDeleteSession.value = false
+  if (!window.confirm(t('footer.confirm_delete_dialog'))) return
   try {
     await api.deleteSession(activeSessionId.value)
     await loadSessions()
@@ -849,6 +850,7 @@ export default { name: 'AppFooter' }
 .session-delete-btn {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 4px;
   background: transparent;
   border: 1px solid var(--border);
@@ -858,6 +860,8 @@ export default { name: 'AppFooter' }
   font-size: 11px;
   padding: 2px 8px;
   height: 24px;
+  min-width: 136px;
+  white-space: nowrap;
 }
 
 .session-delete-btn:hover:not(:disabled) {
