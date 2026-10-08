@@ -7,9 +7,12 @@ setup:
 dev:
 	wails dev
 
+VERSION ?= $(shell git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//' || echo dev)
+WAILS ?= $(shell go env GOPATH)/bin/wails
+
 build:
 	cd frontend && npm install && cd ..
-	wails build
+	$(WAILS) build -ldflags "-X main.version=$(VERSION)"
 
 test:
 	go vet ./...
@@ -25,12 +28,6 @@ tidy:
 
 clean:
 	rm -rf build/
-
-build-server:
-	cd server && go build -o ../build/sd-studio-server .
-
-test-server:
-	cd server && go test ./... -v
 
 mcp:
 	go build -o build/bin/sd-mcp ./cmd/sd-mcp

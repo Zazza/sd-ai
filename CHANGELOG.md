@@ -2,6 +2,21 @@
 
 All notable changes to SD Studio are documented here.
 
+## [0.9.6] — 2026-10-08
+
+### Added
+- **Window icon**: the title-bar/taskbar window icon now uses the app logo (a dedicated 256×256 PNG embedded via `go:embed` and wired into the Wails Linux options — the 1024px packaging icon stays for builds/installers).
+- **Local builds stamp their version**: `make build` passes `-ldflags "-X main.version=$(git describe --tags --abbrev=0)"`, so a locally built binary shows the real version (e.g. v0.9.5) instead of "vdev"; CI releases already stamped it.
+- **Resolution picker in From Image (Remix)**: the params block (next to Denoising/Seed) now has a `ResolutionSelector` with a leading "Match original" option — `null` keeps the current behavior (backend stores the original size), picking a resolution sends `resolution_id` in `EnqueueFromImage` params (backend fits the original into the chosen resolution preserving aspect ratio, upscaling included). The choice is page-local and is not persisted.
+- **Resolution picker in From Image (Remix)**: the params block (next to Denoising/Seed) now has a `ResolutionSelector` with a leading "Match original" option — `null` keeps the current behavior (backend stores the original size), picking a resolution sends `resolution_id` in `EnqueueFromImage` params (backend fits the original into the chosen resolution preserving aspect ratio, upscaling included). The choice is page-local and is not persisted.
+
+### Changed
+- **Safer destructive buttons**:
+  - Queue "Cancel All" now requires a second click ("Cancel?" confirm state, resets after 3 s), same as "Clear Done".
+  - Queue footer buttons got a stable `min-width` (wider for the morphing clear button) plus `white-space: nowrap`, so the "…→ confirm?" text morph no longer changes button size or shifts neighbors.
+  - Session "Delete History" in the footer shows a native `window.confirm()` dialog ("Delete the session and all its files? This action cannot be undone.") after the inline two-click confirm, before files are removed; the button width is also fixed.
+  - New i18n keys in both RU and EN: `fi.resolution_original`, `queue.confirm_cancel`, `footer.confirm_delete_dialog`.
+
 ## [0.9.5] — 2026-10-07
 
 ### Fixed

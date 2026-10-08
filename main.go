@@ -50,6 +50,9 @@ var bundledPresets embed.FS
 //go:embed build/appicon.png
 var appIcon []byte
 
+//go:embed build/appicon-256.png
+var windowIcon []byte
+
 func main() {
 	cfg := config.Load()
 
@@ -91,7 +94,7 @@ func main() {
 		},
 		Linux: &linux.Options{
 			WebviewGpuPolicy: linux.WebviewGpuPolicyAlways,
-			Icon:             appIcon,
+			Icon:             windowIcon,
 		},
 	}); err != nil {
 		log.Fatalf("Error: %v", err)

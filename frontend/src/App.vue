@@ -1,7 +1,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { WindowSetSystemDefaultTheme } from './wailsjs/runtime/runtime'
-import { Diamond, Sparkles, Sliders, Settings, RotateCcw, Download, FolderOpen, Sun, Moon, ImagePlus, Columns } from 'lucide-vue-next'
+import { Sparkles, Sliders, Settings, RotateCcw, Download, FolderOpen, Sun, Moon, ImagePlus, Columns } from 'lucide-vue-next'
 import { api } from './api.js'
 import { t, setLocale, locale } from './i18n/index.js'
 import UnifiedPresetsPage from './components/UnifiedPresetsPage.vue'
@@ -140,7 +140,7 @@ onUnmounted(() => {
     <div class="app-body">
     <aside class="sidebar">
       <div class="sidebar-logo">
-        <Diamond :size="20" class="icon" /> {{ t('app.title') }}
+        <img src="./assets/logo.png" alt="logo" class="logo-img" /> {{ t('app.title') }}
       </div>
       <nav class="sidebar-nav">
         <div class="sidebar-group">

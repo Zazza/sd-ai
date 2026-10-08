@@ -96,7 +96,27 @@ input, textarea, select {
   margin-bottom: 12px;
   display: flex;
   align-items: center;
+  gap: 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  display: flex;
+  align-items: center;
   gap: 8px;
+}
+
+.sidebar-logo .logo-img {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+
+.sidebar-logo .logo-img {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  flex-shrink: 0;
 }
 
 .sidebar-logo span {

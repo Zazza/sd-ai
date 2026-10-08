@@ -4,6 +4,7 @@
 # Build output (appicon.png и windows/icon.ico — исключения: нужны для иконки)
 build/*
 !build/appicon.png
+!build/appicon-256.png
 !build/windows
 build/windows/*
 !build/windows/icon.ico
