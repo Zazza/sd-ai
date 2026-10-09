@@ -34,6 +34,11 @@ const (
 	MaxImageBytes     = 16 * 1024 * 1024 // 16 MB
 )
 
+const (
+	qualityRedenoise = 0.35
+	qualityUpscaler  = "R-ESRGAN 4x+"
+)
+
 // --- Interfaces ---
 
 type EventEmitter interface {
@@ -97,6 +102,8 @@ type GenerateImageResult struct {
 	IsPreview               bool            `json:"is_preview"`
 	HiresFixSkipped         bool            `json:"hires_fix_skipped"`
 	HiresFixManual          bool            `json:"hires_fix_manual"`
+	QualityUpscaleSkipped   bool            `json:"quality_upscale_skipped,omitempty"`
+	QualityRedenoiseSkipped bool            `json:"quality_redenoise_skipped,omitempty"`
 	EffectivePrompt         string          `json:"effective_prompt"`
 	EffectiveNegativePrompt string          `json:"effective_negative_prompt"`
 }
@@ -157,6 +164,7 @@ type GenerateFromImageParams struct {
 	ImageBase64         string  `json:"image_base64"`
 	Mode                string  `json:"mode"`
 	GenMode             string  `json:"gen_mode"`
+	OutputMode          string  `json:"output_mode,omitempty"`
 	PresetID            int64   `json:"preset_id"`
 	CompoundPresetID    int64   `json:"compound_preset_id"`
 	DenoisingStrength   float64 `json:"denoising_strength"`
@@ -314,10 +322,7 @@ func (s *Service) checkSDInterrupted() error {
 	return nil
 }
 
-func (s *Service) manualHiresUpscale(base64Img string, req sd.Txt2ImgRequest, scale float64, denoiseStrength float64, upscaler string) (*sd.Txt2ImgResponse, error) {
-	targetW := int(float64(req.Width) * scale)
-	targetH := int(float64(req.Height) * scale)
-
+func (s *Service) upscaleWithFallback(base64Img string, scale float64, targetW, targetH int, upscaler string) (string, error) {
 	upscaledB64 := ""
 	if upscaler != "" && upscaler != "Latent" {
 		neural, err := s.sd.UpscaleImage(base64Img, upscaler, scale)
@@ -332,23 +337,27 @@ func (s *Service) manualHiresUpscale(base64Img string, req sd.Txt2ImgRequest, sc
 	if upscaledB64 == "" {
 		imgData, err := base64.StdEncoding.DecodeString(base64Img)
 		if err != nil {
-			return nil, fmt.Errorf("decode base64: %w", err)
+			return "", fmt.Errorf("decode base64: %w", err)
 		}
 		img, err := png.Decode(bytes.NewReader(imgData))
 		if err != nil {
-			return nil, fmt.Errorf("decode png: %w", err)
+			return "", fmt.Errorf("decode png: %w", err)
 		}
 		dst := image.NewRGBA(image.Rect(0, 0, targetW, targetH))
 		xdraw.CatmullRom.Scale(dst, dst.Bounds(), img, img.Bounds(), xdraw.Over, nil)
 		var buf bytes.Buffer
 		if err := png.Encode(&buf, dst); err != nil {
-			return nil, fmt.Errorf("encode png: %w", err)
+			return "", fmt.Errorf("encode png: %w", err)
 		}
 		upscaledB64 = base64.StdEncoding.EncodeToString(buf.Bytes())
 	}
 
+	return upscaledB64, nil
+}
+
+func (s *Service) img2imgRedenoise(base64Img string, req sd.Txt2ImgRequest, targetW, targetH int, denoise float64) (*sd.Txt2ImgResponse, error) {
 	i2iReq := sd.Img2ImgRequest{
-		InitImages:        []string{upscaledB64},
+		InitImages:        []string{base64Img},
 		Prompt:            req.Prompt,
 		NegativePrompt:    req.NegativePrompt,
 		SamplerName:       req.SamplerName,
@@ -358,7 +367,7 @@ func (s *Service) manualHiresUpscale(base64Img string, req sd.Txt2ImgRequest, sc
 		Width:             targetW,
 		Height:            targetH,
 		Seed:              req.Seed,
-		DenoisingStrength: &denoiseStrength,
+		DenoisingStrength: &denoise,
 		ClipSkip:          req.ClipSkip,
 		BatchSize:         req.BatchSize,
 		BatchCount:        req.BatchCount,
@@ -366,6 +375,48 @@ func (s *Service) manualHiresUpscale(base64Img string, req sd.Txt2ImgRequest, sc
 		DoNotSaveGrid:     true,
 	}
 	return s.sd.Img2Img(i2iReq)
+}
+
+func (s *Service) manualHiresUpscale(base64Img string, req sd.Txt2ImgRequest, scale float64, denoiseStrength float64, upscaler string) (*sd.Txt2ImgResponse, error) {
+	targetW := int(float64(req.Width) * scale)
+	targetH := int(float64(req.Height) * scale)
+
+	upscaledB64, err := s.upscaleWithFallback(base64Img, scale, targetW, targetH, upscaler)
+	if err != nil {
+		return nil, err
+	}
+
+	return s.img2imgRedenoise(upscaledB64, req, targetW, targetH, denoiseStrength)
+}
+
+func (s *Service) qualityPostProcess(base64Img string, req sd.Txt2ImgRequest, srcW, srcH int, resolutionID *int64) (string, json.RawMessage, bool, bool, error) {
+	targetW, targetH := s.fitImageToResolution(srcW, srcH, resolutionID)
+	scale := 1.0
+	if srcW > 0 {
+		scale = float64(targetW) / float64(srcW)
+	}
+	s.log.Info("from-image quality: upscale %.2fx to %dx%d (%s)", scale, targetW, targetH, qualityUpscaler)
+	upscaledB64, err := s.upscaleWithFallback(base64Img, scale, targetW, targetH, qualityUpscaler)
+	if err != nil {
+		s.log.Warn("from-image quality: upscale failed, using base image: %s", err)
+		return base64Img, nil, true, false, nil
+	}
+	hrResult, err := s.img2imgRedenoise(upscaledB64, req, targetW, targetH, qualityRedenoise)
+	if err != nil {
+		if ierr := s.checkSDInterrupted(); ierr != nil {
+			return "", nil, false, false, ierr
+		}
+		s.log.Warn("from-image quality: redenoise failed, using upscaled image: %s", err)
+		return upscaledB64, nil, false, true, nil
+	}
+	if len(hrResult.Images) == 0 {
+		if ierr := s.checkSDInterrupted(); ierr != nil {
+			return "", nil, false, false, ierr
+		}
+		s.log.Warn("from-image quality: redenoise returned no image, using upscaled image")
+		return upscaledB64, nil, false, true, nil
+	}
+	return hrResult.Images[0], hrResult.Info, false, false, nil
 }
 
 // --- Helpers ---
@@ -630,22 +681,53 @@ func (s *Service) resolveResolution(p *preset.Preset, resolutionID *int64) (widt
 	return r.Width, r.Height
 }
 
-func (s *Service) fitImageToResolution(imgW, imgH int, resolutionID *int64) (int, int) {
+func (s *Service) fitImageScale(imgW, imgH int, resolutionID *int64) (float64, bool) {
 	if resolutionID == nil || *resolutionID <= 0 || imgW <= 0 || imgH <= 0 {
-		return imgW, imgH
+		return 1, false
 	}
 	r, err := s.db.GetResolution(*resolutionID)
 	if err != nil || r.Width <= 0 || r.Height <= 0 {
-		s.log.Warn("fitImageToResolution: failed to load resolution %d: %s", *resolutionID, err)
-		return imgW, imgH
+		s.log.Warn("fitImageScale: failed to load resolution %d: %s", *resolutionID, err)
+		return 1, false
 	}
 	scale := float64(r.Width) / float64(imgW)
 	if h := float64(r.Height) / float64(imgH); h < scale {
 		scale = h
 	}
+	return scale, true
+}
+
+func scaleImageSize(imgW, imgH int, scale float64) (int, int, bool) {
 	w := int(float64(imgW)*scale) / 8 * 8
 	h := int(float64(imgH)*scale) / 8 * 8
 	if w < 8 || h < 8 {
+		return imgW, imgH, false
+	}
+	return w, h, true
+}
+
+func (s *Service) fitImageToResolution(imgW, imgH int, resolutionID *int64) (int, int) {
+	scale, ok := s.fitImageScale(imgW, imgH, resolutionID)
+	if !ok {
+		return imgW, imgH
+	}
+	w, h, ok := scaleImageSize(imgW, imgH, scale)
+	if !ok {
+		return imgW, imgH
+	}
+	return w, h
+}
+
+func (s *Service) fitImageToResolutionDownOnly(imgW, imgH int, resolutionID *int64) (int, int) {
+	scale, ok := s.fitImageScale(imgW, imgH, resolutionID)
+	if !ok {
+		return imgW, imgH
+	}
+	if scale > 1 {
+		scale = 1
+	}
+	w, h, ok := scaleImageSize(imgW, imgH, scale)
+	if !ok {
 		return imgW, imgH
 	}
 	return w, h

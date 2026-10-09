@@ -7,6 +7,8 @@ import (
 )
 
 func TestValidateJobParams(t *testing.T) {
+	resID := int64(2)
+
 	tests := []struct {
 		name    string
 		jobType JobType
@@ -21,6 +23,12 @@ func TestValidateJobParams(t *testing.T) {
 		{"from image preset mode with preset", JobFromImage, generation.GenerateFromImageParams{GenMode: "preset", PresetID: 5}, ""},
 		{"from image compound mode without preset", JobFromImage, generation.GenerateFromImageParams{GenMode: "compound"}, "compound preset is required"},
 		{"from image compound mode with preset", JobFromImage, generation.GenerateFromImageParams{GenMode: "compound", CompoundPresetID: 3}, ""},
+		{"from image quality valid", JobFromImage, generation.GenerateFromImageParams{GenMode: "preset", Mode: "img2img", PresetID: 5, OutputMode: "quality", ResolutionID: &resID}, ""},
+		{"from image quality without resolution", JobFromImage, generation.GenerateFromImageParams{GenMode: "preset", Mode: "img2img", PresetID: 5, OutputMode: "quality"}, "quality output mode requires img2img preset mode with resolution"},
+		{"from image quality with txt2img mode", JobFromImage, generation.GenerateFromImageParams{GenMode: "preset", Mode: "txt2img", PresetID: 5, OutputMode: "quality", ResolutionID: &resID}, "quality output mode requires img2img preset mode with resolution"},
+		{"from image quality with compound gen mode", JobFromImage, generation.GenerateFromImageParams{GenMode: "compound", Mode: "img2img", CompoundPresetID: 3, OutputMode: "quality", ResolutionID: &resID}, "quality output mode requires img2img preset mode with resolution"},
+		{"from image quality with remove object", JobFromImage, generation.GenerateFromImageParams{GenMode: "preset", Mode: "img2img", PresetID: 5, RemoveObject: true, OutputMode: "quality", ResolutionID: &resID}, "quality output mode requires img2img preset mode with resolution"},
+		{"from image bad output mode", JobFromImage, generation.GenerateFromImageParams{GenMode: "preset", PresetID: 5, OutputMode: "bad"}, "output_mode must be standard or quality"},
 		{"from image empty gen mode", JobFromImage, generation.GenerateFromImageParams{}, ""},
 		{"from image unknown gen mode", JobFromImage, generation.GenerateFromImageParams{GenMode: "analyze"}, ""},
 		{"from image remove object without preset", JobFromImage, generation.GenerateFromImageParams{GenMode: "preset", RemoveObject: true}, ""},

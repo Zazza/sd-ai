@@ -89,6 +89,7 @@ export namespace generation {
 	    image_base64: string;
 	    mode: string;
 	    gen_mode: string;
+	    output_mode?: string;
 	    preset_id: number;
 	    compound_preset_id: number;
 	    denoising_strength: number;
@@ -113,6 +114,7 @@ export namespace generation {
 	        this.image_base64 = source["image_base64"];
 	        this.mode = source["mode"];
 	        this.gen_mode = source["gen_mode"];
+	        this.output_mode = source["output_mode"];
 	        this.preset_id = source["preset_id"];
 	        this.compound_preset_id = source["compound_preset_id"];
 	        this.denoising_strength = source["denoising_strength"];
@@ -198,6 +200,8 @@ export namespace generation {
 	    is_preview: boolean;
 	    hires_fix_skipped: boolean;
 	    hires_fix_manual: boolean;
+	    quality_upscale_skipped?: boolean;
+	    quality_redenoise_skipped?: boolean;
 	    effective_prompt: string;
 	    effective_negative_prompt: string;
 	
@@ -213,6 +217,8 @@ export namespace generation {
 	        this.is_preview = source["is_preview"];
 	        this.hires_fix_skipped = source["hires_fix_skipped"];
 	        this.hires_fix_manual = source["hires_fix_manual"];
+	        this.quality_upscale_skipped = source["quality_upscale_skipped"];
+	        this.quality_redenoise_skipped = source["quality_redenoise_skipped"];
 	        this.effective_prompt = source["effective_prompt"];
 	        this.effective_negative_prompt = source["effective_negative_prompt"];
 	    }

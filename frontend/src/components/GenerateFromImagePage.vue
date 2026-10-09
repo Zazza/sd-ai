@@ -12,6 +12,7 @@ import { usePresets } from '../composables/usePresets.js'
 import ImageViewer from './ImageViewer.vue'
 import PresetOverridesPanel from './PresetOverridesPanel.vue'
 import ResolutionSelector from './ResolutionSelector.vue'
+import HiresProfileSelector from './HiresProfileSelector.vue'
 
 const props = defineProps({
   droppedImage: { type: String, default: null }
@@ -43,11 +44,17 @@ const denoisingStrength = ref(0.5)
 const seedInput = ref('')
 const extraNegativePrompt = ref('')
 const selectedResolutionId = ref(null)
+const selectedHiresProfileId = ref(null)
+const hiresProfiles = ref([])
+const loadHiresFailed = ref(false)
+const qualityMode = ref(false)
 
 const generatedImage = ref('')
 const genInfo = ref(null)
 const effectivePrompt = ref('')
 const effectiveNegative = ref('')
+const qualityUpscaleSkipped = ref(false)
+const qualityRedenoiseSkipped = ref(false)
 
 const analyzing = ref(false)
 const generatingImage = ref(false)
@@ -486,6 +493,8 @@ async function generate() {
   genInfo.value = null
   effectivePrompt.value = ''
   effectiveNegative.value = ''
+  qualityUpscaleSkipped.value = false
+  qualityRedenoiseSkipped.value = false
   error.value = ''
   resetProgress()
   enqueuedJobIds.value = new Set()
@@ -504,8 +513,12 @@ async function generate() {
       tags: mode.value === 'remove' ? '' : tags.value,
       extra_negative_prompt: extraNegativePrompt.value,
       resolution_id: selectedResolutionId.value || null,
+      hires_profile_id: (genMode.value === 'compound' && mode.value !== 'remove') ? (selectedHiresProfileId.value || null) : null,
       remove_object: mode.value === 'remove',
       overrides: (genMode.value === 'preset' && mode.value !== 'remove') ? presetOverrides.value : null,
+    }
+    if (genMode.value === 'preset' && mode.value === 'img2img') {
+      params.output_mode = (qualityMode.value && selectedResolutionId.value) ? 'quality' : ''
     }
     if (mode.value === 'inpaint' || mode.value === 'remove') {
       params.mask_base64 = maskB64
@@ -577,6 +590,8 @@ async function onQueueCompleted(data) {
           try { info = typeof r.info === 'string' ? JSON.parse(r.info) : r.info } catch { info = r.info }
         }
         genInfo.value = info
+        qualityUpscaleSkipped.value = r.quality_upscale_skipped || false
+        qualityRedenoiseSkipped.value = r.quality_redenoise_skipped || false
       }
     } catch {}
   }
@@ -651,6 +666,11 @@ let offPaused = () => {}
 onMounted(async () => {
   await loadPresets()
   loadKidsMode()
+  try {
+    hiresProfiles.value = await api.listHiresProfiles() || []
+  } catch {
+    loadHiresFailed.value = true
+  }
   document.addEventListener('paste', handlePaste)
   document.addEventListener('keydown', onKeydown)
   offRemoveStage = EventsOn("remove:stage", (stage) => {
@@ -679,7 +699,14 @@ onMounted(async () => {
       }
     }
     if (s.fi_gen_mode) genMode.value = s.fi_gen_mode
+    if (s.fi_hires_profile_id && !loadHiresFailed.value) {
+      const hid = Number(s.fi_hires_profile_id)
+      if (hiresProfiles.value.find(h => h.id === hid)) {
+        selectedHiresProfileId.value = hid
+      }
+    }
     if (s.fi_denoising) denoisingStrength.value = Number(s.fi_denoising)
+    if (s.fi_quality_mode) qualityMode.value = s.fi_quality_mode === 'true'
     if (s.fi_extra_negative) extraNegativePrompt.value = s.fi_extra_negative
     if (s.fi_analyze_mode) analyzeMode.value = s.fi_analyze_mode === 'describe' ? 'describe' : 'quick'
     if (s.fi_mask_padding) maskPadding.value = Number(s.fi_mask_padding)
@@ -736,18 +763,23 @@ onUnmounted(() => {
 })
 
 function saveFIState() {
-  api.updateSettings({
+  const state = {
     fi_mode: mode.value,
     fi_preset_id: String(selectedPresetId.value || ''),
     fi_compound_preset_id: String(selectedCompoundPresetId.value || ''),
     fi_gen_mode: genMode.value,
     fi_denoising: String(denoisingStrength.value || ''),
+    fi_quality_mode: qualityMode.value ? 'true' : 'false',
     fi_extra_negative: extraNegativePrompt.value || '',
     fi_analyze_mode: analyzeMode.value || '',
     fi_mask_padding: String(maskPadding.value || ''),
     fi_mask_feather: String(maskFeather.value || ''),
     fi_count: String(genCount.value || 1),
-  }).catch(() => {})
+  }
+  if (!loadHiresFailed.value) {
+    state.fi_hires_profile_id = selectedHiresProfileId.value ? String(selectedHiresProfileId.value) : ''
+  }
+  api.updateSettings(state).catch(() => {})
 }
 
 function copyPrompt() {
@@ -932,14 +964,29 @@ function onKeydown(e) {
             </div>
           </div>
 
-          <div v-if="mode !== 'remove' && genMode === 'preset'" class="form-group" style="margin-top: 4px;">
-            <label class="form-label">{{ t('fi.seed_label') }}</label>
-            <input class="form-input" type="number" v-model="seedInput" min="0" step="1" :placeholder="t('fi.seed_placeholder')" />
-            <div style="font-size: 11px; color: var(--text-dim); margin-top: 4px;">{{ t('fi.seed_hint') }}</div>
+          <div v-if="mode !== 'remove'" class="form-group" style="margin-top: 4px;">
+            <label class="form-label" :style="{ opacity: genMode === 'compound' ? 0.5 : 1 }">{{ t('fi.seed_label') }}</label>
+            <input data-testid="fi-seed-input" class="form-input" type="number" v-model="seedInput" min="0" step="1" :disabled="genMode === 'compound'" :placeholder="t('fi.seed_placeholder')" :style="{ opacity: genMode === 'compound' ? 0.5 : 1 }" />
+            <div v-if="genMode === 'compound'" style="font-size: 11px; color: var(--accent); margin-top: 4px;">{{ t('fi.preset_only') }}</div>
+            <div v-else style="font-size: 11px; color: var(--text-dim); margin-top: 4px;">{{ t('fi.seed_hint') }}</div>
           </div>
 
           <div v-if="mode !== 'remove'" class="form-group" style="margin-top: 4px;">
             <ResolutionSelector v-model="selectedResolutionId" :none-label="t('fi.resolution_original')" />
+            <div v-if="mode === 'img2img'" style="margin-top: 6px;">
+              <label :style="{ display: 'flex', alignItems: 'center', gap: '6px', cursor: (genMode === 'compound' || !selectedResolutionId) ? 'not-allowed' : 'pointer', opacity: (genMode === 'compound' || !selectedResolutionId) ? 0.5 : 1 }">
+                <input data-testid="fi-quality-checkbox" type="checkbox" v-model="qualityMode" :disabled="genMode === 'compound' || !selectedResolutionId" style="accent-color: var(--accent);" />
+                <span style="font-size: 12px;">{{ t('fi.quality_mode') }}</span>
+              </label>
+              <div v-if="genMode === 'preset'" style="font-size: 11px; color: var(--text-dim); margin-top: 2px;">{{ t('fi.quality_hint') }}</div>
+              <div v-if="genMode === 'compound'" style="font-size: 11px; color: var(--accent); margin-top: 2px;">{{ t('fi.preset_only') }}</div>
+              <div v-else-if="!selectedResolutionId" style="font-size: 11px; color: var(--accent); margin-top: 2px;">{{ t('fi.quality_needs_resolution') }}</div>
+            </div>
+          </div>
+
+          <div v-if="genMode === 'compound' && mode !== 'remove'" class="form-group" style="margin-top: 4px;">
+            <HiresProfileSelector v-model="selectedHiresProfileId" />
+            <div style="font-size: 11px; color: var(--text-dim); margin-top: 4px;">{{ t('fi.hires_hint') }}</div>
           </div>
 
           <div v-if="mode === 'remove'" class="form-group" style="margin-top: 4px;">
@@ -1114,6 +1161,12 @@ function onKeydown(e) {
             </div>
           </div>
           <div v-else-if="generatedImage" style="width: 100%; padding: 12px;">
+            <div v-if="qualityUpscaleSkipped" class="status status-warning" style="margin-bottom: 8px; text-align: center;">
+              {{ t('fi.quality_upscale_skipped') }}
+            </div>
+            <div v-if="qualityRedenoiseSkipped" class="status status-warning" style="margin-bottom: 8px; text-align: center;">
+              {{ t('fi.quality_redenoise_skipped') }}
+            </div>
             <img :src="imageSrc" alt="Generated" class="img-fade-in" style="border-radius: var(--radius-sm); cursor: zoom-in;" @click="showViewer = true" />
             <div style="display: flex; gap: 8px; margin-top: 12px; justify-content: center;">
               <button class="btn btn-secondary btn-sm" @click="downloadImage">{{ t('fi.btn_download') }}</button>

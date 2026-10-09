@@ -9,6 +9,7 @@ import (
 	"image/jpeg"
 	"image/png"
 	"io"
+	"log"
 	"math"
 	"os"
 	"path/filepath"
@@ -45,9 +46,20 @@ type SDInfo struct {
 	Denoising      float64 `json:"denoising_strength"`
 }
 
+const maxImageBase64 = 50 * 1024 * 1024
+
 func (s *Service) AddToSession(imageBase64 string, info json.RawMessage, source string, isPreview bool, presetID *int64) int64 {
-	if len(imageBase64) > 50*1024*1024 {
-		return 0
+	if len(imageBase64) > maxImageBase64 {
+		reencoded, err := reencodeJPEG(imageBase64)
+		if err != nil {
+			log.Printf("[session] warn: dropped oversized image: base64=%d bytes, cap=%d bytes, jpeg reencode failed: %v", len(imageBase64), maxImageBase64, err)
+			return 0
+		}
+		if len(reencoded) > maxImageBase64 {
+			log.Printf("[session] warn: dropped oversized image: base64=%d bytes, jpeg=%d bytes still over cap=%d bytes", len(imageBase64), len(reencoded), maxImageBase64)
+			return 0
+		}
+		imageBase64 = reencoded
 	}
 
 	sessionID, err := s.db.GetActiveSessionID()
@@ -155,6 +167,22 @@ func (s *Service) AddToSession(imageBase64 string, info json.RawMessage, source 
 	s.emit.Emit("session:active", map[string]int64{"id": itemID})
 
 	return itemID
+}
+
+func reencodeJPEG(imageBase64 string) (string, error) {
+	data, err := base64.StdEncoding.DecodeString(imageBase64)
+	if err != nil {
+		return "", err
+	}
+	img, _, err := image.Decode(bytes.NewReader(data))
+	if err != nil {
+		return "", err
+	}
+	var buf bytes.Buffer
+	if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: 95}); err != nil {
+		return "", err
+	}
+	return base64.StdEncoding.EncodeToString(buf.Bytes()), nil
 }
 
 func (s *Service) CreateSession(name string) (*preset.SessionInfo, error) {

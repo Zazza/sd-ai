@@ -17,12 +17,20 @@ func validateJobParams(jobType JobType, params any) error {
 			return fmt.Errorf("compound preset is required")
 		}
 	case JobFromImage:
-		if p, ok := params.(generation.GenerateFromImageParams); ok && !p.RemoveObject {
-			if p.GenMode == "preset" && p.PresetID <= 0 {
-				return fmt.Errorf("preset is required")
+		if p, ok := params.(generation.GenerateFromImageParams); ok {
+			if p.OutputMode != "" && p.OutputMode != "standard" && p.OutputMode != "quality" {
+				return fmt.Errorf("output_mode must be standard or quality")
 			}
-			if p.GenMode == "compound" && p.CompoundPresetID <= 0 {
-				return fmt.Errorf("compound preset is required")
+			if p.OutputMode == "quality" && (p.RemoveObject || p.Mode != "img2img" || p.GenMode != "preset" || p.ResolutionID == nil || *p.ResolutionID <= 0) {
+				return fmt.Errorf("quality output mode requires img2img preset mode with resolution")
+			}
+			if !p.RemoveObject {
+				if p.GenMode == "preset" && p.PresetID <= 0 {
+					return fmt.Errorf("preset is required")
+				}
+				if p.GenMode == "compound" && p.CompoundPresetID <= 0 {
+					return fmt.Errorf("compound preset is required")
+				}
 			}
 		}
 	}

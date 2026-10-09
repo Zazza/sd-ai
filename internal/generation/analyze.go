@@ -410,6 +410,17 @@ func (s *Service) GenerateFromImage(params GenerateFromImageParams) (*GenerateIm
 	if params.Mode == "inpaint" && params.MaskBase64 == "" {
 		return nil, fmt.Errorf("mask is required for inpaint mode")
 	}
+	if params.OutputMode != "" && params.OutputMode != "standard" && params.OutputMode != "quality" {
+		return nil, fmt.Errorf("output_mode must be standard or quality")
+	}
+	if params.OutputMode == "quality" {
+		if params.RemoveObject || params.GenMode != "preset" || params.Mode != "img2img" {
+			return nil, fmt.Errorf("quality output mode requires img2img preset mode")
+		}
+		if params.ResolutionID == nil || *params.ResolutionID <= 0 {
+			return nil, fmt.Errorf("quality output mode requires resolution")
+		}
+	}
 	if params.DenoisingStrength <= 0 {
 		params.DenoisingStrength = 0.5
 	}
@@ -484,15 +495,20 @@ func (s *Service) GenerateFromImage(params GenerateFromImageParams) (*GenerateIm
 	batchCount := 1
 
 	if params.Mode == "img2img" || params.Mode == "inpaint" {
-		imgW, imgH := filebrowser.DecodeImageSize(params.ImageBase64)
-		if imgW > 0 && imgH > 0 {
-			imgW = imgW / 8 * 8
-			imgH = imgH / 8 * 8
+		srcW, srcH := filebrowser.DecodeImageSize(params.ImageBase64)
+		if srcW > 0 && srcH > 0 {
+			srcW = srcW / 8 * 8
+			srcH = srcH / 8 * 8
 		} else {
-			imgW = 512
-			imgH = 512
+			srcW = 512
+			srcH = 512
 		}
-		imgW, imgH = s.fitImageToResolution(imgW, imgH, params.ResolutionID)
+		var imgW, imgH int
+		if params.OutputMode == "quality" {
+			imgW, imgH = s.fitImageToResolutionDownOnly(srcW, srcH, params.ResolutionID)
+		} else {
+			imgW, imgH = s.fitImageToResolution(srcW, srcH, params.ResolutionID)
+		}
 		denoising := params.DenoisingStrength
 		if denoising <= 0 {
 			denoising = 0.5
@@ -533,13 +549,45 @@ func (s *Service) GenerateFromImage(params GenerateFromImageParams) (*GenerateIm
 			}
 			return nil, fmt.Errorf("no image generated (%s)", params.Mode)
 		}
+		finalImage := result.Images[0]
+		finalInfo := result.Info
+		upscaleSkipped := false
+		redenoiseSkipped := false
+		if params.OutputMode == "quality" {
+			qualityReq := sd.Txt2ImgRequest{
+				Prompt:         prompt,
+				NegativePrompt: negativePrompt,
+				SamplerName:    samplerName,
+				Scheduler:      p.ScheduleType,
+				Steps:          p.Steps,
+				CfgScale:       p.CfgScale,
+				Width:          imgW,
+				Height:         imgH,
+				Seed:           seed,
+				ClipSkip:       &clipSkip,
+				BatchSize:      &batchSize,
+				BatchCount:     &batchCount,
+			}
+			qImg, qInfo, qUpscaleSkipped, qRedenoiseSkipped, qErr := s.qualityPostProcess(result.Images[0], qualityReq, imgW, imgH, params.ResolutionID)
+			if qErr != nil {
+				return nil, qErr
+			}
+			finalImage = qImg
+			if qInfo != nil {
+				finalInfo = qInfo
+			}
+			upscaleSkipped = qUpscaleSkipped
+			redenoiseSkipped = qRedenoiseSkipped
+		}
 		img := &GenerateImageResult{
-			Image:                   result.Images[0],
-			Info:                    result.Info,
+			Image:                   finalImage,
+			Info:                    finalInfo,
+			QualityUpscaleSkipped:   upscaleSkipped,
+			QualityRedenoiseSkipped: redenoiseSkipped,
 			EffectivePrompt:         prompt,
 			EffectiveNegativePrompt: negativePrompt,
 		}
-		s.sessions.AddToSession(result.Images[0], result.Info, "from-image", false, nil)
+		s.sessions.AddToSession(finalImage, finalInfo, "from-image", false, nil)
 		return img, nil
 	}
 
@@ -624,6 +672,7 @@ func (s *Service) generateFromImageCompound(params GenerateFromImageParams, tags
 
 	var lastImage string
 	var lastInfo json.RawMessage
+	lastStepIdx := len(cp.Steps) - 1
 
 	imgW, imgH := filebrowser.DecodeImageSize(params.ImageBase64)
 	if imgW > 0 && imgH > 0 {
@@ -636,6 +685,8 @@ func (s *Service) generateFromImageCompound(params GenerateFromImageParams, tags
 		if err != nil {
 			return nil, fmt.Errorf("step %d: preset not found: %w", stepIdx+1, err)
 		}
+
+		isLastStep := stepIdx == lastStepIdx
 
 		s.emitter.Emit("fromimage:progress", map[string]any{
 			"current": stepIdx + 1,
@@ -665,6 +716,11 @@ func (s *Service) generateFromImageCompound(params GenerateFromImageParams, tags
 			if err != nil {
 				return nil, err
 			}
+			if isLastStep {
+				if img, info, ok := s.applyHiresOnLastStep(p, lastImage, prompt, negativePrompt, samplerName, w, h, clipSkip, 1, 1, params.HiresProfileID); ok {
+					lastImage, lastInfo = img, info
+				}
+			}
 		} else {
 			w, h := width, height
 			if imgW > 0 && imgH > 0 && params.Mode == "img2img" {
@@ -673,6 +729,11 @@ func (s *Service) generateFromImageCompound(params GenerateFromImageParams, tags
 			lastImage, lastInfo, err = s.runFromImageCompoundStep(step, p, lastImage, prompt, negativePrompt, samplerName, w, h, clipSkip, stepIdx+1)
 			if err != nil {
 				return nil, err
+			}
+			if isLastStep {
+				if img, info, ok := s.applyHiresOnLastStep(p, lastImage, prompt, negativePrompt, samplerName, w, h, clipSkip, 1, 1, params.HiresProfileID); ok {
+					lastImage, lastInfo = img, info
+				}
 			}
 		}
 	}

@@ -702,8 +702,10 @@ func RegisterTools(s *Server) {
 	})
 
 	s.Register(Tool{
-		Name:        "from_image",
-		Description: "img2img или inpaint по image_path и пресету. tags (описание изменений) проходит LLM-конвертацию; для inpaint обязателен mask_path. Результат: PNG + sidecar в out_dir.",
+		Name: "from_image",
+		Description: "img2img или inpaint по image_path и пресету. tags (описание изменений) проходит LLM-конвертацию; для inpaint обязателен mask_path. " +
+			"quality=true (только mode=img2img, требует resolution_id): после генерации — ESRGAN-апскейл до бокса разрешения и дочерний img2img denoise 0.35. " +
+			"Результат: PNG + sidecar в out_dir.",
 		InputSchema: props(map[string]any{
 			"image_path":         prop("путь к исходному изображению", "string"),
 			"mode":               prop("img2img | inpaint (по умолчанию img2img)", "string"),
@@ -712,6 +714,8 @@ func RegisterTools(s *Server) {
 			"tags":               prop("что изменить — теги или описание для LLM", "string"),
 			"denoising_strength": prop("сила denoise 0..1 (по умолчанию 0.5)", "number"),
 			"extra_negative":     prop("дополнительный негатив", "string"),
+			"resolution_id":      prop("id разрешения: цель апскейла для quality, иначе fit исходника в бокс", "integer"),
+			"quality":            prop("качественный режим: 3 шага — img2img нативно, апскейл до бокса resolution_id, дочерний img2img (только mode=img2img)", "boolean"),
 		}, "image_path", "preset_id"),
 		Handler: func(s *Server, args map[string]any) (string, error) {
 			path := argString(args, "image_path")
@@ -748,7 +752,7 @@ func RegisterTools(s *Server) {
 					return "", err
 				}
 			}
-			res, err := s.deps.Gen.GenerateFromImage(generation.GenerateFromImageParams{
+			gp := generation.GenerateFromImageParams{
 				ImageBase64:         img,
 				Mode:                mode,
 				GenMode:             "preset",
@@ -757,7 +761,14 @@ func RegisterTools(s *Server) {
 				Tags:                argString(args, "tags"),
 				ExtraNegativePrompt: argString(args, "extra_negative"),
 				MaskBase64:          mask,
-			})
+			}
+			if rid := optInt(args, "resolution_id"); rid != nil && *rid > 0 {
+				gp.ResolutionID = rid
+			}
+			if argBool(args, "quality") {
+				gp.OutputMode = "quality"
+			}
+			res, err := s.deps.Gen.GenerateFromImage(gp)
 			if err != nil {
 				return "", err
 			}
@@ -765,10 +776,17 @@ func RegisterTools(s *Server) {
 			if err != nil {
 				return "", err
 			}
-			return toJSON(map[string]any{
+			out := map[string]any{
 				"path":   outPath,
 				"prompt": res.EffectivePrompt,
-			}), nil
+			}
+			if res.QualityUpscaleSkipped {
+				out["quality_upscale_skipped"] = true
+			}
+			if res.QualityRedenoiseSkipped {
+				out["quality_redenoise_skipped"] = true
+			}
+			return toJSON(out), nil
 		},
 	})
 

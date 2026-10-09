@@ -55,8 +55,10 @@ func (p *processor) processGeneration(job *Job, gen func() (*generation.Generate
 		return nil, err
 	}
 	return &JobResult{
-		ImageBase64: result.Image,
-		Info:        string(result.Info),
+		ImageBase64:             result.Image,
+		Info:                    string(result.Info),
+		QualityUpscaleSkipped:   result.QualityUpscaleSkipped,
+		QualityRedenoiseSkipped: result.QualityRedenoiseSkipped,
 	}, nil
 }
 

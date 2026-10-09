@@ -2,11 +2,13 @@ package session
 
 import (
 	"bytes"
+	cryptorand "crypto/rand"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"image"
 	"image/jpeg"
+	"image/png"
 	"os"
 	"path/filepath"
 	"sync"
@@ -79,6 +81,17 @@ func makeImageJPEG(t *testing.T, w, h int) string {
 	}
 	var buf bytes.Buffer
 	err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: 90})
+	require.NoError(t, err)
+	return base64.StdEncoding.EncodeToString(buf.Bytes())
+}
+
+func makeLargeImagePNG(t *testing.T, w, h int) string {
+	t.Helper()
+	img := image.NewRGBA(image.Rect(0, 0, w, h))
+	_, err := cryptorand.Read(img.Pix)
+	require.NoError(t, err)
+	var buf bytes.Buffer
+	err = png.Encode(&buf, img)
 	require.NoError(t, err)
 	return base64.StdEncoding.EncodeToString(buf.Bytes())
 }
@@ -382,6 +395,65 @@ func TestAddToSession_TooLarge(t *testing.T) {
 	}
 	itemID := svc.AddToSession(string(largeBase64), nil, "sd", false, nil)
 	assert.Equal(t, int64(0), itemID)
+}
+
+func TestAddToSession_OversizedReencodedToJPEG(t *testing.T) {
+	svc, emitter, _ := testService(t)
+
+	largePNG := makeLargeImagePNG(t, 3200, 3200)
+	require.Greater(t, len(largePNG), maxImageBase64)
+
+	itemID := svc.AddToSession(largePNG, nil, "sd", false, nil)
+	assert.True(t, itemID > 0)
+	assert.True(t, emitter.hasEvent("session:added"))
+
+	items, err := svc.GetSessionItems()
+	require.NoError(t, err)
+	require.Len(t, items, 1)
+	assert.Equal(t, 3200, items[0].Width)
+	assert.Equal(t, 3200, items[0].Height)
+}
+
+func TestReencodeJPEG(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name    string
+		input   string
+		wantErr bool
+	}{
+		{
+			name:  "valid image",
+			input: makeImageJPEG(t, 32, 32),
+		},
+		{
+			name:    "invalid base64",
+			input:   "!!!not-valid-base64!!!",
+			wantErr: true,
+		},
+		{
+			name:    "invalid image data",
+			input:   base64.StdEncoding.EncodeToString([]byte("not an image")),
+			wantErr: true,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			out, err := reencodeJPEG(tc.input)
+			if tc.wantErr {
+				assert.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			data, err := base64.StdEncoding.DecodeString(out)
+			require.NoError(t, err)
+			_, format, err := image.Decode(bytes.NewReader(data))
+			require.NoError(t, err)
+			assert.Equal(t, "jpeg", format)
+		})
+	}
 }
 
 func TestAddToSession_InvalidBase64(t *testing.T) {

@@ -110,6 +110,7 @@ type mockSD struct {
 	mu       sync.Mutex
 	txt2img  func(req sd.Txt2ImgRequest) (*sd.Txt2ImgResponse, error)
 	img2img  func(req sd.Img2ImgRequest) (*sd.Txt2ImgResponse, error)
+	upscale  func(base64Img string, upscaler string, scale float64) (string, error)
 	setModel func(modelName string) error
 	setVAE   func(vaeName string) error
 	progress func() (*sd.ProgressResponse, error)
@@ -178,6 +179,12 @@ func (m *mockSD) SetVAE(vaeName string) error {
 }
 
 func (m *mockSD) UpscaleImage(base64Img string, upscaler string, scale float64) (string, error) {
+	m.mu.Lock()
+	fn := m.upscale
+	m.mu.Unlock()
+	if fn != nil {
+		return fn(base64Img, upscaler, scale)
+	}
 	return "", fmt.Errorf("not implemented")
 }
 func (m *mockSD) MemoryInfo() (*sd.MemoryStats, error) { return nil, nil }
@@ -1681,6 +1688,11 @@ func TestGenerateFromImage_Validation(t *testing.T) {
 		{"inpaint without mask", GenerateFromImageParams{ImageBase64: "dGVzdA==", GenMode: "preset", Mode: "inpaint", PresetID: 1}, "mask is required for inpaint mode"},
 		{"preset mode no preset", GenerateFromImageParams{ImageBase64: "dGVzdA==", GenMode: "preset", Mode: "txt2img"}, "preset is required"},
 		{"compound mode no compound", GenerateFromImageParams{ImageBase64: "dGVzdA==", GenMode: "compound", Mode: "txt2img"}, "compound preset is required"},
+		{"invalid output_mode", GenerateFromImageParams{ImageBase64: "dGVzdA==", GenMode: "preset", Mode: "img2img", PresetID: 1, OutputMode: "bad"}, "output_mode must be standard or quality"},
+		{"quality with txt2img mode", GenerateFromImageParams{ImageBase64: "dGVzdA==", GenMode: "preset", Mode: "txt2img", PresetID: 1, OutputMode: "quality"}, "quality output mode requires img2img preset mode"},
+		{"quality with compound gen_mode", GenerateFromImageParams{ImageBase64: "dGVzdA==", GenMode: "compound", Mode: "img2img", CompoundPresetID: 1, OutputMode: "quality"}, "quality output mode requires img2img preset mode"},
+		{"quality with remove object", GenerateFromImageParams{ImageBase64: "dGVzdA==", GenMode: "preset", Mode: "img2img", PresetID: 1, RemoveObject: true, OutputMode: "quality"}, "quality output mode requires img2img preset mode"},
+		{"quality without resolution", GenerateFromImageParams{ImageBase64: "dGVzdA==", GenMode: "preset", Mode: "img2img", PresetID: 1, OutputMode: "quality"}, "quality output mode requires resolution"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1782,6 +1794,90 @@ func TestGenerateCompoundImage_Success(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	assert.Equal(t, "step2-img", result.Image)
+}
+
+func TestGenerateFromImage_CompoundHires(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		steps         int
+		hiresProfile  bool
+		expectUpscale int
+		expectedImage string
+		expectedInfo  string
+	}{
+		{"multi-step with hires", 2, true, 1, "hires-img", `{"seed":3}`},
+		{"multi-step without hires", 2, false, 0, "step2-img", `{"seed":2}`},
+		{"single-step with hires", 1, true, 1, "hires-img", `{"seed":3}`},
+		{"single-step without hires", 1, false, 0, "step1-img", `{"seed":1}`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			db := openTestDB(t)
+			p := makeTestPreset(t, db, nil)
+
+			steps := make([]preset.CompoundPresetStep, 0, tt.steps)
+			for i := 0; i < tt.steps; i++ {
+				steps = append(steps, preset.CompoundPresetStep{PresetID: p.ID, DenoisingStrength: 0.6})
+			}
+			cp := &preset.CompoundPreset{Name: "from-image-cp", Description: "from image", Steps: steps}
+			require.NoError(t, db.CreateCompoundPreset(cp))
+
+			var hiresID *int64
+			if tt.hiresProfile {
+				hp := &preset.HiresProfile{Name: "cp-hires", Upscale: 2.0, DenoisingStrength: 0.5, Upscaler: "R-ESRGAN 4x+"}
+				require.NoError(t, db.CreateHiresProfile(hp))
+				hiresID = &hp.ID
+			}
+
+			srcImg := makePNGBase64(t, 512, 512)
+
+			upscaleCalls := 0
+			sdSvc := &mockSD{
+				upscale: func(base64Img string, upscaler string, scale float64) (string, error) {
+					upscaleCalls++
+					assert.Equal(t, "R-ESRGAN 4x+", upscaler)
+					assert.InDelta(t, 2.0, scale, 0.01)
+					return "upscaled-b64", nil
+				},
+				img2img: func(req sd.Img2ImgRequest) (*sd.Txt2ImgResponse, error) {
+					switch req.InitImages[0] {
+					case srcImg:
+						return &sd.Txt2ImgResponse{Images: []string{"step1-img"}, Info: json.RawMessage(`{"seed":1}`)}, nil
+					case "step1-img":
+						return &sd.Txt2ImgResponse{Images: []string{"step2-img"}, Info: json.RawMessage(`{"seed":2}`)}, nil
+					case "upscaled-b64":
+						return &sd.Txt2ImgResponse{Images: []string{"hires-img"}, Info: json.RawMessage(`{"seed":3}`)}, nil
+					}
+					return nil, fmt.Errorf("unexpected init image: %q", req.InitImages[0])
+				},
+			}
+
+			svc := newTestService(t, db, &mockLLM{
+				genSDPromptFn: func(systemPrompt, userMessage, presetType, model string, maxTokens int) (string, error) {
+					return `{"prompt":"llm-scene-tags","negative_prompt":"llm-neg"}`, nil
+				},
+			}, sdSvc)
+			svc.ctx = context.Background()
+
+			result, err := svc.GenerateFromImage(GenerateFromImageParams{
+				ImageBase64:      srcImg,
+				Mode:             "img2img",
+				GenMode:          "compound",
+				CompoundPresetID: cp.ID,
+				Tags:             "custom prompt",
+				HiresProfileID:   hiresID,
+			})
+			require.NoError(t, err)
+			require.NotNil(t, result)
+			assert.Equal(t, tt.expectedImage, result.Image)
+			assert.Equal(t, tt.expectUpscale, upscaleCalls)
+			assert.NotEmpty(t, result.Info)
+			assert.Equal(t, tt.expectedInfo, string(result.Info))
+		})
+	}
 }
 
 func TestTestCompoundGenerate_Validation(t *testing.T) {
@@ -2409,6 +2505,294 @@ func TestFitImageToResolution(t *testing.T) {
 				t.Errorf("got %dx%d, want %dx%d", w, h, tc.wantW, tc.wantH)
 			}
 			_ = orig
+		})
+	}
+}
+
+func TestFitImageScale(t *testing.T) {
+	t.Parallel()
+
+	db := openTestDB(t)
+	r := &preset.Resolution{Width: 1024, Height: 1024}
+	require.NoError(t, db.CreateResolution(r))
+	svc := newTestService(t, db, &mockLLM{}, &mockSD{})
+
+	tests := []struct {
+		name      string
+		w         int
+		h         int
+		resID     *int64
+		wantScale float64
+		wantOK    bool
+	}{
+		{name: "nil resolution id", w: 768, h: 1152, resID: nil, wantScale: 1, wantOK: false},
+		{name: "zero resolution id", w: 768, h: 1152, resID: int64Ptr(0), wantScale: 1, wantOK: false},
+		{name: "missing resolution", w: 768, h: 1152, resID: int64Ptr(999), wantScale: 1, wantOK: false},
+		{name: "invalid image dims", w: 0, h: 512, resID: &r.ID, wantScale: 1, wantOK: false},
+		{name: "landscape limited by width", w: 2048, h: 1024, resID: &r.ID, wantScale: 0.5, wantOK: true},
+		{name: "portrait limited by height", w: 1024, h: 2048, resID: &r.ID, wantScale: 0.5, wantOK: true},
+		{name: "small image scale above one", w: 512, h: 512, resID: &r.ID, wantScale: 2, wantOK: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			scale, ok := svc.fitImageScale(tt.w, tt.h, tt.resID)
+			assert.InDelta(t, tt.wantScale, scale, 0.0001)
+			assert.Equal(t, tt.wantOK, ok)
+		})
+	}
+}
+
+func TestFitImageToResolutionDownOnly(t *testing.T) {
+	t.Parallel()
+
+	db := openTestDB(t)
+	r := &preset.Resolution{Width: 1024, Height: 1024}
+	require.NoError(t, db.CreateResolution(r))
+	svc := newTestService(t, db, &mockLLM{}, &mockSD{})
+
+	tests := []struct {
+		name  string
+		w     int
+		h     int
+		resID *int64
+		wantW int
+		wantH int
+	}{
+		{name: "no resolution keeps original", w: 768, h: 1152, resID: nil, wantW: 768, wantH: 1152},
+		{name: "missing resolution keeps original", w: 768, h: 1152, resID: int64Ptr(999), wantW: 768, wantH: 1152},
+		{name: "landscape shrinks into box", w: 2048, h: 1024, resID: &r.ID, wantW: 1024, wantH: 512},
+		{name: "portrait shrinks into box", w: 1024, h: 2048, resID: &r.ID, wantW: 512, wantH: 1024},
+		{name: "small image stays native", w: 512, h: 512, resID: &r.ID, wantW: 512, wantH: 512},
+		{name: "odd dims rounded to 8", w: 1500, h: 1000, resID: &r.ID, wantW: 1024, wantH: 680},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			w, h := svc.fitImageToResolutionDownOnly(tt.w, tt.h, tt.resID)
+			assert.Equal(t, tt.wantW, w)
+			assert.Equal(t, tt.wantH, h)
+		})
+	}
+}
+
+func TestQualityPostProcess(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name                 string
+		srcB64               string
+		srcW                 int
+		srcH                 int
+		interrupted          bool
+		upscaleFn            func(base64Img string, upscaler string, scale float64) (string, error)
+		img2imgFn            func(req sd.Img2ImgRequest) (*sd.Txt2ImgResponse, error)
+		wantImg              string
+		wantInfo             string
+		wantUpscaleSkipped   bool
+		wantRedenoiseSkipped bool
+		wantErr              string
+		wantUpscaleCalls     int
+		wantImg2ImgCalls     int
+	}{
+		{
+			name:   "success returns redenoised image and info",
+			srcB64: "step1-img",
+			srcW:   512,
+			srcH:   512,
+			upscaleFn: func(base64Img string, upscaler string, scale float64) (string, error) {
+				return "upscaled-b64", nil
+			},
+			img2imgFn: func(req sd.Img2ImgRequest) (*sd.Txt2ImgResponse, error) {
+				return &sd.Txt2ImgResponse{
+					Images: []string{"final-img"},
+					Info:   json.RawMessage(`{"seed": 77}`),
+				}, nil
+			},
+			wantImg:          "final-img",
+			wantInfo:         `{"seed": 77}`,
+			wantUpscaleCalls: 1,
+			wantImg2ImgCalls: 1,
+		},
+		{
+			name:   "upscale failure returns step1 image",
+			srcB64: "not-valid-base64!!!",
+			srcW:   512,
+			srcH:   512,
+			upscaleFn: func(base64Img string, upscaler string, scale float64) (string, error) {
+				return "", fmt.Errorf("esrgan unavailable")
+			},
+			img2imgFn: func(req sd.Img2ImgRequest) (*sd.Txt2ImgResponse, error) {
+				return nil, fmt.Errorf("img2img must not run")
+			},
+			wantImg:            "not-valid-base64!!!",
+			wantUpscaleSkipped: true,
+			wantUpscaleCalls:   1,
+			wantImg2ImgCalls:   0,
+		},
+		{
+			name:   "redenoise error keeps upscaled image",
+			srcB64: "step1-img",
+			srcW:   512,
+			srcH:   512,
+			upscaleFn: func(base64Img string, upscaler string, scale float64) (string, error) {
+				return "upscaled-b64", nil
+			},
+			img2imgFn: func(req sd.Img2ImgRequest) (*sd.Txt2ImgResponse, error) {
+				return nil, fmt.Errorf("sd img2img down")
+			},
+			wantImg:              "upscaled-b64",
+			wantRedenoiseSkipped: true,
+			wantUpscaleCalls:     1,
+			wantImg2ImgCalls:     1,
+		},
+		{
+			name:   "redenoise empty images keeps upscaled image",
+			srcB64: "step1-img",
+			srcW:   512,
+			srcH:   512,
+			upscaleFn: func(base64Img string, upscaler string, scale float64) (string, error) {
+				return "upscaled-b64", nil
+			},
+			img2imgFn: func(req sd.Img2ImgRequest) (*sd.Txt2ImgResponse, error) {
+				return &sd.Txt2ImgResponse{}, nil
+			},
+			wantImg:              "upscaled-b64",
+			wantRedenoiseSkipped: true,
+			wantUpscaleCalls:     1,
+			wantImg2ImgCalls:     1,
+		},
+		{
+			name:        "interrupted redenoise propagates error",
+			srcB64:      "step1-img",
+			srcW:        512,
+			srcH:        512,
+			interrupted: true,
+			upscaleFn: func(base64Img string, upscaler string, scale float64) (string, error) {
+				return "upscaled-b64", nil
+			},
+			img2imgFn: func(req sd.Img2ImgRequest) (*sd.Txt2ImgResponse, error) {
+				return nil, fmt.Errorf("job cancelled")
+			},
+			wantImg:          "",
+			wantErr:          "interrupted",
+			wantUpscaleCalls: 1,
+			wantImg2ImgCalls: 1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			db := openTestDB(t)
+			r := &preset.Resolution{Width: 1024, Height: 1024}
+			require.NoError(t, db.CreateResolution(r))
+
+			upscaleCalls := 0
+			img2imgCalls := 0
+			sdSvc := &mockSD{
+				upscale: func(base64Img string, upscaler string, scale float64) (string, error) {
+					upscaleCalls++
+					return tt.upscaleFn(base64Img, upscaler, scale)
+				},
+				img2img: func(req sd.Img2ImgRequest) (*sd.Txt2ImgResponse, error) {
+					img2imgCalls++
+					return tt.img2imgFn(req)
+				},
+			}
+
+			svc := newTestService(t, db, &mockLLM{}, sdSvc)
+			svc.ctx = context.Background()
+			if tt.interrupted {
+				require.NoError(t, svc.InterruptGeneration())
+			}
+
+			img, info, upscaleSkipped, redenoiseSkipped, err := svc.qualityPostProcess(
+				tt.srcB64,
+				sd.Txt2ImgRequest{Prompt: "p", NegativePrompt: "n"},
+				tt.srcW,
+				tt.srcH,
+				&r.ID,
+			)
+
+			assert.Equal(t, tt.wantUpscaleCalls, upscaleCalls)
+			assert.Equal(t, tt.wantImg2ImgCalls, img2imgCalls)
+			assert.Equal(t, tt.wantUpscaleSkipped, upscaleSkipped)
+			assert.Equal(t, tt.wantRedenoiseSkipped, redenoiseSkipped)
+
+			if tt.wantErr != "" {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.wantErr)
+			} else {
+				require.NoError(t, err)
+			}
+			assert.Equal(t, tt.wantImg, img)
+			assert.Equal(t, tt.wantInfo, string(info))
+		})
+	}
+}
+
+func TestQualityPostProcess_Params(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		srcW      int
+		srcH      int
+		wantW     int
+		wantH     int
+		wantScale float64
+	}{
+		{name: "upscale small image", srcW: 512, srcH: 512, wantW: 1024, wantH: 1024, wantScale: 2},
+		{name: "downscale large image", srcW: 2048, srcH: 1024, wantW: 1024, wantH: 512, wantScale: 0.5},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			db := openTestDB(t)
+			r := &preset.Resolution{Width: 1024, Height: 1024}
+			require.NoError(t, db.CreateResolution(r))
+
+			var capturedUpscaleImg, capturedUpscaler string
+			var capturedScale float64
+			var capturedI2I sd.Img2ImgRequest
+
+			sdSvc := &mockSD{
+				upscale: func(base64Img string, upscaler string, scale float64) (string, error) {
+					capturedUpscaleImg = base64Img
+					capturedUpscaler = upscaler
+					capturedScale = scale
+					return "upscaled-b64", nil
+				},
+				img2img: func(req sd.Img2ImgRequest) (*sd.Txt2ImgResponse, error) {
+					capturedI2I = req
+					return &sd.Txt2ImgResponse{
+						Images: []string{"final-img"},
+						Info:   json.RawMessage(`{"seed": 1}`),
+					}, nil
+				},
+			}
+
+			svc := newTestService(t, db, &mockLLM{}, sdSvc)
+			svc.ctx = context.Background()
+
+			img, _, _, _, err := svc.qualityPostProcess("step1-img", sd.Txt2ImgRequest{Prompt: "p"}, tt.srcW, tt.srcH, &r.ID)
+			require.NoError(t, err)
+			assert.Equal(t, "final-img", img)
+
+			assert.Equal(t, "step1-img", capturedUpscaleImg)
+			assert.Equal(t, "R-ESRGAN 4x+", capturedUpscaler)
+			assert.InDelta(t, tt.wantScale, capturedScale, 0.0001)
+
+			assert.Equal(t, tt.wantW, capturedI2I.Width)
+			assert.Equal(t, tt.wantH, capturedI2I.Height)
+			require.Len(t, capturedI2I.InitImages, 1)
+			assert.Equal(t, "upscaled-b64", capturedI2I.InitImages[0])
+			require.NotNil(t, capturedI2I.DenoisingStrength)
+			assert.InDelta(t, 0.35, *capturedI2I.DenoisingStrength, 0.001)
 		})
 	}
 }
