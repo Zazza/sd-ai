@@ -13,10 +13,11 @@ import (
 )
 
 const (
-	heavyVRAMHeadroom = 12 << 30
-	heavyRAMHeadroom  = 10 << 30
-	unloadWaitTimeout = 15 * time.Second
-	unloadPollPeriod  = 500 * time.Millisecond
+	heavyVRAMHeadroom    = 12 << 30
+	ramHeadroom          = 10 << 30
+	nonHeavyVRAMHeadroom = 8 << 30
+	unloadWaitTimeout    = 15 * time.Second
+	unloadPollPeriod     = 500 * time.Millisecond
 )
 
 type MemoryGuard struct {
@@ -70,9 +71,6 @@ func (g *MemoryGuard) decide(modelName, logPrefix string) bool {
 	if g.setting("llm_auto_unload", "true") == "false" {
 		return false
 	}
-	if !g.isHeavy(modelName) {
-		return false
-	}
 	if g.llm.Backend() != llm.BackendOllama {
 		return false
 	}
@@ -104,18 +102,23 @@ func (g *MemoryGuard) decide(modelName, logPrefix string) bool {
 	}
 
 	gib := float64(1 << 30)
-	deficit := cudaFree < float64(heavyVRAMHeadroom) || ramFree < float64(heavyRAMHeadroom)
+	needVRAM := float64(nonHeavyVRAMHeadroom)
+	if g.isHeavy(modelName) {
+		needVRAM = float64(heavyVRAMHeadroom)
+	}
+	needRAM := float64(ramHeadroom)
+	deficit := cudaFree < needVRAM || ramFree < needRAM
 	if !deficit {
-		g.log.Info("%s: memory guard: enough headroom for %q (cuda_free=%.1fG ram_free=%.1fG), LLM kept warm", logPrefix, modelName, cudaFree/gib, ramFree/gib)
+		g.log.Info("%s: memory guard: enough headroom for %q (cuda_free=%.1fG ram_free=%.1fG need_vram=%.1fG need_ram=%.1fG), LLM kept warm", logPrefix, modelName, cudaFree/gib, ramFree/gib, needVRAM/gib, needRAM/gib)
 		return false
 	}
-	relief := cudaFree+reclVRAM >= float64(heavyVRAMHeadroom) && ramFree+reclRAM >= float64(heavyRAMHeadroom)
+	relief := cudaFree+reclVRAM >= needVRAM && ramFree+reclRAM >= needRAM
 	if !relief {
-		g.log.Info("%s: memory guard: low memory for %q (cuda_free=%.1fG ram_free=%.1fG reclaimable cuda=%.1fG ram=%.1fG), unload would not free enough", logPrefix, modelName, cudaFree/gib, ramFree/gib, reclVRAM/gib, reclRAM/gib)
+		g.log.Info("%s: memory guard: low memory for %q (cuda_free=%.1fG ram_free=%.1fG need_vram=%.1fG need_ram=%.1fG reclaimable cuda=%.1fG ram=%.1fG), unload would not free enough", logPrefix, modelName, cudaFree/gib, ramFree/gib, needVRAM/gib, needRAM/gib, reclVRAM/gib, reclRAM/gib)
 		return false
 	}
 
-	g.log.Info("%s: memory guard: unloading LLM before %q (cuda_free=%.1fG ram_free=%.1fG reclaimable cuda=%.1fG ram=%.1fG)", logPrefix, modelName, cudaFree/gib, ramFree/gib, reclVRAM/gib, reclRAM/gib)
+	g.log.Info("%s: memory guard: unloading LLM before %q (cuda_free=%.1fG ram_free=%.1fG need_vram=%.1fG need_ram=%.1fG reclaimable cuda=%.1fG ram=%.1fG)", logPrefix, modelName, cudaFree/gib, ramFree/gib, needVRAM/gib, needRAM/gib, reclVRAM/gib, reclRAM/gib)
 	return true
 }
 

@@ -71,11 +71,11 @@ func (m *guardLLM) AnalyzeImageDescribe(model, prompt, imageBase64 string, maxTo
 	return "", fmt.Errorf("not implemented")
 }
 
-func (m *guardLLM) GetModels() ([]llm.LLMModel, error)       { return nil, nil }
-func (m *guardLLM) HealthCheck() error                       { return nil }
-func (m *guardLLM) SetURL(baseURL string)                    {}
-func (m *guardLLM) SetBackend(backend string)                {}
-func (m *guardLLM) SetBackendConfig(cfg llm.BackendConfig)   {}
+func (m *guardLLM) GetModels() ([]llm.LLMModel, error)     { return nil, nil }
+func (m *guardLLM) HealthCheck() error                     { return nil }
+func (m *guardLLM) SetURL(baseURL string)                  {}
+func (m *guardLLM) SetBackend(backend string)              {}
+func (m *guardLLM) SetBackendConfig(cfg llm.BackendConfig) {}
 
 type guardSD struct {
 	stats           *sd.MemoryStats
@@ -191,9 +191,36 @@ func TestMemoryGuard_EnsureHeadroom(t *testing.T) {
 			wantZeroAPI:     true,
 		},
 		{
-			name:            "non heavy model skipped",
-			model:           "epicrealismXL_pureFix",
+			name:            "non heavy sdxl model deficit with relief unloads llm",
+			model:           "riMix_v10",
 			backend:         llm.BackendOllama,
+			listLoadedFn:    loadedOnce([]llm.LoadedModel{vramHeavy}),
+			stats:           cudaStats(gib(3), gib(8)),
+			want:            true,
+			wantUnloadCalls: 1,
+		},
+		{
+			name:            "non heavy model cuda free above 8g keeps llm warm",
+			model:           "riMix_v10",
+			backend:         llm.BackendOllama,
+			listLoadedFn:    staticLoaded([]llm.LoadedModel{vramHeavy}, nil),
+			stats:           cudaStats(gib(10), gib(16)),
+			want:            false,
+			wantUnloadCalls: 0,
+		},
+		{
+			name:            "non heavy model at exact 8g threshold no deficit",
+			model:           "riMix_v10",
+			backend:         llm.BackendOllama,
+			listLoadedFn:    staticLoaded([]llm.LoadedModel{vramHeavy}, nil),
+			stats:           cudaStats(gib(8), gib(16)),
+			want:            false,
+			wantUnloadCalls: 0,
+		},
+		{
+			name:            "heavy model on non ollama backend skipped",
+			model:           "flux1-dev-fp8",
+			backend:         llm.BackendLMStudio,
 			listLoadedFn:    staticLoaded([]llm.LoadedModel{vramHeavy}, nil),
 			stats:           cudaStats(gib(3), gib(8)),
 			want:            false,
@@ -201,8 +228,8 @@ func TestMemoryGuard_EnsureHeadroom(t *testing.T) {
 			wantZeroAPI:     true,
 		},
 		{
-			name:            "heavy model on non ollama backend skipped",
-			model:           "flux1-dev-fp8",
+			name:            "non heavy model on non ollama backend skipped",
+			model:           "riMix_v10",
 			backend:         llm.BackendLMStudio,
 			listLoadedFn:    staticLoaded([]llm.LoadedModel{vramHeavy}, nil),
 			stats:           cudaStats(gib(3), gib(8)),
@@ -221,8 +248,8 @@ func TestMemoryGuard_EnsureHeadroom(t *testing.T) {
 			wantNoMemInfo:   true,
 		},
 		{
-			name:            "no loaded models nothing to unload",
-			model:           "flux1-dev-fp8",
+			name:            "non heavy model no loaded models nothing to unload",
+			model:           "riMix_v10",
 			backend:         llm.BackendOllama,
 			listLoadedFn:    staticLoaded(nil, nil),
 			stats:           cudaStats(gib(3), gib(8)),
@@ -256,6 +283,15 @@ func TestMemoryGuard_EnsureHeadroom(t *testing.T) {
 			stats:           cudaStats(gib(12), gib(10)),
 			want:            false,
 			wantUnloadCalls: 0,
+		},
+		{
+			name:            "heavy model cuda below 12g with relief unloads llm",
+			model:           "flux1-dev-fp8",
+			backend:         llm.BackendOllama,
+			listLoadedFn:    loadedOnce([]llm.LoadedModel{vramHeavy}),
+			stats:           cudaStats(gib(10), gib(16)),
+			want:            true,
+			wantUnloadCalls: 1,
 		},
 		{
 			name:            "deficit with relief unloads llm",
@@ -302,15 +338,14 @@ func TestMemoryGuard_EnsureHeadroom(t *testing.T) {
 			wantUnloadCalls: 1,
 		},
 		{
-			name:            "custom heavy models setting overrides default",
+			name:            "custom heavy models setting lowers threshold for default heavy model",
 			model:           "flux1-dev-fp8",
 			heavyModels:     "megatron",
 			backend:         llm.BackendOllama,
 			listLoadedFn:    staticLoaded([]llm.LoadedModel{vramHeavy}, nil),
-			stats:           cudaStats(gib(3), gib(8)),
+			stats:           cudaStats(gib(10), gib(16)),
 			want:            false,
 			wantUnloadCalls: 0,
-			wantZeroAPI:     true,
 		},
 		{
 			name:            "unload wait timeout still returns true",
