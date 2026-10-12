@@ -13,8 +13,17 @@ func validateJobParams(jobType JobType, params any) error {
 			return fmt.Errorf("preset is required")
 		}
 	case JobCompound:
-		if p, ok := params.(generation.GenerateCompoundImageParams); ok && p.CompoundPresetID <= 0 {
-			return fmt.Errorf("compound preset is required")
+		if p, ok := params.(generation.GenerateCompoundImageParams); ok {
+			if len(p.Steps) > 0 {
+				if p.CompoundPresetID > 0 {
+					return fmt.Errorf("steps and compound_preset_id are mutually exclusive")
+				}
+				if err := generation.ValidateCustomSteps(p.Steps); err != nil {
+					return err
+				}
+			} else if p.CompoundPresetID <= 0 {
+				return fmt.Errorf("compound preset is required")
+			}
 		}
 	case JobFromImage:
 		if p, ok := params.(generation.GenerateFromImageParams); ok {

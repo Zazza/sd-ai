@@ -24,6 +24,7 @@ var AllowedSettings = map[string]bool{
 	"gen_extra_prompt": true, "gen_extra_negative": true,
 	"gen_description": true, "gen_type_id": true,
 	"gen_mode": true, "gen_compound_preset_id": true,
+	"gen_custom_steps": true,
 	"gen_resolution_id": true, "gen_hires_profile_id": true,
 	"batch_preset_id": true, "batch_compound_preset_id": true, "batch_mode": true,
 	"batch_prompt": true, "batch_negative": true, "batch_count": true, "batch_output_folder": true,

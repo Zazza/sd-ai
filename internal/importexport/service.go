@@ -86,6 +86,7 @@ type CompoundExportData struct {
 type CompoundStepExportData struct {
 	StepOrder         int        `json:"step_order"`
 	DenoisingStrength float64    `json:"denoising_strength"`
+	Loras             string     `json:"loras"`
 	Preset            PresetData `json:"preset"`
 }
 
@@ -568,9 +569,14 @@ func (s *Service) PrepareCompoundExportData(ids []int64) ([]CompoundExportData, 
 					Loras:                  p.Loras,
 				}
 			}
+			var loras string
+			if step.Loras != nil {
+				loras = *step.Loras
+			}
 			steps[j] = CompoundStepExportData{
 				StepOrder:         step.StepOrder,
 				DenoisingStrength: step.DenoisingStrength,
+				Loras:             loras,
 				Preset:            pd,
 			}
 		}
@@ -646,6 +652,10 @@ func (s *Service) ImportCompoundItems(items []CompoundExportData) ([]preset.Comp
 	for i, item := range items {
 		var steps []preset.CompoundPresetStep
 		for j, se := range item.Steps {
+			var stepLoras *string
+			if se.Loras != "" && len(se.Loras) <= preset.MaxStepLorasLen && json.Valid([]byte(se.Loras)) {
+				stepLoras = &se.Loras
+			}
 			pd := se.Preset
 			typeName := pd.TypeName
 			if typeName == "" {
@@ -705,6 +715,7 @@ func (s *Service) ImportCompoundItems(items []CompoundExportData) ([]preset.Comp
 					StepOrder:         j + 1,
 					PresetID:          existing.ID,
 					DenoisingStrength: se.DenoisingStrength,
+					Loras:             stepLoras,
 				})
 				continue
 			}
@@ -721,6 +732,7 @@ func (s *Service) ImportCompoundItems(items []CompoundExportData) ([]preset.Comp
 				StepOrder:         j + 1,
 				PresetID:          created[0].ID,
 				DenoisingStrength: se.DenoisingStrength,
+				Loras:             stepLoras,
 			})
 		}
 

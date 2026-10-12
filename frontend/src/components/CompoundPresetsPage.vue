@@ -70,6 +70,7 @@ function openEdit(cp) {
   formSteps.value = cp.steps.map(s => ({
     preset_id: s.preset_id,
     denoising_strength: s.denoising_strength || 0.5,
+    loras: s.loras ?? null,
   }))
   showForm.value = true
   error.value = ''
@@ -122,6 +123,7 @@ async function saveCompound() {
       step_order: i + 1,
       preset_id: s.preset_id,
       denoising_strength: s.denoising_strength,
+      loras: s.loras ?? null,
     })),
   }
 
@@ -149,6 +151,7 @@ async function handleDuplicate(cp) {
       step_order: i + 1,
       preset_id: s.preset_id,
       denoising_strength: s.denoising_strength,
+      loras: s.loras ?? null,
     })),
   })
   await loadData()

@@ -41,12 +41,32 @@ export namespace generation {
 	        this.describe_prompt = source["describe_prompt"];
 	    }
 	}
+	export class CustomStep {
+	    preset_id: number;
+	    denoising_strength: number;
+	    loras?: string;
+	    resolution_id?: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new CustomStep(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.preset_id = source["preset_id"];
+	        this.denoising_strength = source["denoising_strength"];
+	        this.loras = source["loras"];
+	        this.resolution_id = source["resolution_id"];
+	    }
+	}
 	export class GenerateCompoundImageParams {
 	    compound_preset_id: number;
 	    extra_prompt: string;
 	    extra_negative_prompt: string;
 	    resolution_id?: number;
 	    hires_profile_id?: number;
+	    steps?: CustomStep[];
+	    seed?: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new GenerateCompoundImageParams(source);
@@ -59,7 +79,27 @@ export namespace generation {
 	        this.extra_negative_prompt = source["extra_negative_prompt"];
 	        this.resolution_id = source["resolution_id"];
 	        this.hires_profile_id = source["hires_profile_id"];
+	        this.steps = this.convertValues(source["steps"], CustomStep);
+	        this.seed = source["seed"];
 	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class PresetOverrides {
 	    sampler?: string;
@@ -454,6 +494,7 @@ export namespace importexport {
 	export class CompoundStepExportData {
 	    step_order: number;
 	    denoising_strength: number;
+	    loras: string;
 	    preset: PresetData;
 	
 	    static createFrom(source: any = {}) {
@@ -464,6 +505,7 @@ export namespace importexport {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.step_order = source["step_order"];
 	        this.denoising_strength = source["denoising_strength"];
+	        this.loras = source["loras"];
 	        this.preset = this.convertValues(source["preset"], PresetData);
 	    }
 	
@@ -733,6 +775,7 @@ export namespace preset {
 	    preset_id: number;
 	    denoising_strength: number;
 	    resolution_id?: number;
+	    loras?: string;
 	    preset?: Preset;
 	
 	    static createFrom(source: any = {}) {
@@ -747,6 +790,7 @@ export namespace preset {
 	        this.preset_id = source["preset_id"];
 	        this.denoising_strength = source["denoising_strength"];
 	        this.resolution_id = source["resolution_id"];
+	        this.loras = source["loras"];
 	        this.preset = this.convertValues(source["preset"], Preset);
 	    }
 	
@@ -838,6 +882,64 @@ export namespace preset {
 	        this.created_at = source["created_at"];
 	        this.updated_at = source["updated_at"];
 	    }
+	}
+	export class StepMeta {
+	    step: number;
+	    preset?: string;
+	    op?: string;
+	    model?: string;
+	    denoise?: number;
+	    loras?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new StepMeta(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.step = source["step"];
+	        this.preset = source["preset"];
+	        this.op = source["op"];
+	        this.model = source["model"];
+	        this.denoise = source["denoise"];
+	        this.loras = source["loras"];
+	    }
+	}
+	export class GenerationMeta {
+	    preset_id?: number;
+	    model?: string;
+	    label?: string;
+	    chain?: StepMeta[];
+	
+	    static createFrom(source: any = {}) {
+	        return new GenerationMeta(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.preset_id = source["preset_id"];
+	        this.model = source["model"];
+	        this.label = source["label"];
+	        this.chain = this.convertValues(source["chain"], StepMeta);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class HiresProfile {
 	    id: number;
@@ -1003,6 +1105,7 @@ export namespace preset {
 	    preset_id?: number;
 	    is_active: boolean;
 	    created_at: string;
+	    meta?: GenerationMeta;
 	
 	    static createFrom(source: any = {}) {
 	        return new SessionItem(source);
@@ -1028,7 +1131,26 @@ export namespace preset {
 	        this.preset_id = source["preset_id"];
 	        this.is_active = source["is_active"];
 	        this.created_at = source["created_at"];
+	        this.meta = this.convertValues(source["meta"], GenerationMeta);
 	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 
 }

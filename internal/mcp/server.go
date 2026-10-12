@@ -87,7 +87,7 @@ func (NoopEmitter) Emit(event string, data ...any) {}
 
 type NoopSessions struct{}
 
-func (NoopSessions) AddToSession(imageBase64 string, info json.RawMessage, source string, isPreview bool, presetID *int64) int64 {
+func (NoopSessions) AddToSession(imageBase64 string, info json.RawMessage, source string, isPreview bool, meta *preset.GenerationMeta) int64 {
 	return 0
 }
 

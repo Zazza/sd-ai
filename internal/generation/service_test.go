@@ -236,7 +236,7 @@ type sessionItem struct {
 	isPreview   bool
 }
 
-func (m *mockSessions) AddToSession(imageBase64 string, info json.RawMessage, source string, isPreview bool, presetID *int64) int64 {
+func (m *mockSessions) AddToSession(imageBase64 string, info json.RawMessage, source string, isPreview bool, meta *preset.GenerationMeta) int64 {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.items = append(m.items, sessionItem{

@@ -69,6 +69,30 @@ const sourceLabels = {
   'file-browser': 'Browser',
 }
 
+function chainSteps(item) {
+  const chain = item?.meta?.chain
+  return Array.isArray(chain) ? chain.length : 0
+}
+
+function itemTitle(item) {
+  const meta = item.meta
+  const count = chainSteps(item)
+  const lines = []
+  if (meta) {
+    let label = meta.label || ''
+    if (!label && count > 0) label = t('footer.custom_mode')
+    if (!label) label = sourceLabels[item.source] || item.source || ''
+    if (label) lines.push(label)
+    if (meta.model) lines.push(meta.model)
+  } else {
+    if (item.sampler) lines.push(item.sampler)
+    if (!lines.length) lines.push(sourceLabels[item.source] || item.source || '')
+  }
+  if (item.seed != null) lines.push('Seed: ' + item.seed)
+  if (count > 1) lines.push(t('footer.tooltip_steps', { count }))
+  return lines.join('\n')
+}
+
 function addLog(raw) {
   try {
     const entry = JSON.parse(raw)
@@ -584,8 +608,10 @@ onUnmounted(() => {
           class="si-card"
           :class="{ 'si-active': item.is_active }"
           :data-item-id="item.id"
+          :title="itemTitle(item)"
           @click="openViewer(item)"
         >
+          <span v-if="chainSteps(item) > 1" class="si-steps-badge" aria-hidden="true">{{ chainSteps(item) }}</span>
           <div class="si-thumb">
             <img v-if="thumbnails[item.id]" :src="thumbnails[item.id]" />
             <Image v-else :size="24" class="si-placeholder" />
@@ -964,6 +990,27 @@ export default { name: 'AppFooter' }
 .si-source {
   color: var(--text-dim);
   font-weight: 500;
+}
+
+.si-steps-badge {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  z-index: 1;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--accent);
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1;
+  pointer-events: none;
 }
 
 .si-actions {

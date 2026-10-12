@@ -77,7 +77,32 @@ type CompoundPresetStep struct {
 	PresetID          int64   `json:"preset_id"`
 	DenoisingStrength float64 `json:"denoising_strength"`
 	ResolutionID      *int64  `json:"resolution_id"`
+	Loras             *string `json:"loras,omitempty"`
 	Preset            *Preset `json:"preset,omitempty"`
+}
+
+const MaxStepLorasLen = 8192
+
+const (
+	MaxMetaChainSteps = 16
+	MaxMetaStrLen     = 256
+	MaxMetaJSONLen    = 32 * 1024
+)
+
+type GenerationMeta struct {
+	PresetID *int64     `json:"preset_id,omitempty"`
+	Model    string     `json:"model,omitempty"`
+	Label    string     `json:"label,omitempty"`
+	Chain    []StepMeta `json:"chain,omitempty"`
+}
+
+type StepMeta struct {
+	Step    int      `json:"step"`
+	Preset  string   `json:"preset,omitempty"`
+	Op      string   `json:"op,omitempty"`
+	Model   string   `json:"model,omitempty"`
+	Denoise *float64 `json:"denoise,omitempty"`
+	Loras   string   `json:"loras,omitempty"`
 }
 
 type SessionInfo struct {
@@ -89,24 +114,25 @@ type SessionInfo struct {
 }
 
 type SessionItem struct {
-	ID             int64   `json:"id"`
-	SessionID      int64   `json:"session_id"`
-	FileName       string  `json:"file_name"`
-	ThumbName      string  `json:"thumb_name"`
-	Source         string  `json:"source"`
-	Prompt         string  `json:"prompt"`
-	NegativePrompt string  `json:"negative_prompt"`
-	Sampler        string  `json:"sampler"`
-	Steps          int     `json:"steps"`
-	CfgScale       float64 `json:"cfg_scale"`
-	Seed           *int64  `json:"seed"`
-	Denoising      float64 `json:"denoising"`
-	Width          int     `json:"width"`
-	Height         int     `json:"height"`
-	IsPreview      bool    `json:"is_preview"`
-	PresetID       *int64  `json:"preset_id"`
-	IsActive       bool    `json:"is_active"`
-	CreatedAt      string  `json:"created_at"`
+	ID             int64           `json:"id"`
+	SessionID      int64           `json:"session_id"`
+	FileName       string          `json:"file_name"`
+	ThumbName      string          `json:"thumb_name"`
+	Source         string          `json:"source"`
+	Prompt         string          `json:"prompt"`
+	NegativePrompt string          `json:"negative_prompt"`
+	Sampler        string          `json:"sampler"`
+	Steps          int             `json:"steps"`
+	CfgScale       float64         `json:"cfg_scale"`
+	Seed           *int64          `json:"seed"`
+	Denoising      float64         `json:"denoising"`
+	Width          int             `json:"width"`
+	Height         int             `json:"height"`
+	IsPreview      bool            `json:"is_preview"`
+	PresetID       *int64          `json:"preset_id"`
+	IsActive       bool            `json:"is_active"`
+	CreatedAt      string          `json:"created_at"`
+	Meta           *GenerationMeta `json:"meta,omitempty"`
 }
 
 type ExportPreset struct {

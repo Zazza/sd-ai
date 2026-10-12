@@ -4,6 +4,7 @@ import { EventsOn } from '../wailsjs/runtime/runtime'
 import { api } from '../api.js'
 import { parseSeedInput } from '../seed.js'
 import { parseLoras } from '../loraOverride.js'
+import { newCustomStep, restoreCustomSteps, persistCustomSteps, customStepsPayload, customStepLoras } from '../customSteps.js'
 import { t } from '../i18n/index.js'
 import { useGenerationProgress } from '../composables/useGenerationProgress.js'
 import { useKidsMode } from '../composables/useKidsMode.js'
@@ -13,6 +14,7 @@ import ImageViewer from './ImageViewer.vue'
 import ResolutionSelector from './ResolutionSelector.vue'
 import HiresProfileSelector from './HiresProfileSelector.vue'
 import PresetOverridesPanel from './PresetOverridesPanel.vue'
+import CustomPipelineEditor from './CustomPipelineEditor.vue'
 
 const { presets, presetTypes, compoundPresets, loadPresets } = usePresets()
 
@@ -72,10 +74,17 @@ const showSavedDescs = ref(false)
 const showViewer = ref(false)
 
 const moreOptionsOpen = ref(false)
-const showWorkflowLink = ref(false)
 
 const presetOverrides = ref(null)
 const overridesPanel = ref(null)
+
+const customSteps = ref([newCustomStep()])
+
+const showSavePipelineModal = ref(false)
+const pipelineName = ref('')
+const pipelineDescription = ref('')
+const savingPipeline = ref(false)
+const pipelineSavedMsg = ref('')
 
 const isDesktop = ref(window.innerWidth > 1024)
 
@@ -87,6 +96,16 @@ const filteredPresets = computed(() => {
 const selectedPresetLoras = computed(() => {
   const p = presets.value.find(p => p.id === selectedPresetId.value)
   return p ? parseLoras(p.loras) : []
+})
+
+const customValid = computed(() => customSteps.value.length > 0 && customSteps.value.every(s => s.preset_id))
+
+const customFirstPresetId = computed(() => (customSteps.value.length && customSteps.value[0].preset_id) || null)
+
+const generateDisabled = computed(() => {
+  if (genMode.value === 'preset') return !selectedPresetId.value
+  if (genMode.value === 'custom') return !customValid.value
+  return !selectedCompoundPresetId.value
 })
 
 const imageSrc = computed(() => {
@@ -105,7 +124,7 @@ const formattedGenInfo = computed(() => {
   }
 })
 
-watch([description, negative, selectedPresetId, selectedCompoundPresetId, () => presetOverrides.value?.model_name], () => {
+watch([description, negative, selectedPresetId, selectedCompoundPresetId, customFirstPresetId, () => presetOverrides.value?.model_name], () => {
   promptDirty = true
 })
 
@@ -158,6 +177,7 @@ function saveGenState() {
     gen_extra_negative: extraNegativePrompt.value || '',
     gen_mode: genMode.value,
     gen_compound_preset_id: String(selectedCompoundPresetId.value || ''),
+    gen_custom_steps: JSON.stringify(persistCustomSteps(customSteps.value, presets.value)),
     gen_resolution_id: String(selectedResolutionId.value || ''),
     gen_hires_profile_id: String(selectedHiresProfileId.value || ''),
     gen_count: String(genCount.value || 1),
@@ -167,6 +187,10 @@ function saveGenState() {
 async function sendToSD() {
   if (genMode.value === 'compound' && !selectedCompoundPresetId.value) {
     error.value = t('generate.error_select_workflow')
+    return
+  }
+  if (genMode.value === 'custom' && !customValid.value) {
+    error.value = t('generate.error_custom_step_style')
     return
   }
   if (genMode.value === 'preset' && !selectedPresetId.value) {
@@ -192,6 +216,15 @@ async function sendToSD() {
         extra_negative_prompt: extraNegativePrompt.value,
         resolution_id: selectedResolutionId.value,
         hires_profile_id: selectedHiresProfileId.value,
+      })
+    } else if (genMode.value === 'custom') {
+      result = await api.generateCompoundImage({
+        steps: customStepsPayload(customSteps.value, presets.value),
+        extra_prompt: extraPrompt.value,
+        extra_negative_prompt: extraNegativePrompt.value,
+        resolution_id: selectedResolutionId.value,
+        hires_profile_id: selectedHiresProfileId.value,
+        seed: parseSeedInput(seedInput.value),
       })
     } else {
       const seedVal = parseSeedInput(seedInput.value)
@@ -223,6 +256,10 @@ async function generateImage() {
     error.value = t('generate.error_select_workflow')
     return
   }
+  if (genMode.value === 'custom' && !customValid.value) {
+    error.value = t('generate.error_custom_step_style')
+    return
+  }
   if (genMode.value === 'preset' && !selectedPresetId.value) {
     error.value = t('generate.error_select_style')
     return
@@ -245,6 +282,7 @@ async function generateImage() {
   const presetId = selectedPresetId.value
   const compoundId = selectedCompoundPresetId.value
   const ov = presetOverrides.value
+  const customPayload = customStepsPayload(customSteps.value, presets.value)
 
   if (promptDirty) {
     let llmPresetId = presetId
@@ -253,8 +291,10 @@ async function generateImage() {
       if (cp && cp.steps && cp.steps.length > 0) {
         llmPresetId = cp.steps[0].preset_id
       }
+    } else if (mode === 'custom' && customPayload.length > 0) {
+      llmPresetId = customPayload[0].preset_id
     }
-    if (llmPresetId && (mode === 'preset' || mode === 'compound')) {
+    if (llmPresetId && (mode === 'preset' || mode === 'compound' || mode === 'custom')) {
       generationStage.value = 'prompt'
       error.value = ''
       try {
@@ -306,6 +346,15 @@ async function generateImage() {
           resolution_id: resId,
           hires_profile_id: hiresId,
         })
+      } else if (mode === 'custom') {
+        jobId = await api.enqueueCompound({
+          steps: customPayload,
+          extra_prompt: extraP,
+          extra_negative_prompt: extraN,
+          resolution_id: resId,
+          hires_profile_id: hiresId,
+          seed: seedVal !== null ? Math.min(seedVal + i, Number.MAX_SAFE_INTEGER) : null,
+        })
       } else {
         jobId = await api.enqueueTxt2Img({
           preset_id: presetId,
@@ -314,7 +363,7 @@ async function generateImage() {
           resolution_id: resId,
           hires_profile_id: hiresId,
           overrides: ov,
-          seed: seedVal !== null ? seedVal + i : null,
+          seed: seedVal !== null ? Math.min(seedVal + i, Number.MAX_SAFE_INTEGER) : null,
         })
       }
       if (jobId) enqueuedJobIds.value.add(jobId)
@@ -622,15 +671,49 @@ async function onSessionAdded() {
   } catch {}
 }
 
-function enableWorkflowMode() {
-  genMode.value = 'compound'
-  showWorkflowLink.value = false
+function openSavePipelineModal() {
+  if (!customValid.value) {
+    error.value = t('generate.error_custom_step_style')
+    return
+  }
+  pipelineName.value = ''
+  pipelineDescription.value = ''
+  showSavePipelineModal.value = true
+}
+
+async function confirmSavePipeline() {
+  if (!pipelineName.value.trim() || savingPipeline.value) return
+  savingPipeline.value = true
+  const name = pipelineName.value.trim()
+  try {
+    await api.createCompoundPreset({
+      name,
+      description: pipelineDescription.value.trim(),
+      steps: customSteps.value.map((s, i) => ({
+        step_order: i + 1,
+        preset_id: s.preset_id,
+        denoising_strength: s.denoising_strength,
+        loras: customStepLoras(s, presets.value),
+      })),
+    })
+    showSavePipelineModal.value = false
+    error.value = ''
+    pipelineSavedMsg.value = t('generate.save_pipeline_success', { name })
+    clearTimeout(pipelineSavedTimer)
+    pipelineSavedTimer = setTimeout(() => { pipelineSavedMsg.value = '' }, 5000)
+    await loadPresets()
+  } catch (e) {
+    error.value = t('generate.error_save_pipeline', { error: String(e) })
+  } finally {
+    savingPipeline.value = false
+  }
 }
 
 let offCompleted = () => {}
 let offFailed = () => {}
 let offSessionAdded = () => {}
 let offPaused = () => {}
+let pipelineSavedTimer = null
 
 onMounted(async () => {
   const isReset = props.resetting
@@ -666,12 +749,17 @@ onMounted(async () => {
       bindingRestored = true
     }
     if (s.gen_negative && (bindingRestored || !rid)) negative.value = s.gen_negative
-    if (s.gen_mode) genMode.value = s.gen_mode
+    if (s.gen_mode === 'preset' || s.gen_mode === 'compound' || s.gen_mode === 'custom') genMode.value = s.gen_mode
     if (s.gen_compound_preset_id) {
       const cpid = Number(s.gen_compound_preset_id)
       if (compoundPresets.value.find(c => c.id === cpid)) {
         selectedCompoundPresetId.value = cpid
       }
+    }
+    if (s.gen_custom_steps) {
+      try {
+        customSteps.value = restoreCustomSteps(JSON.parse(s.gen_custom_steps), presets.value)
+      } catch {}
     }
     if (s.gen_resolution_id) {
       selectedResolutionId.value = Number(s.gen_resolution_id)
@@ -693,7 +781,7 @@ onMounted(async () => {
         selectedCompoundPresetId.value = cpid
       }
     }
-    if (shared.genMode) genMode.value = shared.genMode
+    if (shared.genMode === 'preset' || shared.genMode === 'compound' || shared.genMode === 'custom') genMode.value = shared.genMode
     if (shared.description) description.value = shared.description
     if (shared.negative) negative.value = shared.negative
     if (shared.selectedResolutionId) {
@@ -746,13 +834,14 @@ onUnmounted(() => {
   offFailed()
   offSessionAdded()
   offPaused()
+  clearTimeout(pipelineSavedTimer)
   document.removeEventListener('keydown', onKeydown)
   window.removeEventListener('resize', onResize)
   saveGenState()
   if (shared) {
     shared.selectedPresetId = selectedPresetId.value
     shared.selectedCompoundPresetId = selectedCompoundPresetId.value
-    shared.genMode = genMode.value
+    shared.genMode = genMode.value === 'custom' ? 'preset' : genMode.value
     shared.description = description.value
     shared.negative = negative.value
     shared.selectedResolutionId = selectedResolutionId.value
@@ -788,11 +877,19 @@ function onKeydown(e) {
       &#9888; {{ error }}
     </div>
     <div v-if="error === 'interrupted'" class="status status-warning">{{ error }}</div>
+    <div v-if="pipelineSavedMsg" class="status status-ok">&#10003; {{ pipelineSavedMsg }}</div>
 
     <div class="generate-layout">
       <div class="generate-section">
         <div class="card">
           <!-- Zone 1: Main flow (always visible) -->
+
+          <!-- Mode switcher -->
+          <div class="form-group" style="display: flex; gap: 8px;">
+            <button class="btn btn-sm" :class="genMode === 'preset' ? 'btn-primary' : 'btn-secondary'" :aria-pressed="genMode === 'preset'" @click="genMode = 'preset'">{{ t('generate.btn_style') }}</button>
+            <button class="btn btn-sm" :class="genMode === 'compound' ? 'btn-primary' : 'btn-secondary'" :aria-pressed="genMode === 'compound'" @click="genMode = 'compound'">{{ t('generate.btn_workflow') }}</button>
+            <button class="btn btn-sm" :class="genMode === 'custom' ? 'btn-primary' : 'btn-secondary'" :aria-pressed="genMode === 'custom'" @click="genMode = 'custom'">{{ t('generate.btn_custom') }}</button>
+          </div>
 
           <!-- Type & Style selector -->
           <div v-if="genMode === 'preset'" class="form-group">
@@ -812,7 +909,6 @@ function onKeydown(e) {
                 </select>
               </div>
             </div>
-            <div v-if="genMode === 'preset'" class="workflow-link" @click="enableWorkflowMode">{{ t('generate.using_workflows') }}</div>
           </div>
 
           <div v-if="genMode === 'compound'" class="form-group">
@@ -821,7 +917,13 @@ function onKeydown(e) {
               <option :value="null" disabled>{{ t('generate.select_workflow') }}</option>
               <option v-for="c in compoundPresets" :key="c.id" :value="c.id">{{ c.name }} ({{ c.steps.length }} steps)</option>
             </select>
-            <div class="workflow-link" @click="genMode = 'preset'">{{ t('generate.btn_style') }} mode</div>
+          </div>
+
+          <div v-if="genMode === 'custom'" class="form-group">
+            <CustomPipelineEditor v-model="customSteps" :presets="presets" :disable-loras="kidsModeActive" />
+            <div style="display: flex; justify-content: flex-end; margin-top: 8px;">
+              <button class="btn btn-sm btn-secondary" :disabled="!customValid" @click="openSavePipelineModal">{{ t('generate.save_pipeline') }}</button>
+            </div>
           </div>
 
           <!-- Description -->
@@ -838,7 +940,7 @@ function onKeydown(e) {
 
           <!-- Generate button -->
           <div style="display: flex; gap: 8px; width: 100%;">
-            <button class="btn btn-primary btn-generate" :class="{ 'btn-generating': generatingImage }" style="flex: 1; justify-content: center;" @click="generateImage" :disabled="genMode === 'preset' ? !selectedPresetId : !selectedCompoundPresetId">
+            <button class="btn btn-primary btn-generate" :class="{ 'btn-generating': generatingImage }" style="flex: 1; justify-content: center;" @click="generateImage" :disabled="generateDisabled">
               <span v-if="generatingImage" style="display: inline-flex; align-items: center; gap: 6px;">
                 <span class="spinner" style="width: 14px; height: 14px; border-width: 2px;"></span>
                 {{ generationStage === 'prompt' ? t('generate.generating_prompt') : t('generate.generating_image') }}
@@ -866,10 +968,10 @@ function onKeydown(e) {
                     <ResolutionSelector v-model="selectedResolutionId" />
                   </div>
                   <HiresProfileSelector v-model="selectedHiresProfileId" />
-                  <div v-if="genMode === 'preset'" class="form-group">
+                  <div v-if="genMode === 'preset' || genMode === 'custom'" class="form-group">
                     <label class="form-label">{{ t('generate.seed_label') }}</label>
                     <input class="form-input" type="number" v-model="seedInput" min="0" step="1" :placeholder="t('generate.seed_placeholder')" />
-                    <div style="font-size: 11px; color: var(--text-dim); margin-top: 4px;">{{ t('generate.seed_hint') }}</div>
+                    <div style="font-size: 11px; color: var(--text-dim); margin-top: 4px;">{{ genMode === 'custom' ? t('generate.seed_hint_custom') : t('generate.seed_hint') }}</div>
                   </div>
                   <PresetOverridesPanel v-if="genMode === 'preset' && !kidsModeActive" ref="overridesPanel" v-model="presetOverrides" :preset-loras="selectedPresetLoras" />
                 </div>
@@ -889,7 +991,7 @@ function onKeydown(e) {
                 <label class="form-label">{{ t('generate.label_negative_prompt') }}</label>
                 <textarea class="form-textarea" v-model="extraNegativePrompt" rows="2" :placeholder="t('generate.placeholder_negative_prompt')"></textarea>
               </div>
-              <button class="btn btn-secondary" style="width: 100%; justify-content: center;" @click="sendToSD" :disabled="(genMode === 'preset' ? !selectedPresetId : !selectedCompoundPresetId) || !extraPrompt">
+              <button class="btn btn-secondary" style="width: 100%; justify-content: center;" @click="sendToSD" :disabled="generateDisabled || !extraPrompt">
                 {{ t('generate.btn_generate_directly') }}
               </button>
             </div>
@@ -1014,6 +1116,27 @@ function onKeydown(e) {
           <button class="btn btn-primary" @click="confirmFastSave" :disabled="!fastSaveFilename.trim() || fastSaveLoading">
             <span v-if="fastSaveLoading" class="spinner" style="width: 14px; height: 14px; border-width: 2px; display: inline-block; vertical-align: middle; margin-right: 4px;"></span>
             {{ t('generate.quick_save_btn') }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="showSavePipelineModal" class="modal-overlay">
+      <div class="modal-content" style="max-width: 400px;">
+        <h3 style="margin: 0 0 12px;">{{ t('generate.save_pipeline_title') }}</h3>
+        <div class="form-group">
+          <label class="form-label">{{ t('generate.save_pipeline_name') }}</label>
+          <input class="form-input" v-model="pipelineName" :placeholder="t('generate.save_pipeline_placeholder_name')" @keydown.enter="confirmSavePipeline" :disabled="savingPipeline" autofocus />
+        </div>
+        <div class="form-group" style="margin-top: 8px;">
+          <label class="form-label">{{ t('generate.save_pipeline_description') }}</label>
+          <input class="form-input" v-model="pipelineDescription" :placeholder="t('generate.save_pipeline_placeholder_description')" :disabled="savingPipeline" />
+        </div>
+        <div style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px;">
+          <button class="btn btn-secondary" @click="showSavePipelineModal = false" :disabled="savingPipeline">{{ t('compound.btn_cancel') }}</button>
+          <button class="btn btn-primary" @click="confirmSavePipeline" :disabled="!pipelineName.trim() || savingPipeline">
+            <span v-if="savingPipeline" class="spinner" style="width: 14px; height: 14px; border-width: 2px; display: inline-block; vertical-align: middle; margin-right: 4px;"></span>
+            {{ t('generate.save_pipeline') }}
           </button>
         </div>
       </div>

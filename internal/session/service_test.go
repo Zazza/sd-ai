@@ -492,7 +492,7 @@ func TestAddToSession_WithPresetID(t *testing.T) {
 
 	img := makeImageJPEG(t, 64, 64)
 	presetID := int64(42)
-	itemID := svc.AddToSession(img, nil, "sd", false, &presetID)
+	itemID := svc.AddToSession(img, nil, "sd", false, &preset.GenerationMeta{PresetID: &presetID})
 	assert.True(t, itemID > 0)
 
 	items, err := svc.GetSessionItems()

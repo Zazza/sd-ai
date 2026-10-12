@@ -139,6 +139,14 @@ func Open(dbPath string) (*DB, error) {
 		return nil, fmt.Errorf("migrate v26: %w", err)
 	}
 
+	if err := migrateV27(db); err != nil {
+		return nil, fmt.Errorf("migrate v27: %w", err)
+	}
+
+	if err := migrateV28(db); err != nil {
+		return nil, fmt.Errorf("migrate v28: %w", err)
+	}
+
 	return &DB{db: db}, nil
 }
 
@@ -803,9 +811,16 @@ func (d *DB) enrichCompoundSteps(steps []CompoundPresetStep) {
 	}
 }
 
+func stepLorasValue(loras *string) string {
+	if loras == nil {
+		return ""
+	}
+	return *loras
+}
+
 func (d *DB) getCompoundSteps(compoundPresetID int64) ([]CompoundPresetStep, error) {
 	rows, err := d.db.Query(
-		`SELECT id, compound_preset_id, step_order, preset_id, denoising_strength, resolution_id FROM compound_preset_steps WHERE compound_preset_id = ? ORDER BY step_order`,
+		`SELECT id, compound_preset_id, step_order, preset_id, denoising_strength, resolution_id, loras FROM compound_preset_steps WHERE compound_preset_id = ? ORDER BY step_order`,
 		compoundPresetID,
 	)
 	if err != nil {
@@ -817,11 +832,15 @@ func (d *DB) getCompoundSteps(compoundPresetID int64) ([]CompoundPresetStep, err
 	for rows.Next() {
 		var s CompoundPresetStep
 		var resolutionID sql.NullInt64
-		if err := rows.Scan(&s.ID, &s.CompoundPresetID, &s.StepOrder, &s.PresetID, &s.DenoisingStrength, &resolutionID); err != nil {
+		var loras string
+		if err := rows.Scan(&s.ID, &s.CompoundPresetID, &s.StepOrder, &s.PresetID, &s.DenoisingStrength, &resolutionID, &loras); err != nil {
 			return nil, err
 		}
 		if resolutionID.Valid {
 			s.ResolutionID = &resolutionID.Int64
+		}
+		if loras != "" {
+			s.Loras = &loras
 		}
 		steps = append(steps, s)
 	}
@@ -843,8 +862,8 @@ func (d *DB) CreateCompoundPreset(cp *CompoundPreset) error {
 
 	for i, step := range cp.Steps {
 		_, err := tx.Exec(
-			`INSERT INTO compound_preset_steps (compound_preset_id, step_order, preset_id, denoising_strength, resolution_id) VALUES (?, ?, ?, ?, ?)`,
-			cp.ID, i+1, step.PresetID, step.DenoisingStrength, step.ResolutionID,
+			`INSERT INTO compound_preset_steps (compound_preset_id, step_order, preset_id, denoising_strength, resolution_id, loras) VALUES (?, ?, ?, ?, ?, ?)`,
+			cp.ID, i+1, step.PresetID, step.DenoisingStrength, step.ResolutionID, stepLorasValue(step.Loras),
 		)
 		if err != nil {
 			tx.Rollback()
@@ -876,8 +895,8 @@ func (d *DB) UpdateCompoundPreset(cp *CompoundPreset) error {
 
 	for i, step := range cp.Steps {
 		_, err := tx.Exec(
-			`INSERT INTO compound_preset_steps (compound_preset_id, step_order, preset_id, denoising_strength, resolution_id) VALUES (?, ?, ?, ?, ?)`,
-			cp.ID, i+1, step.PresetID, step.DenoisingStrength, step.ResolutionID,
+			`INSERT INTO compound_preset_steps (compound_preset_id, step_order, preset_id, denoising_strength, resolution_id, loras) VALUES (?, ?, ?, ?, ?, ?)`,
+			cp.ID, i+1, step.PresetID, step.DenoisingStrength, step.ResolutionID, stepLorasValue(step.Loras),
 		)
 		if err != nil {
 			tx.Rollback()
@@ -1409,4 +1428,12 @@ func migrateV26(db *sql.DB) error {
 		DELETE FROM settings WHERE key = 'rembg_url';
 	`)
 	return err
+}
+
+func migrateV27(db *sql.DB) error {
+	return addColumnIfNotExists(db, "compound_preset_steps", "loras", "TEXT NOT NULL DEFAULT ''")
+}
+
+func migrateV28(db *sql.DB) error {
+	return addColumnIfNotExists(db, "session_items", "meta", "TEXT")
 }

@@ -37,6 +37,7 @@ const (
 const (
 	qualityRedenoise = 0.35
 	qualityUpscaler  = "R-ESRGAN 4x+"
+	maxCustomSteps   = 8
 )
 
 // --- Interfaces ---
@@ -50,7 +51,24 @@ type SettingsApplier interface {
 }
 
 type SessionAdder interface {
-	AddToSession(imageBase64 string, info json.RawMessage, source string, isPreview bool, presetID *int64) int64
+	AddToSession(imageBase64 string, info json.RawMessage, source string, isPreview bool, meta *preset.GenerationMeta) int64
+}
+
+func stepMeta(idx int, p *preset.Preset, step preset.CompoundPresetStep) preset.StepMeta {
+	sm := preset.StepMeta{
+		Step:   idx + 1,
+		Preset: p.Name,
+		Model:  p.ModelName,
+		Loras:  p.Loras,
+	}
+	if idx > 0 {
+		ds := step.DenoisingStrength
+		if ds <= 0 {
+			ds = 0.5
+		}
+		sm.Denoise = &ds
+	}
+	return sm
 }
 
 // --- Types ---
@@ -152,12 +170,47 @@ type UpscalePreviewParams struct {
 	HiresProfileID     *int64   `json:"hires_profile_id,omitempty"`
 }
 
+type CustomStep struct {
+	PresetID          int64   `json:"preset_id"`
+	DenoisingStrength float64 `json:"denoising_strength"`
+	Loras             *string `json:"loras,omitempty"`
+	ResolutionID      *int64  `json:"resolution_id,omitempty"`
+}
+
 type GenerateCompoundImageParams struct {
-	CompoundPresetID    int64  `json:"compound_preset_id"`
-	ExtraPrompt         string `json:"extra_prompt"`
-	ExtraNegativePrompt string `json:"extra_negative_prompt"`
-	ResolutionID        *int64 `json:"resolution_id,omitempty"`
-	HiresProfileID      *int64 `json:"hires_profile_id,omitempty"`
+	CompoundPresetID    int64        `json:"compound_preset_id"`
+	ExtraPrompt         string       `json:"extra_prompt"`
+	ExtraNegativePrompt string       `json:"extra_negative_prompt"`
+	ResolutionID        *int64       `json:"resolution_id,omitempty"`
+	HiresProfileID      *int64       `json:"hires_profile_id,omitempty"`
+	Steps               []CustomStep `json:"steps,omitempty"`
+	Seed                *int64       `json:"seed,omitempty"`
+}
+
+func ValidateCustomSteps(steps []CustomStep) error {
+	if len(steps) > maxCustomSteps {
+		return fmt.Errorf("maximum %d custom steps allowed", maxCustomSteps)
+	}
+	for i, step := range steps {
+		if step.PresetID <= 0 {
+			return fmt.Errorf("step %d: preset is required", i+1)
+		}
+		if step.DenoisingStrength < 0 || step.DenoisingStrength > 1 {
+			return fmt.Errorf("step %d: denoising_strength must be between 0 and 1", i+1)
+		}
+		if i > 0 && step.DenoisingStrength == 0 {
+			return fmt.Errorf("step %d: denoising_strength must be greater than 0", i+1)
+		}
+		if step.Loras != nil && *step.Loras != "" {
+			if len(*step.Loras) > preset.MaxStepLorasLen {
+				return fmt.Errorf("step %d: loras payload too large", i+1)
+			}
+			if !json.Valid([]byte(*step.Loras)) {
+				return fmt.Errorf("step %d: loras must be valid JSON", i+1)
+			}
+		}
+	}
+	return nil
 }
 
 type GenerateFromImageParams struct {
@@ -1073,7 +1126,11 @@ func (s *Service) GenerateImage(params GenerateImageParams) (*GenerateImageResul
 		EffectivePrompt:         prompt,
 		EffectiveNegativePrompt: negativePrompt,
 	}
-	s.sessions.AddToSession(result.Images[0], result.Info, "generate", isPreview, nil)
+	s.sessions.AddToSession(result.Images[0], result.Info, "generate", isPreview, &preset.GenerationMeta{
+		PresetID: &params.PresetID,
+		Label:    p.Name,
+		Model:    p.ModelName,
+	})
 	return img, nil
 }
 
@@ -1341,7 +1398,15 @@ func (s *Service) TestGenerate(params TestGenerateParams) ([]TestGenerateResultI
 			item.ModelName = p.ModelName
 		}
 
-		s.sessions.AddToSession(item.Image, result.Info, "compare", false, nil)
+		compareMeta := &preset.GenerationMeta{}
+		if params.Mode == "presets" {
+			compareMeta.Label = p.Name
+			compareMeta.Model = p.ModelName
+		} else {
+			compareMeta.Model = params.SelectedModels[idx]
+		}
+
+		s.sessions.AddToSession(item.Image, result.Info, "compare", false, compareMeta)
 
 		results = append(results, item)
 
@@ -1490,7 +1555,11 @@ func (s *Service) UpscaleImage(params UpscaleImageParams) (*GenerateImageResult,
 		Info:       result.Info,
 		IsPreview:  false,
 	}
-	s.sessions.AddToSession(result.Images[0], result.Info, "upscale", false, nil)
+	upscaleMeta := &preset.GenerationMeta{}
+	if params.PresetID > 0 {
+		upscaleMeta.PresetID = &params.PresetID
+	}
+	s.sessions.AddToSession(result.Images[0], result.Info, "upscale", false, upscaleMeta)
 	return img, nil
 }
 
@@ -1577,7 +1646,11 @@ func (s *Service) UpscalePreview(params UpscalePreviewParams) (*GenerateImageRes
 		Info:       result.Info,
 		IsPreview:  false,
 	}
-	s.sessions.AddToSession(result.Images[0], result.Info, "upscale-preview", false, nil)
+	s.sessions.AddToSession(result.Images[0], result.Info, "upscale-preview", false, &preset.GenerationMeta{
+		PresetID: &params.PresetID,
+		Label:    p.Name,
+		Model:    p.ModelName,
+	})
 	return img, nil
 }
 

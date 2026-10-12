@@ -1,6 +1,9 @@
 package preset
 
-import "database/sql"
+import (
+	"database/sql"
+	"encoding/json"
+)
 
 func (d *DB) CreateSession(name string) (*SessionInfo, error) {
 	result, err := d.db.Exec(`INSERT INTO sessions (name) VALUES (?)`, name)
@@ -69,17 +72,43 @@ func (d *DB) SetActiveSession(id int64) error {
 	return err
 }
 
+func marshalSessionMeta(meta *GenerationMeta) sql.NullString {
+	if meta == nil {
+		return sql.NullString{}
+	}
+	b, err := json.Marshal(meta)
+	if err != nil {
+		return sql.NullString{}
+	}
+	return sql.NullString{String: string(b), Valid: true}
+}
+
+func unmarshalSessionMeta(v sql.NullString) *GenerationMeta {
+	if !v.Valid || v.String == "" || len(v.String) > MaxMetaJSONLen {
+		return nil
+	}
+	var meta GenerationMeta
+	if err := json.Unmarshal([]byte(v.String), &meta); err != nil {
+		return nil
+	}
+	if meta.PresetID == nil && meta.Model == "" && meta.Label == "" && meta.Chain == nil {
+		return nil
+	}
+	return &meta
+}
+
 func (d *DB) AddSessionItem(item *SessionItem) (int64, error) {
 	_, err := d.db.Exec(`UPDATE session_items SET is_active = 0 WHERE session_id = ?`, item.SessionID)
 	if err != nil {
 		return 0, err
 	}
 	result, err := d.db.Exec(`
-		INSERT INTO session_items (session_id, file_name, thumb_name, source, prompt, negative_prompt, sampler, steps, cfg_scale, seed, denoising, width, height, is_preview, preset_id, is_active)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+		INSERT INTO session_items (session_id, file_name, thumb_name, source, prompt, negative_prompt, sampler, steps, cfg_scale, seed, denoising, width, height, is_preview, preset_id, is_active, meta)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
 		item.SessionID, item.FileName, item.ThumbName, item.Source,
 		item.Prompt, item.NegativePrompt, item.Sampler, item.Steps, item.CfgScale,
-		item.Seed, item.Denoising, item.Width, item.Height, item.IsPreview, item.PresetID)
+		item.Seed, item.Denoising, item.Width, item.Height, item.IsPreview, item.PresetID,
+		marshalSessionMeta(item.Meta))
 	if err != nil {
 		return 0, err
 	}
@@ -88,7 +117,7 @@ func (d *DB) AddSessionItem(item *SessionItem) (int64, error) {
 
 func (d *DB) GetSessionItems(sessionID int64) ([]SessionItem, error) {
 	rows, err := d.db.Query(`
-		SELECT id, session_id, file_name, thumb_name, source, prompt, negative_prompt, sampler, steps, cfg_scale, seed, denoising, width, height, is_preview, preset_id, is_active, created_at
+		SELECT id, session_id, file_name, thumb_name, source, prompt, negative_prompt, sampler, steps, cfg_scale, seed, denoising, width, height, is_preview, preset_id, is_active, created_at, meta
 		FROM session_items WHERE session_id = ? ORDER BY created_at ASC`, sessionID)
 	if err != nil {
 		return nil, err
@@ -99,37 +128,41 @@ func (d *DB) GetSessionItems(sessionID int64) ([]SessionItem, error) {
 
 func (d *DB) GetSessionItem(id int64) (*SessionItem, error) {
 	var item SessionItem
+	var meta sql.NullString
 	err := d.db.QueryRow(`
-		SELECT id, session_id, file_name, thumb_name, source, prompt, negative_prompt, sampler, steps, cfg_scale, seed, denoising, width, height, is_preview, preset_id, is_active, created_at
+		SELECT id, session_id, file_name, thumb_name, source, prompt, negative_prompt, sampler, steps, cfg_scale, seed, denoising, width, height, is_preview, preset_id, is_active, created_at, meta
 		FROM session_items WHERE id = ?`, id).
 		Scan(&item.ID, &item.SessionID, &item.FileName, &item.ThumbName, &item.Source,
 			&item.Prompt, &item.NegativePrompt, &item.Sampler, &item.Steps, &item.CfgScale,
 			&item.Seed, &item.Denoising, &item.Width, &item.Height, &item.IsPreview,
-			&item.PresetID, &item.IsActive, &item.CreatedAt)
+			&item.PresetID, &item.IsActive, &item.CreatedAt, &meta)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
 	}
+	item.Meta = unmarshalSessionMeta(meta)
 	return &item, nil
 }
 
 func (d *DB) GetActiveItem(sessionID int64) (*SessionItem, error) {
 	var item SessionItem
+	var meta sql.NullString
 	err := d.db.QueryRow(`
-		SELECT id, session_id, file_name, thumb_name, source, prompt, negative_prompt, sampler, steps, cfg_scale, seed, denoising, width, height, is_preview, preset_id, is_active, created_at
+		SELECT id, session_id, file_name, thumb_name, source, prompt, negative_prompt, sampler, steps, cfg_scale, seed, denoising, width, height, is_preview, preset_id, is_active, created_at, meta
 		FROM session_items WHERE session_id = ? AND is_active = 1`, sessionID).
 		Scan(&item.ID, &item.SessionID, &item.FileName, &item.ThumbName, &item.Source,
 			&item.Prompt, &item.NegativePrompt, &item.Sampler, &item.Steps, &item.CfgScale,
 			&item.Seed, &item.Denoising, &item.Width, &item.Height, &item.IsPreview,
-			&item.PresetID, &item.IsActive, &item.CreatedAt)
+			&item.PresetID, &item.IsActive, &item.CreatedAt, &meta)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
 	}
+	item.Meta = unmarshalSessionMeta(meta)
 	return &item, nil
 }
 
@@ -192,13 +225,15 @@ func scanSessionItems(rows *sql.Rows) ([]SessionItem, error) {
 	var items []SessionItem
 	for rows.Next() {
 		var item SessionItem
+		var meta sql.NullString
 		if err := rows.Scan(&item.ID, &item.SessionID, &item.FileName, &item.ThumbName,
 			&item.Source, &item.Prompt, &item.NegativePrompt, &item.Sampler,
 			&item.Steps, &item.CfgScale, &item.Seed, &item.Denoising,
 			&item.Width, &item.Height, &item.IsPreview, &item.PresetID,
-			&item.IsActive, &item.CreatedAt); err != nil {
+			&item.IsActive, &item.CreatedAt, &meta); err != nil {
 			return nil, err
 		}
+		item.Meta = unmarshalSessionMeta(meta)
 		items = append(items, item)
 	}
 	return items, rows.Err()

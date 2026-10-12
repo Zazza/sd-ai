@@ -579,6 +579,32 @@ func (s *Service) GenerateFromImage(params GenerateFromImageParams) (*GenerateIm
 			upscaleSkipped = qUpscaleSkipped
 			redenoiseSkipped = qRedenoiseSkipped
 		}
+		genMeta := &preset.GenerationMeta{
+			PresetID: &params.PresetID,
+			Label:    p.Name,
+			Model:    p.ModelName,
+		}
+		if params.OutputMode == "quality" {
+			var chain []preset.StepMeta
+			chain = append(chain, preset.StepMeta{
+				Preset:  p.Name,
+				Model:   p.ModelName,
+				Loras:   p.Loras,
+				Op:      "base",
+				Denoise: &denoising,
+			})
+			if !upscaleSkipped {
+				chain = append(chain, preset.StepMeta{Op: "upscale"})
+			}
+			if !redenoiseSkipped {
+				rd := qualityRedenoise
+				chain = append(chain, preset.StepMeta{Op: "redenoise", Denoise: &rd})
+			}
+			for i := range chain {
+				chain[i].Step = i + 1
+			}
+			genMeta.Chain = chain
+		}
 		img := &GenerateImageResult{
 			Image:                   finalImage,
 			Info:                    finalInfo,
@@ -587,7 +613,7 @@ func (s *Service) GenerateFromImage(params GenerateFromImageParams) (*GenerateIm
 			EffectivePrompt:         prompt,
 			EffectiveNegativePrompt: negativePrompt,
 		}
-		s.sessions.AddToSession(finalImage, finalInfo, "from-image", false, nil)
+		s.sessions.AddToSession(finalImage, finalInfo, "from-image", false, genMeta)
 		return img, nil
 	}
 
@@ -645,7 +671,11 @@ func (s *Service) GenerateFromImage(params GenerateFromImageParams) (*GenerateIm
 		EffectivePrompt:         prompt,
 		EffectiveNegativePrompt: negativePrompt,
 	}
-	s.sessions.AddToSession(result.Images[0], result.Info, "generate", isPreview, nil)
+	s.sessions.AddToSession(result.Images[0], result.Info, "generate", isPreview, &preset.GenerationMeta{
+		PresetID: &params.PresetID,
+		Label:    p.Name,
+		Model:    p.ModelName,
+	})
 	return img, nil
 }
 
@@ -673,6 +703,8 @@ func (s *Service) generateFromImageCompound(params GenerateFromImageParams, tags
 	var lastImage string
 	var lastInfo json.RawMessage
 	lastStepIdx := len(cp.Steps) - 1
+	chain := make([]preset.StepMeta, 0, len(cp.Steps))
+	lastModel := ""
 
 	imgW, imgH := filebrowser.DecodeImageSize(params.ImageBase64)
 	if imgW > 0 && imgH > 0 {
@@ -685,6 +717,9 @@ func (s *Service) generateFromImageCompound(params GenerateFromImageParams, tags
 		if err != nil {
 			return nil, fmt.Errorf("step %d: preset not found: %w", stepIdx+1, err)
 		}
+		ApplyPresetOverrides(p, &PresetOverrides{Loras: step.Loras})
+		chain = append(chain, stepMeta(stepIdx, p, step))
+		lastModel = p.ModelName
 
 		isLastStep := stepIdx == lastStepIdx
 
@@ -750,33 +785,66 @@ func (s *Service) generateFromImageCompound(params GenerateFromImageParams, tags
 		EffectivePrompt:         promptResult.Prompt,
 		EffectiveNegativePrompt: promptResult.NegativePrompt,
 	}
-	s.sessions.AddToSession(lastImage, lastInfo, "compound-from-image", false, nil)
+	s.sessions.AddToSession(lastImage, lastInfo, "compound-from-image", false, &preset.GenerationMeta{
+		Label: cp.Name,
+		Model: lastModel,
+		Chain: chain,
+	})
 	return img, nil
 }
 
 // --- GenerateCompoundImage ---
 
-func (s *Service) GenerateCompoundImage(params GenerateCompoundImageParams) (*GenerateImageResult, error) {
+func (s *Service) resolveCompoundSteps(params GenerateCompoundImageParams) ([]preset.CompoundPresetStep, string, error) {
+	if len(params.Steps) > 0 {
+		if params.CompoundPresetID > 0 {
+			return nil, "", fmt.Errorf("steps and compound_preset_id are mutually exclusive")
+		}
+		if err := ValidateCustomSteps(params.Steps); err != nil {
+			return nil, "", err
+		}
+		steps := make([]preset.CompoundPresetStep, 0, len(params.Steps))
+		for i, cs := range params.Steps {
+			steps = append(steps, preset.CompoundPresetStep{
+				StepOrder:         i + 1,
+				PresetID:          cs.PresetID,
+				DenoisingStrength: cs.DenoisingStrength,
+				Loras:             cs.Loras,
+				ResolutionID:      cs.ResolutionID,
+			})
+		}
+		return steps, "", nil
+	}
 	if params.CompoundPresetID <= 0 {
-		return nil, fmt.Errorf("compound preset is required")
+		return nil, "", fmt.Errorf("compound preset is required")
+	}
+	cp, err := s.db.GetCompoundPreset(params.CompoundPresetID)
+	if err != nil {
+		return nil, "", fmt.Errorf("compound preset not found: %w", err)
+	}
+	if len(cp.Steps) == 0 {
+		return nil, "", fmt.Errorf("compound preset has no steps")
+	}
+	return cp.Steps, cp.Name, nil
+}
+
+func (s *Service) GenerateCompoundImage(params GenerateCompoundImageParams) (*GenerateImageResult, error) {
+	steps, label, err := s.resolveCompoundSteps(params)
+	if err != nil {
+		return nil, err
 	}
 	s.StartSDPolling()
 	defer s.StopSDPolling()
-	cp, err := s.db.GetCompoundPreset(params.CompoundPresetID)
-	if err != nil {
-		return nil, fmt.Errorf("compound preset not found: %w", err)
-	}
-	if len(cp.Steps) == 0 {
-		return nil, fmt.Errorf("compound preset has no steps")
-	}
 
 	var lastImage string
 	var lastInfo json.RawMessage
-	lastStepIdx := len(cp.Steps) - 1
+	lastStepIdx := len(steps) - 1
+	chain := make([]preset.StepMeta, 0, len(steps))
+	lastModel := ""
 
 	var userScenePrompt, userSceneNeg string
 	if strings.TrimSpace(params.ExtraPrompt) != "" {
-		firstPreset, err := s.db.Get(cp.Steps[0].PresetID)
+		firstPreset, err := s.db.Get(steps[0].PresetID)
 		if err != nil {
 			return nil, fmt.Errorf("step 1: preset not found: %w", err)
 		}
@@ -788,17 +856,23 @@ func (s *Service) GenerateCompoundImage(params GenerateCompoundImageParams) (*Ge
 		userSceneNeg = llmResult.NegativePrompt
 	}
 
-	for stepIdx, step := range cp.Steps {
+	for stepIdx, step := range steps {
 		p, err := s.db.Get(step.PresetID)
 		if err != nil {
 			return nil, fmt.Errorf("step %d: preset not found: %w", stepIdx+1, err)
 		}
+		if params.Seed != nil {
+			p.Seed = params.Seed
+		}
+		ApplyPresetOverrides(p, &PresetOverrides{Loras: step.Loras})
+		chain = append(chain, stepMeta(stepIdx, p, step))
+		lastModel = p.ModelName
 
 		isLastStep := stepIdx == lastStepIdx
 
 		s.emitter.Emit("compound:progress", map[string]any{
 			"current": stepIdx + 1,
-			"total":   len(cp.Steps),
+			"total":   len(steps),
 			"status":  "generating",
 			"step":    stepIdx + 1,
 		})
@@ -834,8 +908,8 @@ func (s *Service) GenerateCompoundImage(params GenerateCompoundImageParams) (*Ge
 	}
 
 	s.emitter.Emit("compound:progress", map[string]any{
-		"current": len(cp.Steps),
-		"total":   len(cp.Steps),
+		"current": len(steps),
+		"total":   len(steps),
 		"status":  "done",
 	})
 
@@ -846,7 +920,11 @@ func (s *Service) GenerateCompoundImage(params GenerateCompoundImageParams) (*Ge
 		EffectivePrompt:         "",
 		EffectiveNegativePrompt: "",
 	}
-	s.sessions.AddToSession(lastImage, lastInfo, "compound", false, nil)
+	s.sessions.AddToSession(lastImage, lastInfo, "compound", false, &preset.GenerationMeta{
+		Label: label,
+		Model: lastModel,
+		Chain: chain,
+	})
 	return img, nil
 }
 
@@ -923,6 +1001,8 @@ func (s *Service) TestCompoundGenerate(params TestCompoundGenerateParams) ([]Tes
 		}
 
 		var lastImage string
+		chain := make([]preset.StepMeta, 0, len(cp.Steps))
+		lastModel := ""
 
 		for stepIdx, step := range cp.Steps {
 			p, err := s.db.Get(step.PresetID)
@@ -930,6 +1010,9 @@ func (s *Service) TestCompoundGenerate(params TestCompoundGenerateParams) ([]Tes
 				item.Error = fmt.Sprintf("step %d: preset not found", stepIdx+1)
 				break
 			}
+			ApplyPresetOverrides(p, &PresetOverrides{Loras: step.Loras})
+			chain = append(chain, stepMeta(stepIdx, p, step))
+			lastModel = p.ModelName
 
 			bp := s.buildPrompts(p.Prompt, p.NegativePrompt, p.Loras, userScenePrompt, userSceneNeg)
 			prompt := bp.Prompt
@@ -1036,7 +1119,11 @@ func (s *Service) TestCompoundGenerate(params TestCompoundGenerateParams) ([]Tes
 
 		if item.Error == "" {
 			item.Image = lastImage
-			s.sessions.AddToSession(item.Image, nil, "compare", false, nil)
+			s.sessions.AddToSession(item.Image, nil, "compare", false, &preset.GenerationMeta{
+				Label: cp.Name,
+				Model: lastModel,
+				Chain: chain,
+			})
 		}
 		item.Sampler = ""
 		item.ScheduleType = ""

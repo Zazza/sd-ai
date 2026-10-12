@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"unicode/utf8"
 
 	"go-sd/internal/preset"
 
@@ -44,11 +45,88 @@ type SDInfo struct {
 	Width          int     `json:"width"`
 	Height         int     `json:"height"`
 	Denoising      float64 `json:"denoising_strength"`
+	SDModelName    string  `json:"sd_model_name"`
 }
 
 const maxImageBase64 = 50 * 1024 * 1024
 
-func (s *Service) AddToSession(imageBase64 string, info json.RawMessage, source string, isPreview bool, presetID *int64) int64 {
+func firstNonEmpty(vals ...string) string {
+	for _, v := range vals {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+func truncateMetaStr(s string) string {
+	if len(s) <= preset.MaxMetaStrLen {
+		return s
+	}
+	cut := s[:preset.MaxMetaStrLen]
+	for len(cut) > 0 && !utf8.ValidString(cut) {
+		cut = cut[:len(cut)-1]
+	}
+	return cut
+}
+
+func metaJSONLen(m *preset.GenerationMeta) int {
+	b, err := json.Marshal(m)
+	if err != nil {
+		return preset.MaxMetaJSONLen + 1
+	}
+	return len(b)
+}
+
+func normalizeMeta(meta *preset.GenerationMeta, sdModel string) *preset.GenerationMeta {
+	if meta == nil {
+		return nil
+	}
+	m := &preset.GenerationMeta{
+		PresetID: meta.PresetID,
+		Model:    truncateMetaStr(firstNonEmpty(sdModel, meta.Model)),
+		Label:    truncateMetaStr(meta.Label),
+	}
+	if len(meta.Chain) > 0 {
+		n := len(meta.Chain)
+		if n > preset.MaxMetaChainSteps {
+			n = preset.MaxMetaChainSteps
+		}
+		m.Chain = make([]preset.StepMeta, 0, n)
+		for i := 0; i < n; i++ {
+			st := meta.Chain[i]
+			sm := preset.StepMeta{
+				Step:    st.Step,
+				Preset:  truncateMetaStr(st.Preset),
+				Op:      truncateMetaStr(st.Op),
+				Model:   truncateMetaStr(st.Model),
+				Denoise: st.Denoise,
+			}
+			if len(st.Loras) <= preset.MaxStepLorasLen {
+				sm.Loras = st.Loras
+			}
+			m.Chain = append(m.Chain, sm)
+		}
+	}
+	fullLen := metaJSONLen(m)
+	if fullLen <= preset.MaxMetaJSONLen {
+		return m
+	}
+	for i := range m.Chain {
+		m.Chain[i].Loras = ""
+	}
+	if metaJSONLen(m) <= preset.MaxMetaJSONLen {
+		return m
+	}
+	m.Chain = nil
+	if metaJSONLen(m) <= preset.MaxMetaJSONLen {
+		return m
+	}
+	log.Printf("[session] warn: generation meta dropped: json=%d bytes over cap=%d bytes", fullLen, preset.MaxMetaJSONLen)
+	return nil
+}
+
+func (s *Service) AddToSession(imageBase64 string, info json.RawMessage, source string, isPreview bool, meta *preset.GenerationMeta) int64 {
 	if len(imageBase64) > maxImageBase64 {
 		reencoded, err := reencodeJPEG(imageBase64)
 		if err != nil {
@@ -81,13 +159,12 @@ func (s *Service) AddToSession(imageBase64 string, info json.RawMessage, source 
 		SessionID: sessionID,
 		Source:    source,
 		IsPreview: isPreview,
-		PresetID:  presetID,
 		Width:     img.Bounds().Dx(),
 		Height:    img.Bounds().Dy(),
 	}
 
+	var sd SDInfo
 	if info != nil {
-		var sd SDInfo
 		if json.Unmarshal(info, &sd) == nil {
 			item.Prompt = sd.Prompt
 			item.NegativePrompt = sd.NegativePrompt
@@ -103,6 +180,11 @@ func (s *Service) AddToSession(imageBase64 string, info json.RawMessage, source 
 				item.Height = sd.Height
 			}
 		}
+	}
+
+	item.Meta = normalizeMeta(meta, sd.SDModelName)
+	if meta != nil {
+		item.PresetID = meta.PresetID
 	}
 
 	itemID, err := s.db.AddSessionItem(item)

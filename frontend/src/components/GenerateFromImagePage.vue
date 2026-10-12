@@ -530,7 +530,7 @@ async function generate() {
     const count = Math.max(1, Math.min(100, genCount.value || 1))
     batchTotal.value = count
     for (let i = 0; i < count; i++) {
-      const jobId = await api.enqueueFromImage({ ...params, seed: seedVal !== null ? seedVal + i : null })
+      const jobId = await api.enqueueFromImage({ ...params, seed: seedVal !== null ? Math.min(seedVal + i, Number.MAX_SAFE_INTEGER) : null })
       if (jobId) enqueuedJobIds.value.add(jobId)
     }
     error.value = ''
@@ -726,7 +726,7 @@ onMounted(async () => {
         selectedCompoundPresetId.value = cpid
       }
     }
-    if (shared.genMode) genMode.value = shared.genMode
+    if (shared.genMode === 'preset' || shared.genMode === 'compound') genMode.value = shared.genMode
   }
   if (!props.droppedImage && !uploadedImage.value) {
     await useLastImage()
